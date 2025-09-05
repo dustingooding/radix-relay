@@ -1,4 +1,4 @@
-function(myproject_check_libfuzzer_support var_name)
+function(radix_relay_check_libfuzzer_support var_name)
   set(LibFuzzerTestSource
       "
 #include <cstdint>
