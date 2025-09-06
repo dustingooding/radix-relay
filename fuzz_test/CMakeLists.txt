@@ -8,6 +8,7 @@ target_link_libraries(
   fuzz_tester
   PRIVATE radix_relay_options
           radix_relay_warnings
+          radix_relay::radix_relay_core
           fmt::fmt
           -coverage
           -fsanitize=fuzzer)

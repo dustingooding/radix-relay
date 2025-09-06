@@ -1,11 +1,29 @@
 ## Build Instructions
 
-A full build has different steps:
-1) Specifying the compiler using environment variables
-2) Configuring the project
-3) Building the project
+This project uses CMakePresets.json for standardized build configurations that work with VSCode CMake Tools extension and command line.
 
-For the subsequent builds, in case you change the source code, you only need to repeat the last step.
+### Quick Start (VSCode CMake Tools)
+
+**Recommended**: Use VSCode with the CMake Tools extension for the best development experience.
+
+1. Open project in VSCode
+2. Install CMake Tools extension if not already installed
+3. Use Ctrl+Shift+P → "CMake: Select Configure Preset" → choose `unixlike-clang-debug` (Linux/macOS) or `windows-msvc-debug-developer-mode` (Windows)
+4. Build with Ctrl+Shift+P → "CMake: Build" or F7
+
+VSCode will automatically:
+- Configure in `out/build/<preset-name>/`
+- Install to `out/install/<preset-name>/`
+- Set up debugging and testing integration
+
+### Command Line (Compatible with VSCode)
+
+**Important**: Use the same preset structure as VSCode to avoid conflicts.
+
+A full build has different steps:
+1) Choose appropriate CMake preset
+2) Configure using the preset
+3) Build the project
 
 ### (1) Specify the compiler using environment variables
 
@@ -82,21 +100,36 @@ CMake uses the environment variables CC and CXX to decide which compiler to use.
 
 </details>
 
-### (2) Configure your build
+### (2) Configure using CMake presets
 
-To configure the project, you could use `cmake`, or `ccmake` or `cmake-gui`. Each of them are explained in the following:
+**Using presets ensures compatibility with VSCode and standardized build directories.**
 
-#### (2.a) Configuring via cmake:
-With Cmake directly:
+List available presets:
+```bash
+cmake --list-presets=configure
+```
+
+Available presets:
+- `unixlike-clang-debug` - Linux/macOS with Clang (Debug)
+- `unixlike-clang-release` - Linux/macOS with Clang (Release)  
+- `unixlike-gcc-debug` - Linux/macOS with GCC (Debug)
+- `unixlike-gcc-release` - Linux/macOS with GCC (Release)
+- `windows-msvc-debug-developer-mode` - Windows MSVC (Debug, Developer Mode)
+- `windows-msvc-release-developer-mode` - Windows MSVC (Release, Developer Mode)
+
+Configure using preset:
+```bash
+cmake --preset=unixlike-clang-debug
+```
+
+This automatically creates `out/build/unixlike-clang-debug/` directory structure compatible with VSCode.
+
+#### (2.a) Legacy cmake configuration (not recommended):
+If you need to use legacy cmake directly without presets:
 
     cmake -S . -B ./build
 
-Cmake will automatically create the `./build` folder if it does not exist, and it wil configure the project.
-
-Instead, if you have CMake version 3.21+, you can use one of the configuration presets that are listed in the CmakePresets.json file.
-
-    cmake . --preset <configure-preset>
-    cmake --build
+**Warning**: This creates a different directory structure that conflicts with VSCode CMake Tools extension.
 
 #### (2.b) Configuring via ccmake:
 
@@ -169,24 +202,54 @@ Choose "Visual Studio 16 2019" as the generator. To tell Visual studio to use `c
 ![generate](https://user-images.githubusercontent.com/16418197/82781591-c97feb80-9e1f-11ea-86c8-f2748b96f516.png)
 
 ### (3) Build the project
-Once you have selected all the options you would like to use, you can build the
-project (all targets):
 
-    cmake --build ./build
+#### Using presets (recommended):
+Build using the preset you configured:
+```bash
+cmake --build --preset=unixlike-clang-debug
+```
 
-For Visual Studio, give the build configuration (Release, RelWithDeb, Debug, etc) like the following:
+Or use the build directory directly:
+```bash
+cmake --build out/build/unixlike-clang-debug
+```
 
-    cmake --build ./build -- /p:configuration=Release
+#### Legacy build (if not using presets):
+```bash
+cmake --build ./build
+```
 
+For Visual Studio, specify configuration:
+```bash
+cmake --build ./build -- /p:configuration=Release
+```
 
 ### Running the tests
 
-You can use the `ctest` command run the tests.
+#### Using test presets (recommended):
+```bash
+ctest --preset=test-unixlike-clang-debug
+```
 
-```shell
+#### Using build directory directly:
+```bash
+ctest --test-dir out/build/unixlike-clang-debug
+```
+
+#### Legacy test running:
+```bash
 cd ./build
 ctest -C Debug
 cd ../
 ```
+
+### VSCode Integration Notes
+
+- **Build tasks**: Use F7 or Ctrl+Shift+P → "CMake: Build"
+- **Run/Debug**: Use F5 or Ctrl+F5 after selecting target
+- **Test explorer**: Tests appear in VSCode Test Explorer panel
+- **IntelliSense**: Automatically configured using compile_commands.json
+
+**Important**: Always use the same preset in both VSCode and command line to avoid build cache conflicts.
 
 

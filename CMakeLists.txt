@@ -69,7 +69,6 @@ endif()
 include(CTest)
 
 if(BUILD_TESTING)
-  message(AUTHOR_WARNING "Building Tests. Be sure to check out test/constexpr_tests.cpp for constexpr testing")
   add_subdirectory(test)
 endif()
 
@@ -92,7 +91,7 @@ if(MSVC)
 endif()
 
 # set the startup project for the "play" button in MSVC
-set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT intro)
+set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT radix-relay)
 
 if(CMAKE_SKIP_INSTALL_RULES)
   return()
@@ -104,7 +103,7 @@ include(cmake/PackageProject.cmake)
 # we know we want to ship
 radix_relay_package_project(
   TARGETS
-  intro
+  radix-relay
   radix_relay_options
   radix_relay_warnings
   # FIXME: this does not work! CK
