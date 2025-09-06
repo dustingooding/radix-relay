@@ -34,3 +34,7 @@ $RECYCLE.BIN/
 .TemporaryItems
 ehthumbs.db
 Thumbs.db
+
+# AI
+CLAUDE.md
+.claude
