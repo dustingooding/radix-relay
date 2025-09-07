@@ -181,6 +181,24 @@
             }
         }
     ],
+    "buildPresets": [
+        {
+            "name": "unixlike-clang-debug",
+            "configurePreset": "unixlike-clang-debug"
+        },
+        {
+            "name": "unixlike-clang-release",
+            "configurePreset": "unixlike-clang-release"
+        },
+        {
+            "name": "unixlike-gcc-debug",
+            "configurePreset": "unixlike-gcc-debug"
+        },
+        {
+            "name": "unixlike-gcc-release",
+            "configurePreset": "unixlike-gcc-release"
+        }
+    ],
     "testPresets": [
         {
             "name": "test-common",

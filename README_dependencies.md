@@ -108,12 +108,12 @@ The following compilers should work:
         ```powershell
         choco install vswhere -y
         refreshenv
-       
+
         # change to x86 for 32bit
         $clpath = vswhere -products * -latest -prerelease -find **/Hostx64/x64/*
         $clangpath = vswhere -products * -latest -prerelease -find **/Llvm/bin/*
         $vcvarsallpath =  vswhere -products * -latest -prerelease -find **/Auxiliary/Build/*
-       
+
         $path = [System.Environment]::GetEnvironmentVariable("PATH", "User")
         [Environment]::SetEnvironmentVariable("Path", $path + ";$clpath" + ";$clangpath" + ";$vcvarsallpath", "User")
         refreshenv

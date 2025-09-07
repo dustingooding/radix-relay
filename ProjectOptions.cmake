@@ -135,7 +135,7 @@ macro(radix_relay_global_options)
 
   if(radix_relay_ENABLE_HARDENING AND radix_relay_ENABLE_GLOBAL_HARDENING)
     include(cmake/Hardening.cmake)
-    if(NOT SUPPORTS_UBSAN 
+    if(NOT SUPPORTS_UBSAN
        OR radix_relay_ENABLE_SANITIZER_UNDEFINED
        OR radix_relay_ENABLE_SANITIZER_ADDRESS
        OR radix_relay_ENABLE_SANITIZER_THREAD
@@ -221,7 +221,7 @@ macro(radix_relay_local_options)
 
   if(radix_relay_ENABLE_HARDENING AND NOT radix_relay_ENABLE_GLOBAL_HARDENING)
     include(cmake/Hardening.cmake)
-    if(NOT SUPPORTS_UBSAN 
+    if(NOT SUPPORTS_UBSAN
        OR radix_relay_ENABLE_SANITIZER_UNDEFINED
        OR radix_relay_ENABLE_SANITIZER_ADDRESS
        OR radix_relay_ENABLE_SANITIZER_THREAD
