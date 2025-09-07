@@ -1,7 +1,7 @@
 # [⇌] Radix Relay
 
 [![ci](https://github.com/dustingooding/radix-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/dustingooding/radix-relay/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/dustingooding/radix-relay/branch/main/graph/badge.svg)](https://codecov.io/gh/dustingooding/radix-relay)
+[![codecov](https://codecov.io/gh/dustingooding/radix-relay/graph/badge.svg?token=D48EPLUL27)](https://codecov.io/gh/dustingooding/radix-relay)
 [![CodeQL](https://github.com/dustingooding/radix-relay/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/dustingooding/radix-relay/actions/workflows/codeql-analysis.yml)
 
 Open-source hybrid mesh communications system combining internet (Nostr) and local mesh (BLE) transports with Signal Protocol encryption.
@@ -29,12 +29,15 @@ This project is in active Phase 1 development. See [CONTRIBUTING.md](CONTRIBUTIN
 
 ## Security
 
-For security issues, please email radix-relay@proton.me or create a private security advisory on GitHub.
-
+For security issues, please email <radix-relay@proton.me> or create a private security advisory on GitHub.
 
 ## More Details
 
- * [Dependency Setup](README_dependencies.md)
- * [Building Details](README_building.md)
- * [Troubleshooting](README_troubleshooting.md)
- * [Docker](README_docker.md)
+- [Dependency Setup](README_dependencies.md)
+- [Building Details](README_building.md)
+- [Troubleshooting](README_troubleshooting.md)
+- [Docker](README_docker.md)
+
+## Acknowledgments
+
+This project is built using the excellent [cmake_template](https://github.com/cpp-best-practices/cmake_template) by [Jason Turner](https://github.com/lefticus) (@lefticus), which provides a robust foundation with modern CMake practices, comprehensive CI/CD, static analysis, and cross-platform support.

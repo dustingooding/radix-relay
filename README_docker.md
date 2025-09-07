@@ -1,15 +1,15 @@
-## Docker Instructions
+# Docker Instructions
 
 If you have [Docker](https://www.docker.com/) installed, you can run this
 in your terminal, when the Dockerfile is inside the `.devcontainer` directory:
 
 ```bash
-docker build -f ./.devcontainer/Dockerfile --tag=my_project:latest .
-docker run -it my_project:latest
+docker build -f ./.devcontainer/Dockerfile --tag=radix-relay:latest .
+docker run -it radix-relay:latest
 ```
 
 This command will put you in a `bash` session in a Ubuntu 20.04 Docker container,
-with all of the tools listed in the [Dependencies](#dependencies) section already installed.
+with all of the tools listed in the [Dependencies](README_dependencies.md) section already installed.
 Additionally, you will have `g++-11` and `clang++-13` installed as the default
 versions of `g++` and `clang++`.
 
@@ -25,11 +25,11 @@ If you wish to use clang as your default CC and CXX environment variables, you
 may do so like this:
 
 ```bash
-docker build --tag=my_project:latest --build-arg USE_CLANG=1 .
+docker build --tag=radix-relay:latest --build-arg USE_CLANG=1 .
 ```
 
 You will be logged in as root, so you will see the `#` symbol as your prompt.
-You will be in a directory that contains a copy of the `cpp_starter_project`;
+You will be in a directory that contains a copy of `radix-relay`;
 any changes you make to your local copy will not be updated in the Docker image
 until you rebuild it.
 If you need to mount your local copy directly in the Docker image, see
@@ -38,25 +38,23 @@ TLDR:
 
 ```bash
 docker run -it \
-	-v absolute_path_on_host_machine:absolute_path_in_guest_container \
-	my_project:latest
+  -v absolute_path_on_host_machine:absolute_path_in_guest_container \
+  radix-relay:latest
 ```
 
-You can configure and build [as directed above](#build) using these commands:
+You can configure and [build](README_building.md) using these commands:
 
 ```bash
-/starter_project# mkdir build
-/starter_project# cmake -S . -B ./build
-/starter_project# cmake --build ./build
+/radix_relay# cmake --preset=unixlike-gcc-debug
+/radix_relay# cmake --build out/build/unixlike-gcc-debug
 ```
 
-You can configure and build using `clang-13`, without rebuilding the container,
+You can configure and build using `clang`, without rebuilding the container,
 with these commands:
 
 ```bash
-/starter_project# mkdir build
-/starter_project# CC=clang CXX=clang++ cmake -S . -B ./build
-/starter_project# cmake --build ./build
+/radix_relay# cmake --preset=unixlike-clang-debug
+/radix_relay# cmake --build out/build/unixlike-clang-debug
 ```
 
 The `ccmake` tool is also installed; you can substitute `ccmake` for `cmake` to
@@ -68,4 +66,3 @@ run them separately.
 
 A script called `build_examples.sh` is provided to help you to build the example
 GUI projects in this container.
-

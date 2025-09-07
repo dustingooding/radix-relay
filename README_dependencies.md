@@ -1,25 +1,27 @@
-## Dependencies
+# Dependencies
 
 Note about install commands:
+
 - for Windows, we use [choco](https://chocolatey.org/install).
 - for macOS, we use [brew](https://brew.sh/).
 - In case of an error in cmake, make sure that the dependencies are on the PATH.
 
-
-### Too Long, Didn't Install
+## Too Long, Didn't Install
 
 This is a really long list of dependencies, and it's easy to mess up. That's why:
 
-#### Docker
+### Docker
+
 We have a Docker image that's already set up for you. See the [Docker instructions](./README_docker.md).
 
-#### Setup-cpp
+### Setup-cpp
 
 We have [setup-cpp](https://github.com/aminya/setup-cpp) that is a cross-platform tool to install all the compilers and dependencies on the system.
 
 Please check [the setup-cpp documentation](https://github.com/aminya/setup-cpp) for more information.
 
 For example, on Windows, you can run the following to install llvm, cmake, ninja, ccache, and cppcheck.
+
 ```ps1
 # windows example (open shell as admin)
 curl -LJO "https://github.com/aminya/setup-cpp/releases/download/v0.5.7/setup_cpp_windows.exe"
@@ -28,165 +30,193 @@ curl -LJO "https://github.com/aminya/setup-cpp/releases/download/v0.5.7/setup_cp
 RefreshEnv.cmd # reload the environment
 ```
 
-### Necessary Dependencies
+## Necessary Dependencies
+
 1. A C++ compiler that supports C++17.
 See [cppreference.com](https://en.cppreference.com/w/cpp/compiler_support)
 to see which features are supported by each compiler.
 The following compilers should work:
 
-  * [gcc 7+](https://gcc.gnu.org/)
-	<details>
-	<summary>Install command</summary>
+    - [gcc 7+](https://gcc.gnu.org/)
 
-	- Debian/Ubuntu:
+        **Install command:**
 
-			sudo apt install build-essential
+        - Debian/Ubuntu:
 
-	- Windows:
+          ```bash
+          sudo apt install build-essential
+          ```
 
-			choco install mingw -y
+        - Windows:
 
-	- MacOS:
+          ```cmd
+          choco install mingw -y
+          ```
 
-			brew install gcc
-	</details>
+        - MacOS:
 
-  * [clang 6+](https://clang.llvm.org/)
-	<details>
-	<summary>Install command</summary>
+          ```bash
+          brew install gcc
+          ```
 
-	- Debian/Ubuntu:
+    - [clang 6+](https://clang.llvm.org/)
 
-			bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
+        **Install command:**
 
-	- Windows:
+        - Debian/Ubuntu:
 
-		Visual Studio 2019 ships with LLVM (see the Visual Studio section). However, to install LLVM separately:
+           ```bash
+           bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
+           ```
 
-			choco install llvm -y
+        - Windows:
 
-		llvm-utils for using external LLVM with Visual Studio generator:
+          Visual Studio 2019 ships with LLVM (see the Visual Studio section). However, to install LLVM separately:
 
-			git clone https://github.com/zufuliu/llvm-utils.git
-			cd llvm-utils/VS2017
-			.\install.bat
+          ```cmd
+          choco install llvm -y
+          ```
 
-	- MacOS:
+          llvm-utils for using external LLVM with Visual Studio generator:
 
-			brew install llvm
-	</details>
+          ```cmd
+          git clone https://github.com/zufuliu/llvm-utils.git
+          cd llvm-utils/VS2017
+          .\install.bat
+          ```
 
-  * [Visual Studio 2019 or higher](https://visualstudio.microsoft.com/)
-	<details>
-	<summary>Install command + Environment setup</summary>
+        - MacOS:
 
-	On Windows, you need to install Visual Studio 2019 because of the SDK and libraries that ship with it.
+           ```bash
+           brew install llvm
+           ```
 
-  	Visual Studio IDE - 2019 Community (installs Clang too):
+    - [Visual Studio 2019 or higher](https://visualstudio.microsoft.com/)
 
-  	  	choco install -y visualstudio2019community --package-parameters "add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended --includeOptional --passive --locale en-US"
+        **Install command + Environment setup:**
 
-	Put MSVC compiler, Clang compiler, and vcvarsall.bat on the path:
+        On Windows, you need to install Visual Studio 2019 because of the SDK and libraries that ship with it.
 
-			choco install vswhere -y
-			refreshenv
+        Visual Studio IDE - 2019 Community (installs Clang too):
 
-			# change to x86 for 32bit
-			$clpath = vswhere -products * -latest -prerelease -find **/Hostx64/x64/*
-			$clangpath = vswhere -products * -latest -prerelease -find **/Llvm/bin/*
-			$vcvarsallpath =  vswhere -products * -latest -prerelease -find **/Auxiliary/Build/*
+        ```cmd
+        choco install -y visualstudio2019community --package-parameters "add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended --includeOptional --passive --locale en-US"
+        ```
 
-			$path = [System.Environment]::GetEnvironmentVariable("PATH", "User")
-			[Environment]::SetEnvironmentVariable("Path", $path + ";$clpath" + ";$clangpath" + ";$vcvarsallpath", "User")
-			refreshenv
+        Put MSVC compiler, Clang compiler, and vcvarsall.bat on the path:
 
-	</details>
-
+        ```powershell
+        choco install vswhere -y
+        refreshenv
+       
+        # change to x86 for 32bit
+        $clpath = vswhere -products * -latest -prerelease -find **/Hostx64/x64/*
+        $clangpath = vswhere -products * -latest -prerelease -find **/Llvm/bin/*
+        $vcvarsallpath =  vswhere -products * -latest -prerelease -find **/Auxiliary/Build/*
+       
+        $path = [System.Environment]::GetEnvironmentVariable("PATH", "User")
+        [Environment]::SetEnvironmentVariable("Path", $path + ";$clpath" + ";$clangpath" + ";$vcvarsallpath", "User")
+        refreshenv
+        ```
 
 2. [CMake 3.21+](https://cmake.org/)
-	<details>
-	<summary>Install Command</summary>
 
-	- Debian/Ubuntu:
+    **Install Command:**
 
-			sudo apt-get install cmake
+    - Debian/Ubuntu:
 
-	- Windows:
+       ```bash
+       sudo apt-get install cmake
+       ```
 
-			choco install cmake -y
+    - Windows:
 
-	- MacOS:
+       ```cmd
+       choco install cmake -y
+       ```
 
-			brew install cmake
+    - MacOS:
 
-	</details>
+       ```bash
+       brew install cmake
+       ```
 
-### Optional Dependencies
-#### C++ Tools
-  * [Doxygen](http://doxygen.nl/)
-	<details>
-	<summary>Install Command</summary>
+## Optional Dependencies
 
-	- Debian/Ubuntu:
+### C++ Tools
 
-			sudo apt-get install doxygen
-			sudo apt-get install graphviz
+- [Doxygen](http://doxygen.nl/)
 
-	- Windows:
+    **Install Command:**
 
-			choco install doxygen.install -y
-			choco install graphviz -y
+  - Debian/Ubuntu:
 
-	- MacOS:
+       ```bash
+       sudo apt-get install doxygen
+       sudo apt-get install graphviz
+       ```
 
-			brew install doxygen
-	 		brew install graphviz
+  - Windows:
 
-	</details>
+       ```cmd
+       choco install doxygen.install -y
+       choco install graphviz -y
+       ```
 
+  - MacOS:
 
-  * [ccache](https://ccache.dev/)
-	<details>
-	<summary>Install Command</summary>
+       ```bash
+       brew install doxygen
+       brew install graphviz
+       ```
 
-	- Debian/Ubuntu:
+- [ccache](https://ccache.dev/)
 
-			sudo apt-get install ccache
+    **Install Command:**
 
-	- Windows:
+  - Debian/Ubuntu:
 
-			choco install ccache -y
+       ```bash
+       sudo apt-get install ccache
+       ```
 
-	- MacOS:
+  - Windows:
 
-			brew install ccache
+       ```cmd
+       choco install ccache -y
+       ```
 
-	</details>
+  - MacOS:
 
+       ```bash
+       brew install ccache
+       ```
 
-  * [Cppcheck](http://cppcheck.sourceforge.net/)
-	<details>
-	<summary>Install Command</summary>
+- [Cppcheck](http://cppcheck.sourceforge.net/)
 
-	- Debian/Ubuntu:
+    **Install Command:**
 
-			sudo apt-get install cppcheck
+  - Debian/Ubuntu:
 
-	- Windows:
+       ```bash
+       sudo apt-get install cppcheck
+       ```
 
-			choco install cppcheck -y
+  - Windows:
 
-	- MacOS:
+       ```cmd
+       choco install cppcheck -y
+       ```
 
-			brew install cppcheck
+  - MacOS:
 
-	</details>
+       ```bash
+       brew install cppcheck
+       ```
 
+- [include-what-you-use](https://include-what-you-use.org/)
 
-  * [include-what-you-use](https://include-what-you-use.org/)
-	<details>
-	<summary>Install Command</summary>
+     **Install Command:**
 
-	Follow instructions here:
-	https://github.com/include-what-you-use/include-what-you-use#how-to-install
-	</details>
+     Follow instructions here:
+     <https://github.com/include-what-you-use/include-what-you-use#how-to-install>
