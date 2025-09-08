@@ -1,5 +1,4 @@
-#ifndef RADIX_RELAY_CLI_HPP
-#define RADIX_RELAY_CLI_HPP
+#pragma once
 
 #include <fmt/core.h>
 #include <iostream>
@@ -72,5 +71,3 @@ private:
 };
 
 }// namespace radix_relay
-
-#endif

@@ -10,10 +10,6 @@
 
 #include "internal_use_only/config.hpp"
 
-namespace {
-constexpr std::size_t NODE_ID_SUFFIX_LENGTH = 4;
-}
-
 // NOLINTNEXTLINE(bugprone-exception-escape)
 auto main(int argc, char **argv) -> int
 {
@@ -73,7 +69,8 @@ auto main(int argc, char **argv) -> int
 
   spdlog::info("Starting interactive mode");
 
-  std::string node_id = "node-" + identity_path.substr(identity_path.find_last_of('/') + 1, NODE_ID_SUFFIX_LENGTH);
+  constexpr std::size_t node_id_suffix_length{ 4 };
+  std::string node_id = "node-" + identity_path.substr(identity_path.find_last_of('/') + 1, node_id_suffix_length);
 
   fmt::print("Radix Relay v{} - Interactive Mode\n", radix_relay::cmake::project_version);
   fmt::print("Identity: {}\n", node_id);

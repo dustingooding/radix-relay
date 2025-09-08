@@ -1,5 +1,4 @@
-#ifndef RADIX_RELAY_COMMAND_HANDLER_CONCEPT_HPP
-#define RADIX_RELAY_COMMAND_HANDLER_CONCEPT_HPP
+#pragma once
 
 #include <concepts>
 #include <radix_relay/events/events.hpp>
@@ -35,5 +34,3 @@ concept CommandHandler = requires(T handler,
 };
 
 }// namespace radix_relay::concepts
-
-#endif

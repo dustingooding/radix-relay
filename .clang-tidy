@@ -21,7 +21,20 @@ HeaderFilterRegex: ''
 FormatStyle:     none
 
 CheckOptions:
-  - key: readability-identifier-length.IgnoredVariableNames
-    value: 'x|y|z'
-  - key: readability-identifier-length.IgnoredParameterNames
-    value: 'x|y|z'
+  - {key: readability-identifier-length.IgnoredVariableNames, value: 'x|y|z'}
+  - {key: readability-identifier-length.IgnoredParameterNames, value: 'x|y|z'}
+  - {key: readability-identifier-naming.NamespaceCase, value: lower_case}
+  - {key: readability-identifier-naming.ClassCase, value: lower_case}
+  - {key: readability-identifier-naming.StructCase, value: lower_case}
+  - {key: readability-identifier-naming.TemplateParameterCase, value: CamelCase}
+  - {key: readability-identifier-naming.FunctionCase, value: lower_case}
+  - {key: readability-identifier-naming.VariableCase, value: lower_case}
+  - {key: readability-identifier-naming.MemberCase, value: lower_case}
+  - {key: readability-identifier-naming.ParameterCase, value: lower_case}
+  - {key: readability-identifier-naming.EnumConstantCase, value: lower_case}
+  - {key: readability-identifier-naming.ConstantCase, value: lower_case}
+  - {key: readability-identifier-naming.StaticConstantCase, value: lower_case}
+  - {key: readability-identifier-naming.GlobalConstantCase, value: lower_case}
+  - {key: readability-identifier-naming.MemberConstantCase, value: lower_case}
+  - {key: readability-identifier-naming.StaticVariableCase, value: lower_case}
+  - {key: readability-identifier-naming.GlobalVariableCase, value: lower_case}

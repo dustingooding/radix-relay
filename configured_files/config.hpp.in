@@ -1,5 +1,4 @@
-#ifndef radix_relay_CONFIG_HPP
-#define radix_relay_CONFIG_HPP
+#pragma once
 
 // this is a basic example of how a CMake configured file might look
 // in this particular case, we are using it to set the version number of our executable
@@ -12,5 +11,3 @@ inline constexpr int project_version_patch { @PROJECT_VERSION_PATCH@ };
 inline constexpr int project_version_tweak { @PROJECT_VERSION_TWEAK@ };
 inline constexpr std::string_view git_sha = "@GIT_SHA@";
 }// namespace radix_relay::cmake
-
-#endif

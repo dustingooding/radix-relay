@@ -5,8 +5,8 @@
 #include <string>
 #include <utility>
 
-// Fuzzer that tests CLI command parsing and handling with arbitrary input
 // cppcheck-suppress unusedFunction symbolName=LLVMFuzzerTestOneInput
+// NOLINTNEXTLINE(readability-identifier-naming)
 extern "C" auto LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) -> int
 {
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
