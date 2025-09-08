@@ -1,5 +1,4 @@
-#ifndef RADIX_RELAY_STANDARD_EVENT_HANDLER_HPP
-#define RADIX_RELAY_STANDARD_EVENT_HANDLER_HPP
+#pragma once
 
 #include <radix_relay/command_handler.hpp>
 #include <radix_relay/concepts/event_handler.hpp>
@@ -12,5 +11,3 @@ using StandardEventHandler = EventHandler<CommandHandler>;
 static_assert(concepts::EventHandler<StandardEventHandler>);
 
 }// namespace radix_relay
-
-#endif

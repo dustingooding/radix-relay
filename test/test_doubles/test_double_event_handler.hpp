@@ -1,5 +1,4 @@
-#ifndef TEST_DOUBLE_EVENT_HANDLER_HPP
-#define TEST_DOUBLE_EVENT_HANDLER_HPP
+#pragma once
 
 #include <algorithm>
 #include <radix_relay/concepts/event_handler.hpp>
@@ -38,5 +37,3 @@ struct TestDoubleEventHandler
 static_assert(radix_relay::concepts::EventHandler<TestDoubleEventHandler>);
 
 }// namespace radix_relay_test
-
-#endif

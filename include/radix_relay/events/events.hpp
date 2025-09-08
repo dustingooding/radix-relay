@@ -1,5 +1,4 @@
-#ifndef RADIX_RELAY_EVENTS_HPP
-#define RADIX_RELAY_EVENTS_HPP
+#pragma once
 
 #include <concepts>
 #include <string>
@@ -73,5 +72,3 @@ template<typename T>
 concept Event = Command<T> || std::same_as<T, raw_command>;
 
 }// namespace radix_relay::events
-
-#endif
