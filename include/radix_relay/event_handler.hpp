@@ -1,5 +1,4 @@
-#ifndef RADIX_RELAY_EVENT_HANDLER_HPP
-#define RADIX_RELAY_EVENT_HANDLER_HPP
+#pragma once
 
 #include <radix_relay/concepts/command_handler.hpp>
 #include <radix_relay/events/events.hpp>
@@ -92,5 +91,3 @@ private:
 };
 
 }// namespace radix_relay
-
-#endif

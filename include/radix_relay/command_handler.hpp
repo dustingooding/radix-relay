@@ -1,5 +1,4 @@
-#ifndef RADIX_RELAY_COMMAND_HANDLER_HPP
-#define RADIX_RELAY_COMMAND_HANDLER_HPP
+#pragma once
 
 #include <fmt/core.h>
 #include <radix_relay/concepts/command_handler.hpp>
@@ -136,5 +135,3 @@ private:
 static_assert(concepts::CommandHandler<CommandHandler>);
 
 }// namespace radix_relay
-
-#endif

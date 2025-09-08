@@ -1,5 +1,4 @@
-#ifndef TEST_DOUBLE_COMMAND_HANDLER_HPP
-#define TEST_DOUBLE_COMMAND_HANDLER_HPP
+#pragma once
 
 #include <algorithm>
 #include <radix_relay/concepts/command_handler.hpp>
@@ -83,5 +82,3 @@ public:
 static_assert(radix_relay::concepts::CommandHandler<TestDoubleCommandHandler>);
 
 }// namespace radix_relay_test
-
-#endif
