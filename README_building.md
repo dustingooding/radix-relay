@@ -128,7 +128,7 @@ cmake --list-presets=configure
 Available presets:
 
 - `unixlike-clang-debug` - Linux/macOS with Clang (Debug)
-- `unixlike-clang-release` - Linux/macOS with Clang (Release)  
+- `unixlike-clang-release` - Linux/macOS with Clang (Release)
 - `unixlike-gcc-debug` - Linux/macOS with GCC (Debug)
 - `unixlike-gcc-release` - Linux/macOS with GCC (Release)
 - `windows-msvc-debug-developer-mode` - Windows MSVC (Debug, Developer Mode)

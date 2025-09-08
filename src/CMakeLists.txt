@@ -1,2 +1,2 @@
-add_subdirectory(radix_relay_core)
 add_subdirectory(radix_relay)
+add_subdirectory(radix_relay/core)

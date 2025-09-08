@@ -37,6 +37,31 @@ target_link_libraries(
           radix_relay::radix_relay_core
           Catch2::Catch2WithMain)
 
+add_executable(event_system_tests event_system_tests.cpp)
+target_link_libraries(
+  event_system_tests
+  PRIVATE radix_relay::radix_relay_warnings
+          radix_relay::radix_relay_options
+          radix_relay::radix_relay_core
+          Catch2::Catch2WithMain)
+
+add_executable(event_handler_tests event_handler_tests.cpp)
+target_link_libraries(
+  event_handler_tests
+  PRIVATE radix_relay::radix_relay_warnings
+          radix_relay::radix_relay_options
+          radix_relay::radix_relay_core
+          Catch2::Catch2WithMain)
+
+add_executable(command_handler_tests command_handler_tests.cpp)
+target_link_libraries(
+  command_handler_tests
+  PRIVATE radix_relay::radix_relay_warnings
+          radix_relay::radix_relay_options
+          radix_relay::radix_relay_core
+          fmt::fmt
+          Catch2::Catch2WithMain)
+
 if(WIN32 AND BUILD_SHARED_LIBS)
   add_custom_command(
     TARGET cli_tests
@@ -60,3 +85,41 @@ catch_discover_tests(
   OUTPUT_SUFFIX
   .xml)
 
+catch_discover_tests(
+  event_system_tests
+  TEST_PREFIX
+  "unittests."
+  REPORTER
+  XML
+  OUTPUT_DIR
+  .
+  OUTPUT_PREFIX
+  "unittests."
+  OUTPUT_SUFFIX
+  .xml)
+
+catch_discover_tests(
+  event_handler_tests
+  TEST_PREFIX
+  "unittests."
+  REPORTER
+  XML
+  OUTPUT_DIR
+  .
+  OUTPUT_PREFIX
+  "unittests."
+  OUTPUT_SUFFIX
+  .xml)
+
+catch_discover_tests(
+  command_handler_tests
+  TEST_PREFIX
+  "unittests."
+  REPORTER
+  XML
+  OUTPUT_DIR
+  .
+  OUTPUT_PREFIX
+  "unittests."
+  OUTPUT_SUFFIX
+  .xml)
