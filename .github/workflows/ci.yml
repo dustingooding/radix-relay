@@ -21,20 +21,12 @@ jobs:
     strategy:
       fail-fast: false
 
-      # Recommendations:
-      #   * support at least 2 operating systems
-      #   * support at least 2 compilers
-      #   * make sure all supported configurations for your project are built
-      #
-      # Disable/enable builds in this list to meet the above recommendations
-      # and your own projects needs
       matrix:
         os:
           - ubuntu-latest
           - macos-latest
           - windows-latest
         compiler:
-          # you can specify the version after `-` like "llvm-15.0.2".
           - llvm-19.1.1
           - gcc-14
         generator:
@@ -49,7 +41,6 @@ jobs:
           - OFF
 
         exclude:
-          # mingw is determined by this author to be too buggy to support
           - os: windows-latest
             compiler: gcc-14
 
@@ -143,22 +134,17 @@ jobs:
         with:
           envFile: '.github/constants.env'
 
-
       - name: Setup Cpp
         uses: aminya/setup-cpp@v1
         with:
           compiler: ${{ matrix.compiler }}
           vcvarsall: ${{ contains(matrix.os, 'windows' )}}
-
           cmake: true
           ninja: true
-          vcpkg: false
+          vcpkg: true
           ccache: true
           clangtidy: ${{ env.CLANG_TIDY_VERSION }}
-
-
           cppcheck: true
-
           gcovr: true
           opencppcoverage: true
 
@@ -172,20 +158,38 @@ jobs:
           rustc --version
           cargo --version
 
-      - name: Configure CMake
+      - name: Install Protocol Buffers (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libprotobuf-dev
+
+      - name: Install Protocol Buffers (macOS)
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+
+      - name: Install Protocol Buffers (Windows)
+        if: runner.os == 'Windows'
         run: |
-          cmake -S . -B ./build -G "${{matrix.generator}}" -D${{ env.PROJECT_NAME }}_ENABLE_IPO=${{matrix.enable_ipo }} -DCMAKE_BUILD_TYPE:STRING=${{matrix.build_type}} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }} -DGIT_SHA:STRING=${{ github.sha }}
+          vcpkg install
+          echo "${{ github.workspace }}\vcpkg_installed\x64-windows\tools\protobuf" >> $env:GITHUB_PATH
+
+      - name: Verify Protobuf installation
+        run: protoc --version
+
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -S . -B ./build -G "${{matrix.generator}}" -DCMAKE_TOOLCHAIN_FILE="$env:USERPROFILE\vcpkg\scripts\buildsystems\vcpkg.cmake" -D${{ env.PROJECT_NAME }}_ENABLE_IPO=${{matrix.enable_ipo }} -DCMAKE_BUILD_TYPE:STRING=${{matrix.build_type}} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }} -DGIT_SHA:STRING=${{ github.sha }}
+
+      - name: Configure CMake (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: cmake -S . -B ./build -G "${{matrix.generator}}" -D${{ env.PROJECT_NAME }}_ENABLE_IPO=${{matrix.enable_ipo }} -DCMAKE_BUILD_TYPE:STRING=${{matrix.build_type}} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }} -DGIT_SHA:STRING=${{ github.sha }}
 
       - name: Build
-        # Execute the build.  You can specify a specific target with "--target <NAME>"
         run: |
           cmake --build ./build --config ${{matrix.build_type}}
 
       - name: Unix - Test and coverage
         if: runner.os != 'Windows'
         working-directory: ./build
-        # Execute tests defined by the CMake configuration.
-        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
         run: |
           ctest -C ${{matrix.build_type}}
           gcovr -j ${{env.nproc}} --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable '${{ matrix.gcov_executable }}'
@@ -213,7 +217,7 @@ jobs:
       - name: Publish to codecov
         uses: codecov/codecov-action@v5
         with:
-          fail_ci_if_error: true # we weren't posting previously
+          fail_ci_if_error: true
           flags: ${{ runner.os }}
           name: ${{ runner.os }}-coverage
           token: ${{ secrets.CODECOV_TOKEN }}
