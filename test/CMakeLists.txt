@@ -123,3 +123,32 @@ catch_discover_tests(
   "unittests."
   OUTPUT_SUFFIX
   .xml)
+
+# Add Rust bridge tests if test_crate_cxx is available
+if(TARGET test_crate_cxx)
+  add_executable(rust_bridge_tests rust_bridge_tests.cpp)
+  target_link_libraries(
+    rust_bridge_tests
+    PRIVATE radix_relay::radix_relay_warnings
+            radix_relay::radix_relay_options
+            test_crate_cxx
+            Catch2::Catch2WithMain)
+
+  # Disable static analysis for generated CXX bridge code
+  set_target_properties(rust_bridge_tests PROPERTIES
+    CXX_CLANG_TIDY ""
+    CXX_CPPCHECK "")
+
+  catch_discover_tests(
+    rust_bridge_tests
+    TEST_PREFIX
+    "rust."
+    REPORTER
+    XML
+    OUTPUT_DIR
+    .
+    OUTPUT_PREFIX
+    "rust."
+    OUTPUT_SUFFIX
+    .xml)
+endif()

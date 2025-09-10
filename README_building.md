@@ -92,27 +92,13 @@ Run one of the following in PowerShell:
   vcvarsall.bat x64
   ```
 
-- clang:
-
-  ```powershell
-  [Environment]::SetEnvironmentVariable("CC", "clang.exe", "User")
-  [Environment]::SetEnvironmentVariable("CXX", "clang++.exe", "User")
-  refreshenv
-  ```
-
-- gcc:
-
-  ```powershell
-  [Environment]::SetEnvironmentVariable("CC", "gcc.exe", "User")
-  [Environment]::SetEnvironmentVariable("CXX", "g++.exe", "User")
-  refreshenv
-  ```
+**Note**: This project only supports MSVC on Windows. Clang/LLVM and GCC are not supported due to libsignal compatibility requirements.
 
 **Temporarily (only for the current shell):**
 
 ```powershell
-$Env:CC="clang.exe"
-$Env:CXX="clang++.exe"
+$Env:CC="cl.exe"
+$Env:CXX="cl.exe"
 ```
 
 ## (2) Configure using CMake presets
@@ -129,10 +115,14 @@ Available presets:
 
 - `unixlike-clang-debug` - Linux/macOS with Clang (Debug)
 - `unixlike-clang-release` - Linux/macOS with Clang (Release)
-- `unixlike-gcc-debug` - Linux/macOS with GCC (Debug)
-- `unixlike-gcc-release` - Linux/macOS with GCC (Release)
+- `unixlike-gcc-debug` - Linux with GCC (Debug)
+- `unixlike-gcc-release` - Linux with GCC (Release)
 - `windows-msvc-debug-developer-mode` - Windows MSVC (Debug, Developer Mode)
 - `windows-msvc-release-developer-mode` - Windows MSVC (Release, Developer Mode)
+- `windows-msvc-debug-user-mode` - Windows MSVC (Debug, User Mode)
+- `windows-msvc-release-user-mode` - Windows MSVC (Release, User Mode)
+
+**Note**: Windows Clang presets have been removed due to libsignal compatibility requirements.
 
 Configure using preset:
 
@@ -197,19 +187,9 @@ Choose "Visual Studio 16 2019" as the generator:
 
 ![default_vs](https://user-images.githubusercontent.com/16418197/82524696-32502680-9af5-11ea-9697-a42000e900a6.jpg)
 
-### Windows - Visual Studio generator and Clang Compiler
+### Windows - MSVC Only
 
-You should have already set `C` and `CXX` to `clang.exe` and `clang++.exe`.
-
-Choose "Visual Studio 16 2019" as the generator. To tell Visual studio to use `clang-cl.exe`:
-
-- If you use the LLVM that is shipped with Visual Studio: write `ClangCl` under "optional toolset to use".
-
-![visual_studio](https://user-images.githubusercontent.com/16418197/82781142-ae60ac00-9e1e-11ea-8c77-222b005a8f7e.png)
-
-- If you use an external LLVM: write [`LLVM_v142`](https://github.com/zufuliu/llvm-utils#llvm-for-visual-studio-2017-and-2019) under "optional toolset to use".
-
-![visual_studio](https://user-images.githubusercontent.com/16418197/82769558-b3136900-9dfa-11ea-9f73-02ab8f9b0ca4.png)
+**Note**: This project only supports MSVC on Windows due to libsignal compatibility requirements. Use the Visual Studio generator with the default MSVC toolset.
 
 2.c.4) Choose the Cmake options and then generate:
 

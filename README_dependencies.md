@@ -32,7 +32,7 @@ RefreshEnv.cmd # reload the environment
 
 ## Necessary Dependencies
 
-1. A C++ compiler that supports C++17.
+1. A C++ compiler that supports C++20.
 See [cppreference.com](https://en.cppreference.com/w/cpp/compiler_support)
 to see which features are supported by each compiler.
 The following compilers should work:
