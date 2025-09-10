@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "test_crate",
+]
+
+[workspace.dependencies]
+# Common dependencies can be defined here and inherited by members

@@ -5,9 +5,6 @@ include(cmake/CPM.cmake)
 # targets
 function(radix_relay_setup_dependencies)
 
-  # For each dependency, see if it's
-  # already been provided to us by a parent project
-
   if(NOT TARGET fmtlib::fmtlib)
     cpmaddpackage("gh:fmtlib/fmt#11.1.4")
   endif()
@@ -40,7 +37,27 @@ function(radix_relay_setup_dependencies)
     cpmaddpackage("gh:lefticus/tools#update_build_system")
   endif()
 
-  # Protocol Buffers (required for libsignal)
+  if(NOT TARGET corrosion)
+    if(WIN32)
+      set(Rust_TOOLCHAIN "stable-x86_64-pc-windows-msvc" CACHE STRING "Rust toolchain to use")
+    elseif(APPLE)
+      set(Rust_TOOLCHAIN "stable-aarch64-apple-darwin" CACHE STRING "Rust toolchain to use")
+    else()
+      set(Rust_TOOLCHAIN "stable-x86_64-unknown-linux-gnu" CACHE STRING "Rust toolchain to use")
+    endif()
+
+    cpmaddpackage(
+      NAME
+      corrosion
+      VERSION
+      0.5.2
+      GITHUB_REPOSITORY
+      "corrosion-rs/corrosion"
+      OPTIONS
+      "CORROSION_VERBOSE_OUTPUT ON"
+    )
+  endif()
+
   find_package(Protobuf REQUIRED)
   if(Protobuf_FOUND)
     message(STATUS "Found Protobuf: ${Protobuf_VERSION}")

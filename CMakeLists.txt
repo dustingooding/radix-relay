@@ -32,6 +32,10 @@ radix_relay_global_options()
 include(Dependencies.cmake)
 radix_relay_setup_dependencies()
 
+# Rust integration via Corrosion
+include(cmake/RustIntegration.cmake)
+setup_rust_workspace()
+
 radix_relay_local_options()
 
 # don't know if this should be set globally from here or not...
