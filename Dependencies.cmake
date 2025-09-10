@@ -40,4 +40,13 @@ function(radix_relay_setup_dependencies)
     cpmaddpackage("gh:lefticus/tools#update_build_system")
   endif()
 
+  # Protocol Buffers (required for libsignal)
+  find_package(Protobuf REQUIRED)
+  if(Protobuf_FOUND)
+    message(STATUS "Found Protobuf: ${Protobuf_VERSION}")
+    message(STATUS "  Protobuf compiler: ${Protobuf_PROTOC_EXECUTABLE}")
+    message(STATUS "  Protobuf libraries: ${Protobuf_LIBRARIES}")
+    message(STATUS "  Protobuf include dirs: ${Protobuf_INCLUDE_DIRS}")
+  endif()
+
 endfunction()
