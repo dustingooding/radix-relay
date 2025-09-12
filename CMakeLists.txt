@@ -19,10 +19,14 @@ endif()
 # when compiling with PCH enabled
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Read version from VERSION file
+file(READ ${CMAKE_CURRENT_SOURCE_DIR}/VERSION PROJECT_VERSION_FROM_FILE)
+string(STRIP "${PROJECT_VERSION_FROM_FILE}" PROJECT_VERSION_FROM_FILE)
+
 # Set the project name and language
 project(
   radix_relay
-  VERSION 0.2.0
+  VERSION ${PROJECT_VERSION_FROM_FILE}
   DESCRIPTION ""
   HOMEPAGE_URL "https://github.com/dustingooding/radix-relay"
   LANGUAGES CXX C)
