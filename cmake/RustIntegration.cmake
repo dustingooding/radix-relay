@@ -27,13 +27,13 @@ function(setup_rust_workspace)
 
     corrosion_import_crate(
         MANIFEST_PATH "${CMAKE_SOURCE_DIR}/rust/Cargo.toml"
-        CRATES test_crate
+        CRATES crypto_utils
     )
 
     # Add CXX bridge for C++ interoperability
     corrosion_add_cxxbridge(
-        test_crate_cxx
-        CRATE test_crate
+        crypto_utils_cxx
+        CRATE crypto_utils
         FILES lib.rs
     )
 
@@ -41,14 +41,14 @@ function(setup_rust_workspace)
     if(MSVC)
         if(CMAKE_BUILD_TYPE STREQUAL "Debug")
             # Ensure CXX bridge C++ code uses debug MSVC runtime (/MDd)
-            corrosion_set_env_vars(test_crate
+            corrosion_set_env_vars(crypto_utils
                 "CFLAGS=/MDd /D_ITERATOR_DEBUG_LEVEL=2"
                 "CXXFLAGS=/MDd /D_ITERATOR_DEBUG_LEVEL=2"
             )
             message(STATUS "  CXX bridge: Using MSVC debug runtime (/MDd) with iterator debug level 2")
         else()
             # Ensure CXX bridge C++ code uses release MSVC runtime (/MD)
-            corrosion_set_env_vars(test_crate
+            corrosion_set_env_vars(crypto_utils
                 "CFLAGS=/MD /D_ITERATOR_DEBUG_LEVEL=0"
                 "CXXFLAGS=/MD /D_ITERATOR_DEBUG_LEVEL=0"
             )
@@ -61,11 +61,11 @@ function(setup_rust_workspace)
 
     # Set environment variables for Rust compilation
     if(APPLE)
-        corrosion_set_env_vars(test_crate
+        corrosion_set_env_vars(crypto_utils
             "CARGO_TARGET_DIR=${RUST_TARGET_DIR}"
             "MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
     else()
-        corrosion_set_env_vars(test_crate "CARGO_TARGET_DIR=${RUST_TARGET_DIR}")
+        corrosion_set_env_vars(crypto_utils "CARGO_TARGET_DIR=${RUST_TARGET_DIR}")
     endif()
 
     add_test(

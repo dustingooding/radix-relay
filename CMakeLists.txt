@@ -22,7 +22,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Set the project name and language
 project(
   radix_relay
-  VERSION 0.1.0
+  VERSION 0.2.0
   DESCRIPTION ""
   HOMEPAGE_URL "https://github.com/dustingooding/radix-relay"
   LANGUAGES CXX C)

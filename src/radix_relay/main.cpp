@@ -10,9 +10,8 @@
 
 #include "internal_use_only/config.hpp"
 
-namespace {
-constexpr std::size_t NODE_ID_SUFFIX_LENGTH = 4;
-}
+// Include generated CXX bridge header for crypto utilities
+#include "crypto_utils_cxx/lib.h"
 
 // NOLINTNEXTLINE(bugprone-exception-escape)
 auto main(int argc, char **argv) -> int
@@ -42,8 +41,10 @@ auto main(int argc, char **argv) -> int
 
   CLI11_PARSE(app, argc, argv);
 
+  const radix_relay::StandardEventHandler::command_handler_t command_handler;
+
   if (show_version) {
-    fmt::print("Radix Relay v{}\n", radix_relay::cmake::project_version);
+    command_handler.handle(radix_relay::events::version{});
     return 0;
   }
 
@@ -53,30 +54,26 @@ auto main(int argc, char **argv) -> int
   spdlog::info("Identity: {}, Mode: {}", identity_path, mode);
 
   if (send_cmd->parsed()) {
-    spdlog::info("Sending message '{}' to '{}'", send_message, recipient);
-    fmt::print("Message queued for delivery via {} transport(s)\n", mode);
+    command_handler.handle(radix_relay::events::send{ .peer = recipient, .message = send_message });
     return 0;
   }
 
   if (peers_cmd->parsed()) {
-    fmt::print("Discovered peers: (none - transport layer not implemented)\n");
+    command_handler.handle(radix_relay::events::peers{});
     return 0;
   }
 
   if (status_cmd->parsed()) {
-    fmt::print("Network Status:\n");
-    fmt::print("  Internet: Not connected\n");
-    fmt::print("  BLE Mesh: Not initialized\n");
-    fmt::print("  Active Sessions: 0\n");
+    command_handler.handle(radix_relay::events::status{});
     return 0;
   }
 
   spdlog::info("Starting interactive mode");
 
-  std::string node_id = "node-" + identity_path.substr(identity_path.find_last_of('/') + 1, NODE_ID_SUFFIX_LENGTH);
+  std::string node_fingerprint = std::string(radix_relay::get_node_identity_fingerprint());
 
   fmt::print("Radix Relay v{} - Interactive Mode\n", radix_relay::cmake::project_version);
-  fmt::print("Identity: {}\n", node_id);
+  fmt::print("Node: {}\n", node_fingerprint);
   fmt::print("Transport: {} (internet + BLE mesh)\n", mode);
   fmt::print("Connected Peers: 0 (transport layer not implemented)\n\n");
 
@@ -84,9 +81,8 @@ auto main(int argc, char **argv) -> int
     "Available commands: send, broadcast, peers, status, sessions, mode, scan, connect, trust, verify, version, help, "
     "quit\n\n");
 
-  const radix_relay::StandardEventHandler::command_handler_t command_handler;
   const radix_relay::StandardEventHandler event_handler{ command_handler };
-  radix_relay::InteractiveCli cli(node_id, mode, event_handler);
+  radix_relay::InteractiveCli cli(node_fingerprint, mode, event_handler);
   cli.run();
 
   return 0;

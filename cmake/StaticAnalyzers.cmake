@@ -11,8 +11,10 @@ macro(radix_relay_enable_cppcheck WARNINGS_AS_ERRORS CPPCHECK_OPTIONS)
     if("${CPPCHECK_OPTIONS}" STREQUAL "")
       # Enable all warnings that are actionable by the user of this toolset
       # style should enable the other 3, but we'll be explicit just in case
-      set(SUPPRESS_DIR "*:${CMAKE_CURRENT_BINARY_DIR}/_deps/*.h")
-      message(STATUS "CPPCHECK_OPTIONS suppress: ${SUPPRESS_DIR}")
+      set(SUPPRESS_DEPS_DIR "*:${CMAKE_CURRENT_BINARY_DIR}/_deps/*")
+      message(STATUS "CPPCHECK_OPTIONS suppress: ${SUPPRESS_DEPS_DIR}")
+      set(SUPPRESS_CORROSION_DIR "*:${CMAKE_CURRENT_BINARY_DIR}/corrosion_generated/*")
+      message(STATUS "CPPCHECK_OPTIONS suppress: ${SUPPRESS_CORROSION_DIR}")
       set(CMAKE_CXX_CPPCHECK
           ${CPPCHECK}
           --template=${CPPCHECK_TEMPLATE}
@@ -32,7 +34,8 @@ macro(radix_relay_enable_cppcheck WARNINGS_AS_ERRORS CPPCHECK_OPTIONS)
           # ignores static_assert type failures
           --suppress=knownConditionTrueFalse
           --inconclusive
-          --suppress=${SUPPRESS_DIR})
+          --suppress=${SUPPRESS_DEPS_DIR}
+          --suppress=${SUPPRESS_CORROSION_DIR})
     else()
       # if the user provides a CPPCHECK_OPTIONS with a template specified, it will override this template
       set(CMAKE_CXX_CPPCHECK ${CPPCHECK} --template=${CPPCHECK_TEMPLATE} ${CPPCHECK_OPTIONS})
