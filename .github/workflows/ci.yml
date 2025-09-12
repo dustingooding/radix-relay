@@ -43,6 +43,10 @@ jobs:
         exclude:
           - os: windows-latest
             compiler: gcc-14
+          - os: windows-latest
+            compiler: llvm-19.1.1
+          - os: macos-latest
+            compiler: gcc-14
 
         include:
           # Add appropriate variables for gcov version required. This will intentionally break
@@ -191,14 +195,14 @@ jobs:
         if: runner.os != 'Windows'
         working-directory: ./build
         run: |
-          ctest -C ${{matrix.build_type}}
+          ctest -C ${{matrix.build_type}} --output-on-failure
           gcovr -j ${{env.nproc}} --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable '${{ matrix.gcov_executable }}'
 
       - name: Windows - Test and coverage
         if: runner.os == 'Windows'
         working-directory: ./build
         run: |
-          OpenCppCoverage.exe --export_type cobertura:coverage.xml --cover_children -- ctest -C ${{matrix.build_type}}
+          OpenCppCoverage.exe --export_type cobertura:coverage.xml --cover_children -- ctest -C ${{matrix.build_type}} --output-on-failure
 
       - name: CPack
         if: matrix.package_generator != ''
