@@ -5,6 +5,11 @@
 #include <radix_relay/events/events.hpp>
 #include <utility>
 
+// Include generated CXX bridge header for crypto utilities
+#include "crypto_utils_cxx/lib.h"
+
+#include "internal_use_only/config.hpp"
+
 namespace radix_relay {
 
 struct CommandHandler
@@ -41,10 +46,14 @@ private:
   {
     std::ignore = initialized_;
     fmt::print("Network Status:\n");
-    fmt::print("  ├─ Internet: Not connected (transport not implemented)\n");
-    fmt::print("  ├─ BLE Mesh: Not initialized (transport not implemented)\n");
-    fmt::print("  ├─ Active Sessions: 0\n");
-    fmt::print("  └─ Messages: 0 sent, 0 received\n");
+    fmt::print("  Internet: Not connected\n");
+    fmt::print("  BLE Mesh: Not initialized\n");
+    fmt::print("  Active Sessions: 0\n");
+
+    // Crypto Status - call to Rust crypto utilities
+    fmt::print("\nCrypto Status:\n");
+    std::string node_fingerprint = std::string(radix_relay::get_node_identity_fingerprint());
+    fmt::print("  Node Fingerprint: {}\n", node_fingerprint);
   }
 
   auto handle_impl(const events::sessions & /*command*/) const -> void
@@ -64,8 +73,7 @@ private:
   auto handle_impl(const events::version & /*command*/) const -> void
   {
     std::ignore = initialized_;
-    fmt::print("Radix Relay v{}\n", "1.0.0");
-    fmt::print("Hybrid Mesh Communications System\n");
+    fmt::print("Radix Relay v{}\n", radix_relay::cmake::project_version);
   }
 
   auto handle_impl(const events::mode &command) const -> void

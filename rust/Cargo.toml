@@ -2,7 +2,7 @@
 resolver = "2"
 
 members = [
-    "test_crate",
+    "crypto_utils",
 ]
 
 [workspace.dependencies]

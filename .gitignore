@@ -5,6 +5,9 @@ out/coverage/*
 cmake-build-*/
 conan-cache/
 
+# Rust build artifacts
+rust/target/
+
 # User spesific settings
 CMakeUserPresets.json
 spack.yaml
