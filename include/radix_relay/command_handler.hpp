@@ -5,8 +5,8 @@
 #include <radix_relay/events/events.hpp>
 #include <utility>
 
-// Include generated CXX bridge header for crypto utilities
-#include "crypto_utils_cxx/lib.h"
+// Include node identity utilities
+#include <radix_relay/node_identity.hpp>
 
 #include "internal_use_only/config.hpp"
 
@@ -52,7 +52,7 @@ private:
 
     // Crypto Status - call to Rust crypto utilities
     fmt::print("\nCrypto Status:\n");
-    std::string node_fingerprint = std::string(radix_relay::get_node_identity_fingerprint());
+    std::string node_fingerprint = get_node_fingerprint();
     fmt::print("  Node Fingerprint: {}\n", node_fingerprint);
   }
 

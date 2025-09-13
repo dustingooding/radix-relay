@@ -2,6 +2,45 @@ cmake_minimum_required(VERSION 3.15...3.23)
 
 project(CmakeConfigPackageTests LANGUAGES CXX)
 
+function(add_catch_test)
+  cmake_parse_arguments(TEST_ARG "" "NAME;PREFIX" "SOURCES;LIBS" ${ARGN})
+
+  if(NOT TEST_ARG_NAME)
+    message(FATAL_ERROR "add_catch_test requires NAME")
+  endif()
+
+  if(NOT TEST_ARG_SOURCES)
+    message(FATAL_ERROR "add_catch_test requires SOURCES")
+  endif()
+
+  if(NOT TEST_ARG_PREFIX)
+    set(TEST_ARG_PREFIX "unittests")
+  endif()
+
+  add_executable(${TEST_ARG_NAME} ${TEST_ARG_SOURCES})
+
+  target_link_libraries(
+    ${TEST_ARG_NAME}
+    PRIVATE radix_relay::radix_relay_warnings
+            radix_relay::radix_relay_options
+            radix_relay::radix_relay_core
+            Catch2::Catch2WithMain
+            ${TEST_ARG_LIBS})
+
+  catch_discover_tests(
+    ${TEST_ARG_NAME}
+    TEST_PREFIX
+    "${TEST_ARG_PREFIX}."
+    REPORTER
+    XML
+    OUTPUT_DIR
+    .
+    OUTPUT_PREFIX
+    "${TEST_ARG_PREFIX}."
+    OUTPUT_SUFFIX
+    .xml)
+endfunction()
+
 # ---- Test as standalone project the exported config package ----
 
 if(PROJECT_IS_TOP_LEVEL OR TEST_INSTALLED_VERSION)
@@ -19,48 +58,16 @@ endif()
 
 include(${Catch2_SOURCE_DIR}/extras/Catch.cmake)
 
-# Provide a simple smoke test to make sure that the CLI works and can display a --help message
-add_test(NAME cli.has_help COMMAND radix-relay --help)
+# Include integration tests for the main CLI executable
+include(main_cli_tests.cmake)
 
-# Provide a test to verify that the version being reported from the application
-# matches the version given to CMake. This will be important once you package
-# your program. Real world shows that this is the kind of simple mistake that is easy
-# to make, but also easy to test for.
-add_test(NAME cli.version_matches COMMAND radix-relay --version)
-set_tests_properties(cli.version_matches PROPERTIES PASS_REGULAR_EXPRESSION "${PROJECT_VERSION}")
-
-add_executable(cli_tests cli_tests.cpp)
-target_link_libraries(
-  cli_tests
-  PRIVATE radix_relay::radix_relay_warnings
-          radix_relay::radix_relay_options
-          radix_relay::radix_relay_core
-          Catch2::Catch2WithMain)
-
-add_executable(event_system_tests event_system_tests.cpp)
-target_link_libraries(
-  event_system_tests
-  PRIVATE radix_relay::radix_relay_warnings
-          radix_relay::radix_relay_options
-          radix_relay::radix_relay_core
-          Catch2::Catch2WithMain)
-
-add_executable(event_handler_tests event_handler_tests.cpp)
-target_link_libraries(
-  event_handler_tests
-  PRIVATE radix_relay::radix_relay_warnings
-          radix_relay::radix_relay_options
-          radix_relay::radix_relay_core
-          Catch2::Catch2WithMain)
-
-add_executable(command_handler_tests command_handler_tests.cpp)
-target_link_libraries(
-  command_handler_tests
-  PRIVATE radix_relay::radix_relay_warnings
-          radix_relay::radix_relay_options
-          radix_relay::radix_relay_core
-          fmt::fmt
-          Catch2::Catch2WithMain)
+add_catch_test(NAME cli_parser_integration_tests SOURCES cli_parser_integration_tests.cpp LIBS CLI11::CLI11;spdlog::spdlog)
+add_catch_test(NAME cli_tests SOURCES cli_tests.cpp)
+add_catch_test(NAME cli_utils_tests SOURCES cli_utils_tests.cpp LIBS CLI11::CLI11;fmt::fmt;spdlog::spdlog;crypto_utils_cxx)
+add_catch_test(NAME command_handler_tests SOURCES command_handler_tests.cpp LIBS fmt::fmt)
+add_catch_test(NAME event_handler_tests SOURCES event_handler_tests.cpp)
+add_catch_test(NAME event_system_tests SOURCES event_system_tests.cpp)
+add_catch_test(NAME node_identity_tests SOURCES node_identity_tests.cpp LIBS crypto_utils_cxx)
 
 if(WIN32 AND BUILD_SHARED_LIBS)
   add_custom_command(
@@ -70,85 +77,11 @@ if(WIN32 AND BUILD_SHARED_LIBS)
     COMMAND_EXPAND_LISTS)
 endif()
 
-# automatically discover tests that are defined in catch based test files you can modify the unittests. Set TEST_PREFIX
-# to whatever you want, or use different for different binaries
-catch_discover_tests(
-  cli_tests
-  TEST_PREFIX
-  "unittests."
-  REPORTER
-  XML
-  OUTPUT_DIR
-  .
-  OUTPUT_PREFIX
-  "unittests."
-  OUTPUT_SUFFIX
-  .xml)
-
-catch_discover_tests(
-  event_system_tests
-  TEST_PREFIX
-  "unittests."
-  REPORTER
-  XML
-  OUTPUT_DIR
-  .
-  OUTPUT_PREFIX
-  "unittests."
-  OUTPUT_SUFFIX
-  .xml)
-
-catch_discover_tests(
-  event_handler_tests
-  TEST_PREFIX
-  "unittests."
-  REPORTER
-  XML
-  OUTPUT_DIR
-  .
-  OUTPUT_PREFIX
-  "unittests."
-  OUTPUT_SUFFIX
-  .xml)
-
-catch_discover_tests(
-  command_handler_tests
-  TEST_PREFIX
-  "unittests."
-  REPORTER
-  XML
-  OUTPUT_DIR
-  .
-  OUTPUT_PREFIX
-  "unittests."
-  OUTPUT_SUFFIX
-  .xml)
-
-# Add Rust bridge tests if test_crate_cxx is available
-if(TARGET test_crate_cxx)
-  add_executable(rust_bridge_tests rust_bridge_tests.cpp)
-  target_link_libraries(
-    rust_bridge_tests
-    PRIVATE radix_relay::radix_relay_warnings
-            radix_relay::radix_relay_options
-            test_crate_cxx
-            Catch2::Catch2WithMain)
+if(TARGET crypto_utils_cxx)
+  add_catch_test(NAME rust_bridge_tests SOURCES rust_bridge_tests.cpp LIBS crypto_utils_cxx PREFIX rust)
 
   # Disable static analysis for generated CXX bridge code
   set_target_properties(rust_bridge_tests PROPERTIES
     CXX_CLANG_TIDY ""
     CXX_CPPCHECK "")
-
-  catch_discover_tests(
-    rust_bridge_tests
-    TEST_PREFIX
-    "rust."
-    REPORTER
-    XML
-    OUTPUT_DIR
-    .
-    OUTPUT_PREFIX
-    "rust."
-    OUTPUT_SUFFIX
-    .xml)
 endif()
