@@ -1,41 +1,36 @@
-
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use sha2::{Sha256, Digest};
+use crate::ffi::NodeIdentity;
 
 #[cxx::bridge(namespace = "radix_relay")]
 mod ffi {
+    struct NodeIdentity {
+        hostname: String,
+        username: String,
+        platform: String,
+        machine_id: String,
+        mac_address: String,
+        install_id: String,
+    }
+
     extern "Rust" {
-        fn hello_world() -> String;
-        fn add_numbers(a: i32, b: i32) -> i32;
-        fn get_node_identity_fingerprint() -> String;
+        fn generate_node_fingerprint(identity: &NodeIdentity) -> String;
     }
 }
 
-pub fn hello_world() -> String {
-    "Hello World from Rust via CXX bridge!".to_string()
-}
+pub fn generate_node_fingerprint(identity: &NodeIdentity) -> String {
+    let mut hasher = Sha256::new();
 
-pub fn add_numbers(a: i32, b: i32) -> i32 {
-    a + b
-}
+    hasher.update(identity.hostname.as_bytes());
+    hasher.update(identity.username.as_bytes());
+    hasher.update(identity.platform.as_bytes());
+    hasher.update(identity.machine_id.as_bytes());
+    hasher.update(identity.mac_address.as_bytes());
+    hasher.update(identity.install_id.as_bytes());
+    hasher.update(b"radix-node");
 
-pub fn get_node_identity_fingerprint() -> String {
-    // Generate a deterministic node identity fingerprint
-    // In a real implementation, this would use actual identity key material
-    let mut hasher = DefaultHasher::new();
+    let result = hasher.finalize();
 
-    // Use some system-specific information for fingerprint generation
-    let hostname = std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown".to_string());
-    let user = std::env::var("USER").unwrap_or_else(|_| "unknown".to_string());
-
-    hostname.hash(&mut hasher);
-    user.hash(&mut hasher);
-    "radix-node".hash(&mut hasher);
-
-    let hash = hasher.finish();
-
-    // Format as a readable fingerprint (similar to SSH key fingerprints)
-    format!("RDX:{:016x}", hash)
+    format!("RDX:{:x}", result)
 }
 
 #[cfg(test)]
@@ -43,25 +38,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_hello_world() {
-        let result = hello_world();
-        assert_eq!(result, "Hello World from Rust via CXX bridge!");
+    fn test_generate_node_fingerprint_known_input() {
+        let identity = NodeIdentity {
+            hostname: "test-host".to_string(),
+            username: "test-user".to_string(),
+            platform: "linux".to_string(),
+            machine_id: "machine123".to_string(),
+            mac_address: "00:11:22:33:44:55".to_string(),
+            install_id: "install456".to_string(),
+        };
+
+        let fingerprint = generate_node_fingerprint(&identity);
+        assert_eq!(fingerprint, "RDX:dae7dd5b261f004b5a5f08f9af5c468b5ef6d18a7ef9d066f5489341c4932348");
     }
 
     #[test]
-    fn test_add_numbers() {
-        assert_eq!(add_numbers(2, 3), 5);
-        assert_eq!(add_numbers(-1, 1), 0);
-    }
+    fn test_generate_node_fingerprint_empty_fields() {
+        let identity = NodeIdentity {
+            hostname: "".to_string(),
+            username: "".to_string(),
+            platform: "".to_string(),
+            machine_id: "".to_string(),
+            mac_address: "".to_string(),
+            install_id: "".to_string(),
+        };
 
-    #[test]
-    fn test_get_node_identity_fingerprint() {
-        let fingerprint = get_node_identity_fingerprint();
-        assert!(fingerprint.starts_with("RDX:"));
-        assert_eq!(fingerprint.len(), 20); // "RDX:" + 16 hex chars
-
-        // Should be deterministic for same environment
-        let fingerprint2 = get_node_identity_fingerprint();
-        assert_eq!(fingerprint, fingerprint2);
+        let fingerprint = generate_node_fingerprint(&identity);
+        assert_eq!(fingerprint, "RDX:175568d645658bd89cd35d8f9857624b36b27bcb41163539ebe46ec49601217d");
     }
 }

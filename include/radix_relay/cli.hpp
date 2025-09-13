@@ -19,7 +19,7 @@ template<concepts::EventHandler EvtHandler> struct InteractiveCli
   {
     std::string input;
     while (true) {
-      fmt::print("{} [⇌] ", node_id_);
+      fmt::print("[⇌] ");
 
       if (!std::getline(std::cin, input)) {
         break;// EOF or Ctrl+D
