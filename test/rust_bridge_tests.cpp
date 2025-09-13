@@ -1,33 +1,31 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 
-#include "test_crate_cxx/lib.h"
+#include "crypto_utils_cxx/lib.h"
 
 TEST_CASE("Rust CXX Bridge Integration", "[rust][cxx]")
 {
 
-  SECTION("hello_world function returns expected string")
+  SECTION("generate_node_fingerprint produces deterministic output")
   {
-    auto result = hello_world();
-    std::string expected = "Hello World from Rust via CXX bridge!";
-    REQUIRE(std::string(result) == expected);
+    auto fingerprint1 = radix_relay::generate_node_fingerprint("testhost", "testuser");
+    auto fingerprint2 = radix_relay::generate_node_fingerprint("testhost", "testuser");
+    auto fingerprint3 = radix_relay::generate_node_fingerprint("otherhost", "testuser");
+
+    REQUIRE(std::string(fingerprint1).starts_with("RDX:"));
+    REQUIRE(std::string(fingerprint1).length() == 20);
+    REQUIRE(std::string(fingerprint1) == std::string(fingerprint2));
+    REQUIRE(std::string(fingerprint1) != std::string(fingerprint3));
   }
 
-  SECTION("add_numbers function performs correct arithmetic")
+  SECTION("get_node_identity_fingerprint returns valid format")
   {
-    REQUIRE(add_numbers(2, 3) == 5);
-    REQUIRE(add_numbers(-1, 1) == 0);
-    REQUIRE(add_numbers(0, 0) == 0);
-    REQUIRE(add_numbers(-5, -3) == -8);
-    REQUIRE(add_numbers(100, 200) == 300);
-  }
+    auto fingerprint = radix_relay::get_node_identity_fingerprint();
 
-  SECTION("rust::String converts to std::string correctly")
-  {
-    auto rust_string = hello_world();
-    std::string std_string = std::string(rust_string);
+    REQUIRE(std::string(fingerprint).starts_with("RDX:"));
+    REQUIRE(std::string(fingerprint).length() == 20);
 
-    REQUIRE(!std_string.empty());
-    REQUIRE(std_string == "Hello World from Rust via CXX bridge!");
+    auto fingerprint2 = radix_relay::get_node_identity_fingerprint();
+    REQUIRE(std::string(fingerprint) == std::string(fingerprint2));
   }
 }
