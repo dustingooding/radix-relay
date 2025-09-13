@@ -1,3 +1,0 @@
-[submodule "third_party/libsignal"]
-	path = third_party/libsignal
-	url = https://github.com/signalapp/libsignal.git

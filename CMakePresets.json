@@ -65,7 +65,9 @@
                 "CMAKE_C_COMPILER": "cl",
                 "CMAKE_CXX_COMPILER": "cl",
                 "CMAKE_BUILD_TYPE": "Debug",
-                "ENABLE_DEVELOPER_MODE": "ON"
+                "ENABLE_DEVELOPER_MODE": "ON",
+                "radix_relay_ENABLE_SANITIZER_ADDRESS": "OFF",
+                "radix_relay_ENABLE_SANITIZER_UNDEFINED": "OFF"
             }
         },
         {
@@ -89,7 +91,9 @@
                 "CMAKE_C_COMPILER": "cl",
                 "CMAKE_CXX_COMPILER": "cl",
                 "CMAKE_BUILD_TYPE": "Debug",
-                "ENABLE_DEVELOPER_MODE": "OFF"
+                "ENABLE_DEVELOPER_MODE": "OFF",
+                "radix_relay_ENABLE_SANITIZER_ADDRESS": "OFF",
+                "radix_relay_ENABLE_SANITIZER_UNDEFINED": "OFF"
             }
         },
         {
@@ -150,6 +154,22 @@
         }
     ],
     "buildPresets": [
+        {
+            "name": "windows-msvc-debug-developer-mode",
+            "configurePreset": "windows-msvc-debug-developer-mode"
+        },
+        {
+            "name": "windows-msvc-release-developer-mode",
+            "configurePreset": "windows-msvc-release-developer-mode"
+        },
+        {
+            "name": "windows-msvc-debug-user-mode",
+            "configurePreset": "windows-msvc-debug-user-mode"
+        },
+        {
+            "name": "windows-msvc-release-user-mode",
+            "configurePreset": "windows-msvc-release-user-mode"
+        },
         {
             "name": "unixlike-clang-debug",
             "configurePreset": "unixlike-clang-debug"
@@ -221,6 +241,20 @@
             "description": "Enable output and stop on failure",
             "inherits": "test-common",
             "configurePreset": "unixlike-clang-release"
+        },
+        {
+            "name": "test-windows-msvc-debug-user-mode",
+            "displayName": "Strict",
+            "description": "Enable output and stop on failure",
+            "inherits": "test-common",
+            "configurePreset": "windows-msvc-debug-user-mode"
+        },
+        {
+            "name": "test-windows-msvc-release-user-mode",
+            "displayName": "Strict",
+            "description": "Enable output and stop on failure",
+            "inherits": "test-common",
+            "configurePreset": "windows-msvc-release-user-mode"
         }
     ]
 }

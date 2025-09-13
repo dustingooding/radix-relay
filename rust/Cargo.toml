@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
     "crypto_utils",
+    "signal_bridge",
 ]
 
 [workspace.dependencies]

@@ -122,8 +122,6 @@ jobs:
             core.setFailed('There is a mismatch between configured llvm compiler and clang-tidy version chosen')
 
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
 
       - name: Setup Cache
         uses: ./.github/actions/setup_cache
@@ -179,34 +177,73 @@ jobs:
       - name: Verify Protobuf installation
         run: protoc --version
 
+      - name: Determine CMake preset
+        id: preset
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            if [ "${{ matrix.packaging_maintainer_mode }}" = "On" ]; then
+              if [ "${{ matrix.build_type }}" = "Debug" ]; then
+                echo "preset=windows-msvc-debug-developer-mode" >> $GITHUB_OUTPUT
+              else
+                echo "preset=windows-msvc-release-developer-mode" >> $GITHUB_OUTPUT
+              fi
+            else
+              if [ "${{ matrix.build_type }}" = "Debug" ]; then
+                echo "preset=windows-msvc-debug-user-mode" >> $GITHUB_OUTPUT
+              else
+                echo "preset=windows-msvc-release-user-mode" >> $GITHUB_OUTPUT
+              fi
+            fi
+          elif [ "${{ matrix.compiler }}" = "gcc-14" ]; then
+            if [ "${{ matrix.build_type }}" = "Debug" ]; then
+              echo "preset=unixlike-gcc-debug" >> $GITHUB_OUTPUT
+            else
+              echo "preset=unixlike-gcc-release" >> $GITHUB_OUTPUT
+            fi
+          else
+            if [ "${{ matrix.build_type }}" = "Debug" ]; then
+              echo "preset=unixlike-clang-debug" >> $GITHUB_OUTPUT
+            else
+              echo "preset=unixlike-clang-release" >> $GITHUB_OUTPUT
+            fi
+          fi
+        shell: bash
+
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
-        run: cmake -S . -B ./build -G "${{matrix.generator}}" -DCMAKE_TOOLCHAIN_FILE="$env:USERPROFILE\vcpkg\scripts\buildsystems\vcpkg.cmake" -D${{ env.PROJECT_NAME }}_ENABLE_IPO=${{matrix.enable_ipo }} -DCMAKE_BUILD_TYPE:STRING=${{matrix.build_type}} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }} -DGIT_SHA:STRING=${{ github.sha }}
+        run: cmake --preset=${{ steps.preset.outputs.preset }} -DCMAKE_TOOLCHAIN_FILE="$env:USERPROFILE\vcpkg\scripts\buildsystems\vcpkg.cmake" -D${{ env.PROJECT_NAME }}_ENABLE_IPO=${{matrix.enable_ipo }} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }} -DGIT_SHA:STRING=${{ github.sha }}
 
       - name: Configure CMake (Linux/macOS)
         if: runner.os != 'Windows'
-        run: cmake -S . -B ./build -G "${{matrix.generator}}" -D${{ env.PROJECT_NAME }}_ENABLE_IPO=${{matrix.enable_ipo }} -DCMAKE_BUILD_TYPE:STRING=${{matrix.build_type}} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }} -DGIT_SHA:STRING=${{ github.sha }}
+        run: cmake --preset=${{ steps.preset.outputs.preset }} -D${{ env.PROJECT_NAME }}_ENABLE_IPO=${{matrix.enable_ipo }} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }} -DGIT_SHA:STRING=${{ github.sha }}
 
       - name: Build
         run: |
-          cmake --build ./build --config ${{matrix.build_type}}
+          cmake --build --preset=${{ steps.preset.outputs.preset }}
 
       - name: Unix - Test and coverage
         if: runner.os != 'Windows'
-        working-directory: ./build
         run: |
-          ctest -C ${{matrix.build_type}} --output-on-failure
-          gcovr -j ${{env.nproc}} --root ../ --print-summary --xml-pretty --xml coverage.xml . --gcov-executable '${{ matrix.gcov_executable }}'
+          ctest --preset=test-${{ steps.preset.outputs.preset }}
+          cd out/build/${{ steps.preset.outputs.preset }}
+          gcovr -j ${{env.nproc}} --root ../../.. --print-summary --xml-pretty --xml coverage.xml . --gcov-executable '${{ matrix.gcov_executable }}'
 
       - name: Windows - Test and coverage
         if: runner.os == 'Windows'
-        working-directory: ./build
         run: |
-          OpenCppCoverage.exe --export_type cobertura:coverage.xml --cover_children -- ctest -C ${{matrix.build_type}} --output-on-failure
+          OpenCppCoverage.exe --sources src\ --sources include\ --modules *radix_relay*.exe --modules *test*.exe --modules *signal_bridge*.dll --modules *crypto_utils*.dll --export_type cobertura:coverage.xml --cover_children -- ctest --preset=test-${{ steps.preset.outputs.preset }}
+          if (Test-Path "coverage.xml") {
+            Write-Host "coverage.xml already in root"
+          } elseif (Test-Path "out\build\${{ steps.preset.outputs.preset }}\coverage.xml") {
+            Move-Item "out\build\${{ steps.preset.outputs.preset }}\coverage.xml" "coverage.xml"
+          } else {
+            Write-Warning "coverage.xml not found in expected locations"
+            Get-ChildItem -Recurse -Filter coverage.xml -ErrorAction SilentlyContinue
+          }
 
       - name: CPack
         if: matrix.package_generator != ''
-        working-directory: ./build
+        working-directory: out/build/${{ steps.preset.outputs.preset }}
         run: |
           cpack -C ${{matrix.build_type}} -G ${{matrix.package_generator}}
 
@@ -215,7 +252,7 @@ jobs:
         if: ${{ startsWith(github.ref, 'refs/tags/') && matrix.package_generator != '' }}
         with:
           files: |
-            build/*-*${{ matrix.build_type }}*-*.*
+            out/build/${{ steps.preset.outputs.preset }}/*-*${{ matrix.build_type }}*-*.*
 
 
       - name: Publish to codecov
@@ -225,4 +262,4 @@ jobs:
           flags: ${{ runner.os }}
           name: ${{ runner.os }}-coverage
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./build/coverage.xml
+          files: ./coverage.xml

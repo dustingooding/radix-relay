@@ -11,9 +11,12 @@ macro(radix_relay_enable_cppcheck WARNINGS_AS_ERRORS CPPCHECK_OPTIONS)
     if("${CPPCHECK_OPTIONS}" STREQUAL "")
       # Enable all warnings that are actionable by the user of this toolset
       # style should enable the other 3, but we'll be explicit just in case
-      set(SUPPRESS_DEPS_DIR "*:${CMAKE_CURRENT_BINARY_DIR}/_deps/*")
+      # Normalize path separators to native format
+      file(TO_NATIVE_PATH "*/_deps/*" SUPPRESS_DEPS_DIR)
+      file(TO_NATIVE_PATH "*/corrosion_generated/*" SUPPRESS_CORROSION_DIR)
+      set(SUPPRESS_DEPS_DIR "*:${SUPPRESS_DEPS_DIR}")
+      set(SUPPRESS_CORROSION_DIR "*:${SUPPRESS_CORROSION_DIR}")
       message(STATUS "CPPCHECK_OPTIONS suppress: ${SUPPRESS_DEPS_DIR}")
-      set(SUPPRESS_CORROSION_DIR "*:${CMAKE_CURRENT_BINARY_DIR}/corrosion_generated/*")
       message(STATUS "CPPCHECK_OPTIONS suppress: ${SUPPRESS_CORROSION_DIR}")
       set(CMAKE_CXX_CPPCHECK
           ${CPPCHECK}
