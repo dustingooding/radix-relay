@@ -1,0 +1,4 @@
+# Local Rust configuration to match CI environment
+[build]
+# Treat warnings as errors to catch issues locally before CI
+rustflags = ["-D", "warnings"]

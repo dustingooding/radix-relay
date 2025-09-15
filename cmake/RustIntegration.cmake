@@ -25,9 +25,14 @@ function(setup_rust_workspace)
         message(STATUS "  Rust Release build configured")
     endif()
 
+    set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/../rust")
+
+    # Set global Cargo environment before importing crates
+    set(ENV{CARGO_TARGET_DIR} "${RUST_TARGET_DIR}")
+
     corrosion_import_crate(
         MANIFEST_PATH "${CMAKE_SOURCE_DIR}/rust/Cargo.toml"
-        CRATES crypto_utils
+        CRATES crypto_utils signal_bridge
     )
 
     # Add CXX bridge for C++ interoperability
@@ -56,21 +61,22 @@ function(setup_rust_workspace)
         endif()
     endif()
 
-
-    set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/../rust")
-
     # Set environment variables for Rust compilation
     if(APPLE)
         corrosion_set_env_vars(crypto_utils
             "CARGO_TARGET_DIR=${RUST_TARGET_DIR}"
             "MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
+        corrosion_set_env_vars(signal_bridge
+            "CARGO_TARGET_DIR=${RUST_TARGET_DIR}"
+            "MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
     else()
         corrosion_set_env_vars(crypto_utils "CARGO_TARGET_DIR=${RUST_TARGET_DIR}")
+        corrosion_set_env_vars(signal_bridge "CARGO_TARGET_DIR=${RUST_TARGET_DIR}")
     endif()
 
     add_test(
         NAME rust_tests
-        COMMAND ${RUST_CARGO} test --manifest-path "${CMAKE_SOURCE_DIR}/rust/Cargo.toml"
+        COMMAND ${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${RUST_TARGET_DIR} ${RUST_CARGO} test --manifest-path "${CMAKE_SOURCE_DIR}/rust/Cargo.toml"
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     )
 

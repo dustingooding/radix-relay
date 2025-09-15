@@ -1,0 +1,11 @@
+[package]
+name = "signal_bridge"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+# Core libsignal dependencies - using git dependency to avoid linting third-party code
+libsignal-protocol = { git = "https://github.com/signalapp/libsignal.git", tag = "v0.80.0" }
