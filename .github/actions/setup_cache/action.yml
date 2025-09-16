@@ -72,6 +72,7 @@ runs:
         path: |
           C:/Users/runneradmin/vcpkg
           ${{ github.workspace }}/vcpkg_installed
+          ${{ github.workspace }}\vcpkg_cache
         key: ${{ runner.os }}-vcpkg-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-${{ hashFiles('**/vcpkg.json') }}
         restore-keys: |
           ${{ runner.os }}-vcpkg-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-
