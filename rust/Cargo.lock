@@ -1376,6 +1376,7 @@ name = "signal_bridge"
 version = "0.1.0"
 dependencies = [
  "libsignal-protocol",
+ "rand",
 ]
 
 [[package]]
