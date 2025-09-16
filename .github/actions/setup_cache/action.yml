@@ -1,6 +1,6 @@
 
 name: 'setup_cache'
-description: 'sets up the shared cache'
+description: 'sets up the shared cache with optimized Windows performance'
 inputs:
   compiler:
     required: true
@@ -19,34 +19,93 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Cache
-      uses: actions/cache@v3
+    # CMake dependency cache - CPM downloads, subbuild artifacts, not our code
+    - name: Cache CMake dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ github.workspace }}/out/build/**/_deps
+          ${{ github.workspace }}/out/build/**/_*-subbuild
+          ${{ github.workspace }}/out/build/**/_*-src
+          ${{ github.workspace }}/out/build/**/corrosion
+          ${{ github.workspace }}/out/build/**/cmake/CPM_*.cmake
+        key: ${{ runner.os }}-${{ inputs.compiler }}-cmake-deps-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**/*.cmake') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ inputs.compiler }}-cmake-deps-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-
+          ${{ runner.os }}-${{ inputs.compiler }}-cmake-deps-${{ inputs.build_type }}-
+          ${{ runner.os }}-${{ inputs.compiler }}-cmake-deps-
+
+    # Compiler-specific caches
+    - name: Cache Unix compiler artifacts
+      if: runner.os != 'Windows'
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cache/pip
           ~/.ccache
-        key: ${{ runner.os }}-${{ inputs.compiler }}-${{ inputs.build_type }}-${{ inputs.generator }}-${{ inputs.packaging_maintainer_mode }}-${{ hashFiles('**/CMakeLists.txt') }}
+        key: ${{ runner.os }}-${{ inputs.compiler }}-compiler-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-${{ hashFiles('**/CMakeLists.txt') }}
         restore-keys: |
-          ${{ runner.os }}-${{ inputs.compiler }}-${{ inputs.build_type }}
+          ${{ runner.os }}-${{ inputs.compiler }}-compiler-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-
+          ${{ runner.os }}-${{ inputs.compiler }}-compiler-${{ inputs.build_type }}-
+          ${{ runner.os }}-${{ inputs.compiler }}-compiler-
 
+    # Windows MSVC dependency cache - only cache build system, not compiled code
+    - name: Cache MSVC dependencies (Windows)
+      if: runner.os == 'Windows'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ github.workspace }}/out/build/**/_deps
+          ${{ github.workspace }}/out/build/**/corrosion
+          ~/AppData/Local/Microsoft/MSBuild
+        key: ${{ runner.os }}-msvc-deps-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**/*.cmake') }}
+        restore-keys: |
+          ${{ runner.os }}-msvc-deps-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-
+          ${{ runner.os }}-msvc-deps-${{ inputs.build_type }}-
+          ${{ runner.os }}-msvc-deps-
+
+    # vcpkg cache - Windows dependency management (compiled packages only)
     - name: Cache vcpkg (Windows)
       if: runner.os == 'Windows'
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           C:/Users/runneradmin/vcpkg
           ${{ github.workspace }}/vcpkg_installed
-        key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
+        key: ${{ runner.os }}-vcpkg-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-${{ hashFiles('**/vcpkg.json') }}
         restore-keys: |
+          ${{ runner.os }}-vcpkg-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-
+          ${{ runner.os }}-vcpkg-${{ inputs.build_type }}-
           ${{ runner.os }}-vcpkg-
 
-    - name: Cache Cargo build
+    # Rust/Cargo cache (Unix) - only cache dependencies, not our compiled Rust code
+    - name: Cache Cargo dependencies (Unix)
+      if: runner.os != 'Windows'
       uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-          ${{ github.workspace }}/out/build/*/cargo
-        key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          ${{ github.workspace }}/out/build/rust
+          ${{ github.workspace }}/out/build/**/cargo
+        key: ${{ runner.os }}-cargo-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-build-
+          ${{ runner.os }}-cargo-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-
+          ${{ runner.os }}-cargo-${{ inputs.build_type }}-
+          ${{ runner.os }}-cargo-
+
+    # Rust/Cargo cache (Windows) - Windows-specific paths
+    - name: Cache Cargo dependencies (Windows)
+      if: runner.os == 'Windows'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ env.USERPROFILE }}/.cargo/registry
+          ${{ env.USERPROFILE }}/.cargo/git
+          ${{ github.workspace }}/out/build/rust
+          ${{ github.workspace }}/out/build/**/cargo
+        key: ${{ runner.os }}-cargo-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ inputs.build_type }}-${{ inputs.packaging_maintainer_mode }}-
+          ${{ runner.os }}-cargo-${{ inputs.build_type }}-
+          ${{ runner.os }}-cargo-
