@@ -134,4 +134,62 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_signed_pre_key_store_save_signed_pre_key() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::storage::SqliteStorage;
+
+        let storage = SqliteStorage::new(":memory:").await?;
+        let mut rng = rand::rng();
+        let identity_key_pair = IdentityKeyPair::generate(&mut rng);
+        let signed_pre_key_id = 1;
+        let timestamp = Timestamp::from_epoch_millis(12345);
+        let key_pair = KeyPair::generate(&mut rng);
+        let signature = identity_key_pair.private_key().calculate_signature(&key_pair.public_key.serialize(), &mut rng)?;
+        let signed_pre_key = SignedPreKeyRecord::new(signed_pre_key_id.into(), timestamp, &key_pair, &signature);
+
+        assert_eq!(storage.signed_pre_key_count().await, 0);
+
+        let result = storage.save_signed_pre_key(signed_pre_key_id, &signed_pre_key).await;
+        assert!(result.is_ok());
+
+        assert_eq!(storage.signed_pre_key_count().await, 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_signed_pre_key_store_get_nonexistent() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::storage::SqliteStorage;
+
+        let storage = SqliteStorage::new(":memory:").await?;
+        let signed_pre_key_id = 999;
+
+        let retrieved = storage.get_signed_pre_key(signed_pre_key_id).await?;
+        assert!(retrieved.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_signed_pre_key_store_save_and_get() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::storage::SqliteStorage;
+
+        let storage = SqliteStorage::new(":memory:").await?;
+        let mut rng = rand::rng();
+        let identity_key_pair = IdentityKeyPair::generate(&mut rng);
+        let signed_pre_key_id = 1;
+        let timestamp = Timestamp::from_epoch_millis(12345);
+        let key_pair = KeyPair::generate(&mut rng);
+        let signature = identity_key_pair.private_key().calculate_signature(&key_pair.public_key.serialize(), &mut rng)?;
+        let signed_pre_key = SignedPreKeyRecord::new(signed_pre_key_id.into(), timestamp, &key_pair, &signature);
+
+        storage.save_signed_pre_key(signed_pre_key_id, &signed_pre_key).await?;
+        let retrieved = storage.get_signed_pre_key(signed_pre_key_id).await?;
+
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().id()?, signed_pre_key_id.into());
+
+        Ok(())
+    }
 }

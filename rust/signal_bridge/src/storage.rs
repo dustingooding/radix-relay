@@ -11,6 +11,7 @@ use tokio::sync::Mutex;
 pub struct SqliteStorage {
     identity_keys: Arc<Mutex<HashMap<String, IdentityKey>>>,
     pre_keys: Arc<Mutex<HashMap<u32, KeyPair>>>,
+    signed_pre_keys: Arc<Mutex<HashMap<u32, SignedPreKeyRecord>>>,
 }
 
 impl SqliteStorage {
@@ -18,6 +19,7 @@ impl SqliteStorage {
         Ok(Self {
             identity_keys: Arc::new(Mutex::new(HashMap::new())),
             pre_keys: Arc::new(Mutex::new(HashMap::new())),
+            signed_pre_keys: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -66,6 +68,29 @@ impl SqliteStorage {
 
     pub async fn pre_key_count(&self) -> usize {
         let store = self.pre_keys.lock().await;
+        store.len()
+    }
+
+    pub async fn save_signed_pre_key(
+        &self,
+        signed_pre_key_id: u32,
+        signed_pre_key: &SignedPreKeyRecord,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = self.signed_pre_keys.lock().await;
+        store.insert(signed_pre_key_id, signed_pre_key.clone());
+        Ok(())
+    }
+
+    pub async fn get_signed_pre_key(
+        &self,
+        signed_pre_key_id: u32,
+    ) -> Result<Option<SignedPreKeyRecord>, Box<dyn std::error::Error>> {
+        let store = self.signed_pre_keys.lock().await;
+        Ok(store.get(&signed_pre_key_id).cloned())
+    }
+
+    pub async fn signed_pre_key_count(&self) -> usize {
+        let store = self.signed_pre_keys.lock().await;
         store.len()
     }
 }
