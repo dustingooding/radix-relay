@@ -3,6 +3,8 @@
 //! This crate provides a bridge between Radix Relay's C++ transport layer
 //! and the official Signal Protocol Rust implementation for end-to-end encryption.
 
+mod storage;
+
 #[cfg(test)]
 mod tests {
     use libsignal_protocol::*;
@@ -29,6 +31,56 @@ mod tests {
 
         assert!(!public_key_bytes.iter().all(|&x| x == 0));
         assert!(!private_key_bytes.iter().all(|&x| x == 0));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_identity_key_store_save_identity() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::storage::SqliteStorage;
+
+        let storage = SqliteStorage::new(":memory:").await?;
+        let mut rng = rand::rng();
+        let identity_key_pair = IdentityKeyPair::generate(&mut rng);
+        let address = ProtocolAddress::new("test_user".to_string(), DeviceId::new(1)?);
+
+        assert_eq!(storage.identity_count().await, 0);
+
+        let result = storage.save_identity(&address, identity_key_pair.identity_key()).await;
+        assert!(result.is_ok());
+
+        assert_eq!(storage.identity_count().await, 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_identity_key_store_get_identity_nonexistent() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::storage::SqliteStorage;
+
+        let storage = SqliteStorage::new(":memory:").await?;
+        let address = ProtocolAddress::new("nonexistent_user".to_string(), DeviceId::new(1)?);
+
+        let retrieved = storage.get_identity(&address).await?;
+        assert!(retrieved.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_identity_key_store_save_and_get() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::storage::SqliteStorage;
+
+        let storage = SqliteStorage::new(":memory:").await?;
+        let mut rng = rand::rng();
+        let identity_key_pair = IdentityKeyPair::generate(&mut rng);
+        let address = ProtocolAddress::new("test_user".to_string(), DeviceId::new(1)?);
+
+        storage.save_identity(&address, identity_key_pair.identity_key()).await?;
+        let retrieved = storage.get_identity(&address).await?;
+
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().serialize(), identity_key_pair.identity_key().serialize());
 
         Ok(())
     }
