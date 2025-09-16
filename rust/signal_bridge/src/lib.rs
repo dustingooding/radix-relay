@@ -14,4 +14,22 @@ mod tests {
         assert_eq!(protocol_address.name(), "test_device");
         assert_eq!(protocol_address.device_id(), device_id);
     }
+
+    #[test]
+    fn test_identity_key_generation() -> Result<(), SignalProtocolError> {
+        let mut rng = rand::rng();
+        let identity_key_pair = IdentityKeyPair::generate(&mut rng);
+
+        let identity_key = identity_key_pair.identity_key();
+        let public_key_bytes = identity_key.public_key().serialize();
+        assert_eq!(public_key_bytes.len(), 33);
+
+        let private_key_bytes = identity_key_pair.private_key().serialize();
+        assert_eq!(private_key_bytes.len(), 32);
+
+        assert!(!public_key_bytes.iter().all(|&x| x == 0));
+        assert!(!private_key_bytes.iter().all(|&x| x == 0));
+
+        Ok(())
+    }
 }

@@ -7,4 +7,7 @@ members = [
 ]
 
 [workspace.dependencies]
-# Common dependencies can be defined here and inherited by members
+# Unified versions to align with libsignal dependencies (libsignal uses rand 0.9.2)
+rand = "0.9.2"
+rand_core = "0.9"
+getrandom = "0.3"

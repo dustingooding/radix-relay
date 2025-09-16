@@ -9,3 +9,6 @@ crate-type = ["staticlib"]
 [dependencies]
 # Core libsignal dependencies - using git dependency to avoid linting third-party code
 libsignal-protocol = { git = "https://github.com/signalapp/libsignal.git", tag = "v0.80.0" }
+
+# Use workspace rand version (aligned with libsignal 0.9.2)
+rand = { workspace = true }
