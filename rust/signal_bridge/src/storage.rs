@@ -12,6 +12,7 @@ pub struct SqliteStorage {
     identity_keys: Arc<Mutex<HashMap<String, IdentityKey>>>,
     pre_keys: Arc<Mutex<HashMap<u32, KeyPair>>>,
     signed_pre_keys: Arc<Mutex<HashMap<u32, SignedPreKeyRecord>>>,
+    sessions: Arc<Mutex<HashMap<String, SessionRecord>>>,
 }
 
 impl SqliteStorage {
@@ -20,6 +21,7 @@ impl SqliteStorage {
             identity_keys: Arc::new(Mutex::new(HashMap::new())),
             pre_keys: Arc::new(Mutex::new(HashMap::new())),
             signed_pre_keys: Arc::new(Mutex::new(HashMap::new())),
+            sessions: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -92,5 +94,216 @@ impl SqliteStorage {
     pub async fn signed_pre_key_count(&self) -> usize {
         let store = self.signed_pre_keys.lock().await;
         store.len()
+    }
+
+    pub async fn store_session(
+        &self,
+        address: &ProtocolAddress,
+        session_record: &SessionRecord,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let key = format!("{}:{}", address.name(), u32::from(address.device_id()));
+        let mut store = self.sessions.lock().await;
+        store.insert(key, session_record.clone());
+        Ok(())
+    }
+
+    pub async fn load_session(
+        &self,
+        address: &ProtocolAddress,
+    ) -> Result<Option<SessionRecord>, Box<dyn std::error::Error>> {
+        let key = format!("{}:{}", address.name(), u32::from(address.device_id()));
+        let store = self.sessions.lock().await;
+        Ok(store.get(&key).cloned())
+    }
+
+    pub async fn session_count(&self) -> usize {
+        let store = self.sessions.lock().await;
+        store.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_identity_key_store_save_identity() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqliteStorage::new(":memory:").await?;
+        let mut rng = rand::rng();
+        let identity_key_pair = IdentityKeyPair::generate(&mut rng);
+        let address = ProtocolAddress::new("test_user".to_string(), DeviceId::new(1)?);
+
+        assert_eq!(storage.identity_count().await, 0);
+
+        let result = storage.save_identity(&address, identity_key_pair.identity_key()).await;
+        assert!(result.is_ok());
+
+        assert_eq!(storage.identity_count().await, 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_identity_key_store_get_identity_nonexistent() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqliteStorage::new(":memory:").await?;
+        let address = ProtocolAddress::new("nonexistent_user".to_string(), DeviceId::new(1)?);
+
+        let retrieved = storage.get_identity(&address).await?;
+        assert!(retrieved.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_identity_key_store_save_and_get() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqliteStorage::new(":memory:").await?;
+        let mut rng = rand::rng();
+        let identity_key_pair = IdentityKeyPair::generate(&mut rng);
+        let address = ProtocolAddress::new("test_user".to_string(), DeviceId::new(1)?);
+
+        storage.save_identity(&address, identity_key_pair.identity_key()).await?;
+        let retrieved = storage.get_identity(&address).await?;
+
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().serialize(), identity_key_pair.identity_key().serialize());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_pre_key_store_save_pre_key() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqliteStorage::new(":memory:").await?;
+        let mut rng = rand::rng();
+        let key_pair = KeyPair::generate(&mut rng);
+        let pre_key_id = 42;
+
+        assert_eq!(storage.pre_key_count().await, 0);
+
+        let result = storage.save_pre_key(pre_key_id, &key_pair).await;
+        assert!(result.is_ok());
+
+        assert_eq!(storage.pre_key_count().await, 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_pre_key_store_get_nonexistent() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqliteStorage::new(":memory:").await?;
+        let pre_key_id = 999;
+
+        let retrieved = storage.get_pre_key(pre_key_id).await?;
+        assert!(retrieved.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_pre_key_store_save_and_get() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqliteStorage::new(":memory:").await?;
+        let mut rng = rand::rng();
+        let key_pair = KeyPair::generate(&mut rng);
+        let pre_key_id = 42;
+
+        storage.save_pre_key(pre_key_id, &key_pair).await?;
+        let retrieved = storage.get_pre_key(pre_key_id).await?;
+
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().public_key.serialize(), key_pair.public_key.serialize());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_signed_pre_key_store_save_signed_pre_key() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqliteStorage::new(":memory:").await?;
+        let mut rng = rand::rng();
+        let identity_key_pair = IdentityKeyPair::generate(&mut rng);
+        let signed_pre_key_id = 1;
+        let timestamp = Timestamp::from_epoch_millis(12345);
+        let key_pair = KeyPair::generate(&mut rng);
+        let signature = identity_key_pair.private_key().calculate_signature(&key_pair.public_key.serialize(), &mut rng)?;
+        let signed_pre_key = SignedPreKeyRecord::new(signed_pre_key_id.into(), timestamp, &key_pair, &signature);
+
+        assert_eq!(storage.signed_pre_key_count().await, 0);
+
+        let result = storage.save_signed_pre_key(signed_pre_key_id, &signed_pre_key).await;
+        assert!(result.is_ok());
+
+        assert_eq!(storage.signed_pre_key_count().await, 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_signed_pre_key_store_get_nonexistent() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqliteStorage::new(":memory:").await?;
+        let signed_pre_key_id = 999;
+
+        let retrieved = storage.get_signed_pre_key(signed_pre_key_id).await?;
+        assert!(retrieved.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_signed_pre_key_store_save_and_get() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqliteStorage::new(":memory:").await?;
+        let mut rng = rand::rng();
+        let identity_key_pair = IdentityKeyPair::generate(&mut rng);
+        let signed_pre_key_id = 1;
+        let timestamp = Timestamp::from_epoch_millis(12345);
+        let key_pair = KeyPair::generate(&mut rng);
+        let signature = identity_key_pair.private_key().calculate_signature(&key_pair.public_key.serialize(), &mut rng)?;
+        let signed_pre_key = SignedPreKeyRecord::new(signed_pre_key_id.into(), timestamp, &key_pair, &signature);
+
+        storage.save_signed_pre_key(signed_pre_key_id, &signed_pre_key).await?;
+        let retrieved = storage.get_signed_pre_key(signed_pre_key_id).await?;
+
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().id()?, signed_pre_key_id.into());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_session_store_save_session() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqliteStorage::new(":memory:").await?;
+        let address = ProtocolAddress::new("test_user".to_string(), DeviceId::new(1)?);
+        let session_record = SessionRecord::new_fresh();
+
+        assert_eq!(storage.session_count().await, 0);
+
+        let result = storage.store_session(&address, &session_record).await;
+        assert!(result.is_ok());
+
+        assert_eq!(storage.session_count().await, 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_session_store_get_nonexistent() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqliteStorage::new(":memory:").await?;
+        let address = ProtocolAddress::new("nonexistent_user".to_string(), DeviceId::new(1)?);
+
+        let retrieved = storage.load_session(&address).await?;
+        assert!(retrieved.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_session_store_save_and_get() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqliteStorage::new(":memory:").await?;
+        let address = ProtocolAddress::new("test_user".to_string(), DeviceId::new(1)?);
+        let session_record = SessionRecord::new_fresh();
+
+        storage.store_session(&address, &session_record).await?;
+        let retrieved = storage.load_session(&address).await?;
+
+        assert!(retrieved.is_some());
+
+        Ok(())
     }
 }
