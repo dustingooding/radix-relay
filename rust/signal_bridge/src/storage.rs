@@ -10,12 +10,14 @@ use tokio::sync::Mutex;
 
 pub struct SqliteStorage {
     identity_keys: Arc<Mutex<HashMap<String, IdentityKey>>>,
+    pre_keys: Arc<Mutex<HashMap<u32, KeyPair>>>,
 }
 
 impl SqliteStorage {
     pub async fn new(_db_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             identity_keys: Arc::new(Mutex::new(HashMap::new())),
+            pre_keys: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -41,6 +43,29 @@ impl SqliteStorage {
 
     pub async fn identity_count(&self) -> usize {
         let store = self.identity_keys.lock().await;
+        store.len()
+    }
+
+    pub async fn save_pre_key(
+        &self,
+        pre_key_id: u32,
+        key_pair: &KeyPair,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = self.pre_keys.lock().await;
+        store.insert(pre_key_id, *key_pair);
+        Ok(())
+    }
+
+    pub async fn get_pre_key(
+        &self,
+        pre_key_id: u32,
+    ) -> Result<Option<KeyPair>, Box<dyn std::error::Error>> {
+        let store = self.pre_keys.lock().await;
+        Ok(store.get(&pre_key_id).copied())
+    }
+
+    pub async fn pre_key_count(&self) -> usize {
+        let store = self.pre_keys.lock().await;
         store.len()
     }
 }

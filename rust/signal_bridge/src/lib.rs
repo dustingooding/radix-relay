@@ -84,4 +84,54 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_pre_key_store_save_pre_key() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::storage::SqliteStorage;
+
+        let storage = SqliteStorage::new(":memory:").await?;
+        let mut rng = rand::rng();
+        let key_pair = KeyPair::generate(&mut rng);
+        let pre_key_id = 42;
+
+        assert_eq!(storage.pre_key_count().await, 0);
+
+        let result = storage.save_pre_key(pre_key_id, &key_pair).await;
+        assert!(result.is_ok());
+
+        assert_eq!(storage.pre_key_count().await, 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_pre_key_store_get_nonexistent() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::storage::SqliteStorage;
+
+        let storage = SqliteStorage::new(":memory:").await?;
+        let pre_key_id = 999;
+
+        let retrieved = storage.get_pre_key(pre_key_id).await?;
+        assert!(retrieved.is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_pre_key_store_save_and_get() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::storage::SqliteStorage;
+
+        let storage = SqliteStorage::new(":memory:").await?;
+        let mut rng = rand::rng();
+        let key_pair = KeyPair::generate(&mut rng);
+        let pre_key_id = 42;
+
+        storage.save_pre_key(pre_key_id, &key_pair).await?;
+        let retrieved = storage.get_pre_key(pre_key_id).await?;
+
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().public_key.serialize(), key_pair.public_key.serialize());
+
+        Ok(())
+    }
 }
