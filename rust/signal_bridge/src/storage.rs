@@ -255,7 +255,6 @@ impl SqliteStorage {
     }
 }
 
-// Implement libsignal SessionStore trait for SqliteSessionStore
 #[async_trait(?Send)]
 impl SessionStore for SqliteSessionStore {
     async fn load_session(&self, address: &ProtocolAddress) -> Result<Option<SessionRecord>, SignalProtocolError> {
@@ -276,7 +275,6 @@ impl SessionStore for SqliteSessionStore {
     }
 }
 
-// Implement libsignal SessionStore trait for SqliteStorage (delegates to session_store)
 #[async_trait(?Send)]
 impl SessionStore for SqliteStorage {
     async fn load_session(&self, address: &ProtocolAddress) -> Result<Option<SessionRecord>, SignalProtocolError> {
@@ -292,7 +290,6 @@ impl SessionStore for SqliteStorage {
     }
 }
 
-// Implement libsignal IdentityKeyStore trait for SqliteIdentityKeyStore
 #[async_trait(?Send)]
 impl IdentityKeyStore for SqliteIdentityKeyStore {
     async fn get_identity_key_pair(&self) -> Result<IdentityKeyPair, SignalProtocolError> {
@@ -316,25 +313,20 @@ impl IdentityKeyStore for SqliteIdentityKeyStore {
         address: &ProtocolAddress,
         identity_key: &IdentityKey,
     ) -> Result<IdentityChange, SignalProtocolError> {
-        // Check if this is a new identity or changed identity
         let existing = self.get_identity(address).await.ok().flatten();
 
-        // Store the identity using our internal method
         let key = format!("{}:{}", address.name(), u32::from(address.device_id()));
         let mut store = self.identity_keys.lock().await;
         store.insert(key, *identity_key);
 
         match existing {
             Some(existing_key) if existing_key != *identity_key => {
-                // Identity key changed - return ReplacedExisting
                 Ok(IdentityChange::ReplacedExisting)
             },
             Some(_) => {
-                // Identity key unchanged - return NewOrUnchanged
                 Ok(IdentityChange::NewOrUnchanged)
             },
             None => {
-                // New identity key - return NewOrUnchanged
                 Ok(IdentityChange::NewOrUnchanged)
             },
         }
@@ -361,7 +353,6 @@ impl IdentityKeyStore for SqliteIdentityKeyStore {
     }
 }
 
-// Implement libsignal IdentityKeyStore trait for SqliteStorage (delegates to identity_store)
 #[async_trait(?Send)]
 impl IdentityKeyStore for SqliteStorage {
     async fn get_identity_key_pair(&self) -> Result<IdentityKeyPair, SignalProtocolError> {
@@ -377,12 +368,8 @@ impl IdentityKeyStore for SqliteStorage {
         address: &ProtocolAddress,
         identity_key: &IdentityKey,
     ) -> Result<IdentityChange, SignalProtocolError> {
-        // This is tricky because we need a mutable reference to the identity store
-        // but our method signature doesn't allow us to get one safely
-        // For now, we'll implement this directly
         let existing = self.identity_store.get_identity(address).await.ok().flatten();
 
-        // Store the identity using our internal method
         let key = format!("{}:{}", address.name(), u32::from(address.device_id()));
         let mut store = self.identity_store.identity_keys.lock().await;
         store.insert(key, *identity_key);
@@ -603,11 +590,9 @@ mod tests {
     async fn test_storage_implements_libsignal_session_store() -> Result<(), Box<dyn std::error::Error>> {
         let mut storage = SqliteStorage::new(":memory:").await?;
 
-        // Test that our storage can be used as a libsignal SessionStore
         let address = ProtocolAddress::new("test_user".to_string(), DeviceId::new(1)?);
         let session_record = SessionRecord::new_fresh();
 
-        // This should work with libsignal SessionStore trait methods
         let result = <SqliteStorage as SessionStore>::store_session(
             &mut storage,
             &address,
@@ -628,12 +613,10 @@ mod tests {
     async fn test_storage_implements_libsignal_identity_key_store() -> Result<(), Box<dyn std::error::Error>> {
         let mut storage = SqliteStorage::new(":memory:").await?;
 
-        // Test that our storage can be used as a libsignal IdentityKeyStore
         let address = ProtocolAddress::new("test_user".to_string(), DeviceId::new(1)?);
         let mut rng = rand::rng();
         let identity_key_pair = IdentityKeyPair::generate(&mut rng);
 
-        // This should work with libsignal IdentityKeyStore trait methods
         let result = <SqliteStorage as IdentityKeyStore>::save_identity(
             &mut storage,
             &address,
@@ -654,14 +637,12 @@ mod tests {
     async fn test_local_identity_and_registration_storage() -> Result<(), Box<dyn std::error::Error>> {
         let storage = SqliteStorage::new(":memory:").await?;
 
-        // Test that local identity methods require setup first
         let identity_result = <SqliteStorage as IdentityKeyStore>::get_identity_key_pair(&storage).await;
         assert!(identity_result.is_err());
 
         let registration_result = <SqliteStorage as IdentityKeyStore>::get_local_registration_id(&storage).await;
         assert!(registration_result.is_err());
 
-        // Set up local identity and registration ID
         let mut rng = rand::rng();
         let identity_key_pair = IdentityKeyPair::generate(&mut rng);
         let registration_id = 54321;
@@ -669,7 +650,6 @@ mod tests {
         storage.set_local_identity_key_pair(&identity_key_pair).await?;
         storage.set_local_registration_id(registration_id).await?;
 
-        // Now the trait methods should work
         let retrieved_identity = <SqliteStorage as IdentityKeyStore>::get_identity_key_pair(&storage).await?;
         assert_eq!(retrieved_identity.identity_key().serialize(), identity_key_pair.identity_key().serialize());
 
