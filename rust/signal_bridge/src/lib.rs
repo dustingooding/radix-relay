@@ -4,6 +4,9 @@
 //! and the official Signal Protocol Rust implementation for end-to-end encryption.
 
 #[cfg(test)]
+mod storage;
+
+#[cfg(test)]
 mod tests {
     use libsignal_protocol::*;
 
@@ -32,4 +35,5 @@ mod tests {
 
         Ok(())
     }
+
 }
