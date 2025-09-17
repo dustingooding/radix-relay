@@ -13,6 +13,9 @@ mod keys;
 mod session;
 
 #[cfg(test)]
+mod encryption;
+
+#[cfg(test)]
 mod tests {
     use libsignal_protocol::*;
 
