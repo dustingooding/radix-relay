@@ -27,11 +27,16 @@ pub struct SqliteSignedPreKeyStore {
     signed_pre_keys: Arc<Mutex<HashMap<u32, SignedPreKeyRecord>>>,
 }
 
+pub struct SqliteKyberPreKeyStore {
+    kyber_pre_keys: Arc<Mutex<HashMap<u32, KyberPreKeyRecord>>>,
+}
+
 pub struct SqliteStorage {
     pub session_store: SqliteSessionStore,
     pub identity_store: SqliteIdentityKeyStore,
     pub pre_key_store: SqlitePreKeyStore,
     pub signed_pre_key_store: SqliteSignedPreKeyStore,
+    pub kyber_pre_key_store: SqliteKyberPreKeyStore,
 }
 
 impl SqliteSessionStore {
@@ -150,6 +155,31 @@ impl SqliteSignedPreKeyStore {
     }
 }
 
+impl SqliteKyberPreKeyStore {
+    pub async fn save_kyber_pre_key(
+        &self,
+        kyber_pre_key_id: u32,
+        kyber_pre_key: &KyberPreKeyRecord,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = self.kyber_pre_keys.lock().await;
+        store.insert(kyber_pre_key_id, kyber_pre_key.clone());
+        Ok(())
+    }
+
+    pub async fn get_kyber_pre_key(
+        &self,
+        kyber_pre_key_id: u32,
+    ) -> Result<Option<KyberPreKeyRecord>, Box<dyn std::error::Error>> {
+        let store = self.kyber_pre_keys.lock().await;
+        Ok(store.get(&kyber_pre_key_id).cloned())
+    }
+
+    pub async fn kyber_pre_key_count(&self) -> usize {
+        let store = self.kyber_pre_keys.lock().await;
+        store.len()
+    }
+}
+
 impl SqliteStorage {
     pub async fn new(_db_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
@@ -166,6 +196,9 @@ impl SqliteStorage {
             },
             signed_pre_key_store: SqliteSignedPreKeyStore {
                 signed_pre_keys: Arc::new(Mutex::new(HashMap::new())),
+            },
+            kyber_pre_key_store: SqliteKyberPreKeyStore {
+                kyber_pre_keys: Arc::new(Mutex::new(HashMap::new())),
             },
         })
     }
@@ -398,6 +431,162 @@ impl IdentityKeyStore for SqliteStorage {
 
     async fn get_identity(&self, address: &ProtocolAddress) -> Result<Option<IdentityKey>, SignalProtocolError> {
         self.identity_store.get_identity(address).await.map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to get identity".to_string()))
+    }
+}
+
+#[async_trait(?Send)]
+impl PreKeyStore for SqliteStorage {
+    async fn get_pre_key(&self, prekey_id: PreKeyId) -> Result<PreKeyRecord, SignalProtocolError> {
+        let key_pair = self.pre_key_store.get_pre_key(u32::from(prekey_id)).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to get pre key".to_string()))?;
+
+        match key_pair {
+            Some(key_pair) => Ok(PreKeyRecord::new(prekey_id, &key_pair)),
+            None => Err(SignalProtocolError::InvalidPreKeyId),
+        }
+    }
+
+    async fn save_pre_key(
+        &mut self,
+        prekey_id: PreKeyId,
+        record: &PreKeyRecord,
+    ) -> Result<(), SignalProtocolError> {
+        let key_pair = record.key_pair()?;
+        self.pre_key_store.save_pre_key(u32::from(prekey_id), &key_pair).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to save pre key".to_string()))
+    }
+
+    async fn remove_pre_key(&mut self, prekey_id: PreKeyId) -> Result<(), SignalProtocolError> {
+        self.pre_key_store.remove_pre_key(prekey_id).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to remove pre key".to_string()))
+    }
+}
+
+#[async_trait(?Send)]
+impl SignedPreKeyStore for SqliteStorage {
+    async fn get_signed_pre_key(&self, signed_prekey_id: SignedPreKeyId) -> Result<SignedPreKeyRecord, SignalProtocolError> {
+        let record = self.signed_pre_key_store.get_signed_pre_key(u32::from(signed_prekey_id)).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to get signed pre key".to_string()))?;
+
+        match record {
+            Some(record) => Ok(record),
+            None => Err(SignalProtocolError::InvalidSignedPreKeyId),
+        }
+    }
+
+    async fn save_signed_pre_key(
+        &mut self,
+        signed_prekey_id: SignedPreKeyId,
+        record: &SignedPreKeyRecord,
+    ) -> Result<(), SignalProtocolError> {
+        self.signed_pre_key_store.save_signed_pre_key(u32::from(signed_prekey_id), record).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to save signed pre key".to_string()))
+    }
+}
+
+#[async_trait(?Send)]
+impl KyberPreKeyStore for SqliteStorage {
+    async fn get_kyber_pre_key(&self, kyber_prekey_id: KyberPreKeyId) -> Result<KyberPreKeyRecord, SignalProtocolError> {
+        let record = self.kyber_pre_key_store.get_kyber_pre_key(u32::from(kyber_prekey_id)).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to get kyber pre key".to_string()))?;
+
+        match record {
+            Some(record) => Ok(record),
+            None => Err(SignalProtocolError::InvalidKyberPreKeyId),
+        }
+    }
+
+    async fn save_kyber_pre_key(
+        &mut self,
+        kyber_prekey_id: KyberPreKeyId,
+        record: &KyberPreKeyRecord,
+    ) -> Result<(), SignalProtocolError> {
+        self.kyber_pre_key_store.save_kyber_pre_key(u32::from(kyber_prekey_id), record).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to save kyber pre key".to_string()))
+    }
+
+    async fn mark_kyber_pre_key_used(&mut self, kyber_prekey_id: KyberPreKeyId) -> Result<(), SignalProtocolError> {
+        self.kyber_pre_key_store.mark_kyber_pre_key_used(kyber_prekey_id).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to mark kyber pre key as used".to_string()))
+    }
+}
+
+#[async_trait(?Send)]
+impl PreKeyStore for SqlitePreKeyStore {
+    async fn get_pre_key(&self, prekey_id: PreKeyId) -> Result<PreKeyRecord, SignalProtocolError> {
+        let key_pair = SqlitePreKeyStore::get_pre_key(self, u32::from(prekey_id)).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to get pre key".to_string()))?;
+
+        match key_pair {
+            Some(key_pair) => Ok(PreKeyRecord::new(prekey_id, &key_pair)),
+            None => Err(SignalProtocolError::InvalidPreKeyId),
+        }
+    }
+
+    async fn save_pre_key(
+        &mut self,
+        prekey_id: PreKeyId,
+        record: &PreKeyRecord,
+    ) -> Result<(), SignalProtocolError> {
+        let key_pair = record.key_pair()?;
+        SqlitePreKeyStore::save_pre_key(self, u32::from(prekey_id), &key_pair).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to save pre key".to_string()))
+    }
+
+    async fn remove_pre_key(&mut self, _prekey_id: PreKeyId) -> Result<(), SignalProtocolError> {
+        // For now, we'll just succeed without actually removing
+        // TODO: Implement actual removal when needed
+        Ok(())
+    }
+}
+
+#[async_trait(?Send)]
+impl SignedPreKeyStore for SqliteSignedPreKeyStore {
+    async fn get_signed_pre_key(&self, signed_prekey_id: SignedPreKeyId) -> Result<SignedPreKeyRecord, SignalProtocolError> {
+        let record = SqliteSignedPreKeyStore::get_signed_pre_key(self, u32::from(signed_prekey_id)).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to get signed pre key".to_string()))?;
+
+        match record {
+            Some(record) => Ok(record),
+            None => Err(SignalProtocolError::InvalidSignedPreKeyId),
+        }
+    }
+
+    async fn save_signed_pre_key(
+        &mut self,
+        signed_prekey_id: SignedPreKeyId,
+        record: &SignedPreKeyRecord,
+    ) -> Result<(), SignalProtocolError> {
+        SqliteSignedPreKeyStore::save_signed_pre_key(self, u32::from(signed_prekey_id), record).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to save signed pre key".to_string()))
+    }
+}
+
+#[async_trait(?Send)]
+impl KyberPreKeyStore for SqliteKyberPreKeyStore {
+    async fn get_kyber_pre_key(&self, kyber_prekey_id: KyberPreKeyId) -> Result<KyberPreKeyRecord, SignalProtocolError> {
+        let record = SqliteKyberPreKeyStore::get_kyber_pre_key(self, u32::from(kyber_prekey_id)).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to get kyber pre key".to_string()))?;
+
+        match record {
+            Some(record) => Ok(record),
+            None => Err(SignalProtocolError::InvalidKyberPreKeyId),
+        }
+    }
+
+    async fn save_kyber_pre_key(
+        &mut self,
+        kyber_prekey_id: KyberPreKeyId,
+        record: &KyberPreKeyRecord,
+    ) -> Result<(), SignalProtocolError> {
+        SqliteKyberPreKeyStore::save_kyber_pre_key(self, u32::from(kyber_prekey_id), record).await
+            .map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to save kyber pre key".to_string()))
+    }
+
+    async fn mark_kyber_pre_key_used(&mut self, _kyber_prekey_id: KyberPreKeyId) -> Result<(), SignalProtocolError> {
+        // For now, just succeed without marking as used
+        // TODO: Implement actual marking as used
+        Ok(())
     }
 }
 
@@ -655,6 +844,63 @@ mod tests {
 
         let retrieved_registration = <SqliteStorage as IdentityKeyStore>::get_local_registration_id(&storage).await?;
         assert_eq!(retrieved_registration, registration_id);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_kyber_pre_key_store_save_and_get() -> Result<(), Box<dyn std::error::Error>> {
+        let storage = SqliteStorage::new(":memory:").await?;
+        let kyber_pre_key_id = KyberPreKeyId::from(1u32);
+
+        // Generate a Kyber pre-key record
+        let mut rng = rand::rng();
+        let kyber_keypair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
+        let timestamp = Timestamp::from_epoch_millis(12345);
+        let signature = b"dummy_signature"; // Kyber pre-keys need a signature
+        let kyber_record = KyberPreKeyRecord::new(kyber_pre_key_id, timestamp, &kyber_keypair, signature);
+
+        assert_eq!(storage.kyber_pre_key_store.kyber_pre_key_count().await, 0);
+
+        // Test saving
+        let result = storage.kyber_pre_key_store.save_kyber_pre_key(u32::from(kyber_pre_key_id), &kyber_record).await;
+        assert!(result.is_ok());
+
+        assert_eq!(storage.kyber_pre_key_store.kyber_pre_key_count().await, 1);
+
+        // Test retrieving
+        let retrieved = storage.kyber_pre_key_store.get_kyber_pre_key(u32::from(kyber_pre_key_id)).await?;
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().id()?, kyber_pre_key_id);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_storage_implements_libsignal_kyber_pre_key_store() -> Result<(), Box<dyn std::error::Error>> {
+        let mut storage = SqliteStorage::new(":memory:").await?;
+        let kyber_pre_key_id = KyberPreKeyId::from(1u32);
+
+        // Generate a Kyber pre-key record
+        let mut rng = rand::rng();
+        let kyber_keypair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
+        let timestamp = Timestamp::from_epoch_millis(12345);
+        let signature = b"dummy_signature"; // Kyber pre-keys need a signature
+        let kyber_record = KyberPreKeyRecord::new(kyber_pre_key_id, timestamp, &kyber_keypair, signature);
+
+        // Test using the trait implementation
+        let result = <SqliteStorage as KyberPreKeyStore>::save_kyber_pre_key(
+            &mut storage,
+            kyber_pre_key_id,
+            &kyber_record,
+        ).await;
+        assert!(result.is_ok());
+
+        let retrieved = <SqliteStorage as KyberPreKeyStore>::get_kyber_pre_key(
+            &storage,
+            kyber_pre_key_id,
+        ).await?;
+        assert_eq!(retrieved.id()?, kyber_pre_key_id);
 
         Ok(())
     }
