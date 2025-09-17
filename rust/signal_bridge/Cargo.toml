@@ -15,3 +15,6 @@ rand = { workspace = true }
 
 # Test dependencies
 tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "sync"] }
+
+# Async trait support
+async-trait = "0.1"
