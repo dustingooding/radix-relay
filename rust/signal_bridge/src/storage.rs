@@ -9,27 +9,59 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use async_trait::async_trait;
 
-pub struct SqliteStorage {
-    identity_keys: Arc<Mutex<HashMap<String, IdentityKey>>>,
-    pre_keys: Arc<Mutex<HashMap<u32, KeyPair>>>,
-    signed_pre_keys: Arc<Mutex<HashMap<u32, SignedPreKeyRecord>>>,
+pub struct SqliteSessionStore {
     sessions: Arc<Mutex<HashMap<String, SessionRecord>>>,
+}
+
+pub struct SqliteIdentityKeyStore {
+    identity_keys: Arc<Mutex<HashMap<String, IdentityKey>>>,
     local_identity_key_pair: Arc<Mutex<Option<IdentityKeyPair>>>,
     local_registration_id: Arc<Mutex<Option<u32>>>,
 }
 
-impl SqliteStorage {
-    pub async fn new(_db_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(Self {
-            identity_keys: Arc::new(Mutex::new(HashMap::new())),
-            pre_keys: Arc::new(Mutex::new(HashMap::new())),
-            signed_pre_keys: Arc::new(Mutex::new(HashMap::new())),
-            sessions: Arc::new(Mutex::new(HashMap::new())),
-            local_identity_key_pair: Arc::new(Mutex::new(None)),
-            local_registration_id: Arc::new(Mutex::new(None)),
-        })
+pub struct SqlitePreKeyStore {
+    pre_keys: Arc<Mutex<HashMap<u32, KeyPair>>>,
+}
+
+pub struct SqliteSignedPreKeyStore {
+    signed_pre_keys: Arc<Mutex<HashMap<u32, SignedPreKeyRecord>>>,
+}
+
+pub struct SqliteStorage {
+    pub session_store: SqliteSessionStore,
+    pub identity_store: SqliteIdentityKeyStore,
+    pub pre_key_store: SqlitePreKeyStore,
+    pub signed_pre_key_store: SqliteSignedPreKeyStore,
+}
+
+impl SqliteSessionStore {
+    pub async fn store_session(
+        &self,
+        address: &ProtocolAddress,
+        session_record: &SessionRecord,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let key = format!("{}:{}", address.name(), u32::from(address.device_id()));
+        let mut store = self.sessions.lock().await;
+        store.insert(key, session_record.clone());
+        Ok(())
     }
 
+    pub async fn load_session(
+        &self,
+        address: &ProtocolAddress,
+    ) -> Result<Option<SessionRecord>, Box<dyn std::error::Error>> {
+        let key = format!("{}:{}", address.name(), u32::from(address.device_id()));
+        let store = self.sessions.lock().await;
+        Ok(store.get(&key).cloned())
+    }
+
+    pub async fn session_count(&self) -> usize {
+        let store = self.sessions.lock().await;
+        store.len()
+    }
+}
+
+impl SqliteIdentityKeyStore {
     pub async fn save_identity(
         &self,
         address: &ProtocolAddress,
@@ -55,6 +87,20 @@ impl SqliteStorage {
         store.len()
     }
 
+    pub async fn set_local_identity_key_pair(&self, identity_key_pair: &IdentityKeyPair) -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = self.local_identity_key_pair.lock().await;
+        *store = Some(*identity_key_pair);
+        Ok(())
+    }
+
+    pub async fn set_local_registration_id(&self, registration_id: u32) -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = self.local_registration_id.lock().await;
+        *store = Some(registration_id);
+        Ok(())
+    }
+}
+
+impl SqlitePreKeyStore {
     pub async fn save_pre_key(
         &self,
         pre_key_id: u32,
@@ -77,7 +123,9 @@ impl SqliteStorage {
         let store = self.pre_keys.lock().await;
         store.len()
     }
+}
 
+impl SqliteSignedPreKeyStore {
     pub async fn save_signed_pre_key(
         &self,
         signed_pre_key_id: u32,
@@ -100,48 +148,116 @@ impl SqliteStorage {
         let store = self.signed_pre_keys.lock().await;
         store.len()
     }
+}
+
+impl SqliteStorage {
+    pub async fn new(_db_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self {
+            session_store: SqliteSessionStore {
+                sessions: Arc::new(Mutex::new(HashMap::new())),
+            },
+            identity_store: SqliteIdentityKeyStore {
+                identity_keys: Arc::new(Mutex::new(HashMap::new())),
+                local_identity_key_pair: Arc::new(Mutex::new(None)),
+                local_registration_id: Arc::new(Mutex::new(None)),
+            },
+            pre_key_store: SqlitePreKeyStore {
+                pre_keys: Arc::new(Mutex::new(HashMap::new())),
+            },
+            signed_pre_key_store: SqliteSignedPreKeyStore {
+                signed_pre_keys: Arc::new(Mutex::new(HashMap::new())),
+            },
+        })
+    }
+
+    pub async fn save_identity(
+        &self,
+        address: &ProtocolAddress,
+        identity_key: &IdentityKey,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.identity_store.save_identity(address, identity_key).await
+    }
+
+    pub async fn get_identity(
+        &self,
+        address: &ProtocolAddress,
+    ) -> Result<Option<IdentityKey>, Box<dyn std::error::Error>> {
+        self.identity_store.get_identity(address).await
+    }
+
+    pub async fn identity_count(&self) -> usize {
+        self.identity_store.identity_count().await
+    }
+
+    pub async fn save_pre_key(
+        &self,
+        pre_key_id: u32,
+        key_pair: &KeyPair,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.pre_key_store.save_pre_key(pre_key_id, key_pair).await
+    }
+
+    pub async fn get_pre_key(
+        &self,
+        pre_key_id: u32,
+    ) -> Result<Option<KeyPair>, Box<dyn std::error::Error>> {
+        self.pre_key_store.get_pre_key(pre_key_id).await
+    }
+
+    pub async fn pre_key_count(&self) -> usize {
+        self.pre_key_store.pre_key_count().await
+    }
+
+    pub async fn save_signed_pre_key(
+        &self,
+        signed_pre_key_id: u32,
+        signed_pre_key: &SignedPreKeyRecord,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.signed_pre_key_store.save_signed_pre_key(signed_pre_key_id, signed_pre_key).await
+    }
+
+    pub async fn get_signed_pre_key(
+        &self,
+        signed_pre_key_id: u32,
+    ) -> Result<Option<SignedPreKeyRecord>, Box<dyn std::error::Error>> {
+        self.signed_pre_key_store.get_signed_pre_key(signed_pre_key_id).await
+    }
+
+    pub async fn signed_pre_key_count(&self) -> usize {
+        self.signed_pre_key_store.signed_pre_key_count().await
+    }
 
     pub async fn store_session(
         &self,
         address: &ProtocolAddress,
         session_record: &SessionRecord,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let key = format!("{}:{}", address.name(), u32::from(address.device_id()));
-        let mut store = self.sessions.lock().await;
-        store.insert(key, session_record.clone());
-        Ok(())
+        self.session_store.store_session(address, session_record).await
     }
 
     pub async fn load_session(
         &self,
         address: &ProtocolAddress,
     ) -> Result<Option<SessionRecord>, Box<dyn std::error::Error>> {
-        let key = format!("{}:{}", address.name(), u32::from(address.device_id()));
-        let store = self.sessions.lock().await;
-        Ok(store.get(&key).cloned())
+        self.session_store.load_session(address).await
     }
 
     pub async fn session_count(&self) -> usize {
-        let store = self.sessions.lock().await;
-        store.len()
+        self.session_store.session_count().await
     }
 
     pub async fn set_local_identity_key_pair(&self, identity_key_pair: &IdentityKeyPair) -> Result<(), Box<dyn std::error::Error>> {
-        let mut store = self.local_identity_key_pair.lock().await;
-        *store = Some(*identity_key_pair);
-        Ok(())
+        self.identity_store.set_local_identity_key_pair(identity_key_pair).await
     }
 
     pub async fn set_local_registration_id(&self, registration_id: u32) -> Result<(), Box<dyn std::error::Error>> {
-        let mut store = self.local_registration_id.lock().await;
-        *store = Some(registration_id);
-        Ok(())
+        self.identity_store.set_local_registration_id(registration_id).await
     }
 }
 
-// Implement libsignal SessionStore trait
+// Implement libsignal SessionStore trait for SqliteSessionStore
 #[async_trait(?Send)]
-impl SessionStore for SqliteStorage {
+impl SessionStore for SqliteSessionStore {
     async fn load_session(&self, address: &ProtocolAddress) -> Result<Option<SessionRecord>, SignalProtocolError> {
         let key = format!("{}:{}", address.name(), u32::from(address.device_id()));
         let store = self.sessions.lock().await;
@@ -160,9 +276,25 @@ impl SessionStore for SqliteStorage {
     }
 }
 
-// Implement libsignal IdentityKeyStore trait
+// Implement libsignal SessionStore trait for SqliteStorage (delegates to session_store)
 #[async_trait(?Send)]
-impl IdentityKeyStore for SqliteStorage {
+impl SessionStore for SqliteStorage {
+    async fn load_session(&self, address: &ProtocolAddress) -> Result<Option<SessionRecord>, SignalProtocolError> {
+        self.session_store.load_session(address).await.map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to load session".to_string()))
+    }
+
+    async fn store_session(
+        &mut self,
+        address: &ProtocolAddress,
+        record: &SessionRecord,
+    ) -> Result<(), SignalProtocolError> {
+        self.session_store.store_session(address, record).await.map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to store session".to_string()))
+    }
+}
+
+// Implement libsignal IdentityKeyStore trait for SqliteIdentityKeyStore
+#[async_trait(?Send)]
+impl IdentityKeyStore for SqliteIdentityKeyStore {
     async fn get_identity_key_pair(&self) -> Result<IdentityKeyPair, SignalProtocolError> {
         let store = self.local_identity_key_pair.lock().await;
         match *store {
@@ -226,6 +358,59 @@ impl IdentityKeyStore for SqliteStorage {
         let key = format!("{}:{}", address.name(), u32::from(address.device_id()));
         let store = self.identity_keys.lock().await;
         Ok(store.get(&key).copied())
+    }
+}
+
+// Implement libsignal IdentityKeyStore trait for SqliteStorage (delegates to identity_store)
+#[async_trait(?Send)]
+impl IdentityKeyStore for SqliteStorage {
+    async fn get_identity_key_pair(&self) -> Result<IdentityKeyPair, SignalProtocolError> {
+        self.identity_store.get_identity_key_pair().await
+    }
+
+    async fn get_local_registration_id(&self) -> Result<u32, SignalProtocolError> {
+        self.identity_store.get_local_registration_id().await
+    }
+
+    async fn save_identity(
+        &mut self,
+        address: &ProtocolAddress,
+        identity_key: &IdentityKey,
+    ) -> Result<IdentityChange, SignalProtocolError> {
+        // This is tricky because we need a mutable reference to the identity store
+        // but our method signature doesn't allow us to get one safely
+        // For now, we'll implement this directly
+        let existing = self.identity_store.get_identity(address).await.ok().flatten();
+
+        // Store the identity using our internal method
+        let key = format!("{}:{}", address.name(), u32::from(address.device_id()));
+        let mut store = self.identity_store.identity_keys.lock().await;
+        store.insert(key, *identity_key);
+
+        match existing {
+            Some(existing_key) if existing_key != *identity_key => {
+                Ok(IdentityChange::ReplacedExisting)
+            },
+            Some(_) => {
+                Ok(IdentityChange::NewOrUnchanged)
+            },
+            None => {
+                Ok(IdentityChange::NewOrUnchanged)
+            },
+        }
+    }
+
+    async fn is_trusted_identity(
+        &self,
+        address: &ProtocolAddress,
+        identity_key: &IdentityKey,
+        direction: Direction,
+    ) -> Result<bool, SignalProtocolError> {
+        self.identity_store.is_trusted_identity(address, identity_key, direction).await
+    }
+
+    async fn get_identity(&self, address: &ProtocolAddress) -> Result<Option<IdentityKey>, SignalProtocolError> {
+        self.identity_store.get_identity(address).await.map_err(|_| SignalProtocolError::InvalidState("storage", "Failed to get identity".to_string()))
     }
 }
 
