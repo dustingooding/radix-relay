@@ -1,13 +1,12 @@
-//! Encryption and decryption functions for libsignal
+//! Encryption and decryption functions using trait-based storage
 //!
 //! This module provides message encryption and decryption functions
-//! using the Signal Protocol's Double Ratchet algorithm.
+//! using the Signal Protocol's Double Ratchet algorithm with dependency injection.
 
 use libsignal_protocol::*;
-use crate::memory_storage::MemoryStorage;
 use crate::storage_trait::ExtendedStorageOps;
 
-pub async fn encrypt_message_with_storage<S: ExtendedStorageOps>(
+pub async fn encrypt_message<S: ExtendedStorageOps>(
     storage: &mut S,
     remote_address: &ProtocolAddress,
     plaintext: &[u8],
@@ -15,7 +14,7 @@ pub async fn encrypt_message_with_storage<S: ExtendedStorageOps>(
     storage.encrypt_message(remote_address, plaintext).await
 }
 
-pub async fn decrypt_message_with_storage<S: ExtendedStorageOps>(
+pub async fn decrypt_message<S: ExtendedStorageOps>(
     storage: &mut S,
     remote_address: &ProtocolAddress,
     ciphertext: &CiphertextMessage,
@@ -26,11 +25,13 @@ pub async fn decrypt_message_with_storage<S: ExtendedStorageOps>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memory_storage::MemoryStorage;
+    use crate::storage_trait::{ExtendedIdentityStore, ExtendedSessionStore};
     use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
-    use crate::storage_trait::ExtendedIdentityStore;
+    use crate::session_trait::establish_session_from_bundle;
 
     #[tokio::test]
-    async fn test_encrypt_message_basic() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_encrypt_message_basic_with_memory_storage() -> Result<(), Box<dyn std::error::Error>> {
         let bob_identity = generate_identity_key_pair().await?;
         let bob_pre_keys = generate_pre_keys(1, 1).await?;
         let bob_signed_pre_key = generate_signed_pre_key(&bob_identity, 1).await?;
@@ -59,10 +60,10 @@ mod tests {
         alice_storage.identity_store.set_local_identity_key_pair(&alice_identity).await?;
         alice_storage.identity_store.set_local_registration_id(12346).await?;
 
-        alice_storage.establish_session_from_bundle(&bob_address, &bundle).await?;
+        establish_session_from_bundle(&bob_address, &bundle, &mut alice_storage).await?;
 
         let plaintext = b"Hello, Bob!";
-        let ciphertext = encrypt_message_with_storage(&mut alice_storage, &bob_address, plaintext).await?;
+        let ciphertext = encrypt_message(&mut alice_storage, &bob_address, plaintext).await?;
 
         assert!(!ciphertext.serialize().is_empty());
         assert_ne!(ciphertext.serialize(), plaintext);
@@ -71,7 +72,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_encrypt_decrypt_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_encrypt_decrypt_roundtrip_with_memory_storage() -> Result<(), Box<dyn std::error::Error>> {
         let bob_identity = generate_identity_key_pair().await?;
         let bob_pre_keys = generate_pre_keys(1, 1).await?;
         let bob_signed_pre_key = generate_signed_pre_key(&bob_identity, 1).await?;
@@ -102,7 +103,7 @@ mod tests {
         alice_storage.identity_store.set_local_identity_key_pair(&alice_identity).await?;
         alice_storage.identity_store.set_local_registration_id(12346).await?;
 
-        alice_storage.establish_session_from_bundle(&bob_address, &bundle).await?;
+        establish_session_from_bundle(&bob_address, &bundle, &mut alice_storage).await?;
 
         let mut bob_storage = MemoryStorage::new();
         bob_storage.identity_store.set_local_identity_key_pair(&bob_identity).await?;
@@ -123,10 +124,10 @@ mod tests {
         bob_storage.kyber_pre_key_store.save_kyber_pre_key(KyberPreKeyId::from(1u32), &kyber_pre_key_record).await?;
 
         let plaintext = b"Hello, Bob! This is a secret message.";
-        let ciphertext = encrypt_message_with_storage(&mut alice_storage, &bob_address, plaintext).await?;
+        let ciphertext = encrypt_message(&mut alice_storage, &bob_address, plaintext).await?;
 
         let alice_address = ProtocolAddress::new("alice".to_string(), DeviceId::new(1)?);
-        let decrypted = decrypt_message_with_storage(&mut bob_storage, &alice_address, &ciphertext).await?;
+        let decrypted = decrypt_message(&mut bob_storage, &alice_address, &ciphertext).await?;
 
         assert_eq!(decrypted, plaintext);
 
@@ -134,7 +135,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_encrypt_without_session_fails() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_encrypt_without_session_fails_with_memory_storage() -> Result<(), Box<dyn std::error::Error>> {
         let mut alice_storage = MemoryStorage::new();
         let alice_identity = generate_identity_key_pair().await?;
         alice_storage.identity_store.set_local_identity_key_pair(&alice_identity).await?;
@@ -143,14 +144,14 @@ mod tests {
         let bob_address = ProtocolAddress::new("bob".to_string(), DeviceId::new(1)?);
         let plaintext = b"Hello, Bob!";
 
-        let result = encrypt_message_with_storage(&mut alice_storage, &bob_address, plaintext).await;
+        let result = encrypt_message(&mut alice_storage, &bob_address, plaintext).await;
         assert!(result.is_err());
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_multiple_messages_encryption() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_storage_crash_simulation() -> Result<(), Box<dyn std::error::Error>> {
         let bob_identity = generate_identity_key_pair().await?;
         let bob_pre_keys = generate_pre_keys(1, 1).await?;
         let bob_signed_pre_key = generate_signed_pre_key(&bob_identity, 1).await?;
@@ -179,25 +180,25 @@ mod tests {
         alice_storage.identity_store.set_local_identity_key_pair(&alice_identity).await?;
         alice_storage.identity_store.set_local_registration_id(12346).await?;
 
-        alice_storage.establish_session_from_bundle(&bob_address, &bundle).await?;
+        establish_session_from_bundle(&bob_address, &bundle, &mut alice_storage).await?;
+        assert_eq!(alice_storage.session_store.session_count().await, 1);
 
-        let messages = vec![
-            b"First message".as_slice(),
-            b"Second message with more content".as_slice(),
-            b"Third message!".as_slice(),
-        ];
+        let plaintext = b"Hello before crash!";
+        let ciphertext = encrypt_message(&mut alice_storage, &bob_address, plaintext).await?;
+        assert!(!ciphertext.serialize().is_empty());
 
-        let mut ciphertexts = Vec::new();
-        for message in &messages {
-            let ciphertext = encrypt_message_with_storage(&mut alice_storage, &bob_address, message).await?;
-            ciphertexts.push(ciphertext);
-        }
+        // Simulate crash - create new storage instance (data is lost)
+        let mut alice_storage_after_crash = MemoryStorage::new();
+        alice_storage_after_crash.identity_store.set_local_identity_key_pair(&alice_identity).await?;
+        alice_storage_after_crash.identity_store.set_local_registration_id(12346).await?;
 
-        for i in 0..ciphertexts.len() {
-            for j in (i + 1)..ciphertexts.len() {
-                assert_ne!(ciphertexts[i].serialize(), ciphertexts[j].serialize());
-            }
-        }
+        // Session should be lost
+        assert_eq!(alice_storage_after_crash.session_store.session_count().await, 0);
+
+        // Encryption should fail without session
+        let plaintext_after_crash = b"Hello after crash!";
+        let result = encrypt_message(&mut alice_storage_after_crash, &bob_address, plaintext_after_crash).await;
+        assert!(result.is_err());
 
         Ok(())
     }
