@@ -187,15 +187,12 @@ mod tests {
         let ciphertext = encrypt_message(&mut alice_storage, &bob_address, plaintext).await?;
         assert!(!ciphertext.serialize().is_empty());
 
-        // Simulate crash - create new storage instance (data is lost)
         let mut alice_storage_after_crash = MemoryStorage::new();
         alice_storage_after_crash.identity_store.set_local_identity_key_pair(&alice_identity).await?;
         alice_storage_after_crash.identity_store.set_local_registration_id(12346).await?;
 
-        // Session should be lost
         assert_eq!(alice_storage_after_crash.session_store.session_count().await, 0);
 
-        // Encryption should fail without session
         let plaintext_after_crash = b"Hello after crash!";
         let result = encrypt_message(&mut alice_storage_after_crash, &bob_address, plaintext_after_crash).await;
         assert!(result.is_err());

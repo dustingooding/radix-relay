@@ -97,15 +97,12 @@ mod tests {
         establish_session_from_bundle(&bob_address, &bundle, &mut storage).await?;
         assert_eq!(storage.session_store.session_count().await, 1);
 
-        // Simulate storage failure/crash - create new storage instance
         let mut new_storage = MemoryStorage::new();
         new_storage.identity_store.set_local_identity_key_pair(&alice_identity).await?;
         new_storage.identity_store.set_local_registration_id(12346).await?;
 
-        // Session should be lost in memory storage
         assert_eq!(new_storage.session_store.session_count().await, 0);
 
-        // Re-establish session should work
         establish_session_from_bundle(&bob_address, &bundle, &mut new_storage).await?;
         assert_eq!(new_storage.session_store.session_count().await, 1);
 

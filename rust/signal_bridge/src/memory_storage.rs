@@ -293,7 +293,8 @@ impl KyberPreKeyStore for MemoryKyberPreKeyStore {
     }
 
     async fn mark_kyber_pre_key_used(&mut self, _kyber_prekey_id: KyberPreKeyId) -> Result<(), SignalProtocolError> {
-        // For memory storage, we don't need to track usage
+        // For memory storage, we don't implement usage tracking since this is atest/development storage
+        // In production storage, this would typically mark keys as consumed to prevent reuse
         Ok(())
     }
 }
@@ -400,7 +401,6 @@ impl ExtendedStorageOps for MemoryStorage {
 }
 
 impl MemoryStorage {
-    /// Establish session from bundle - internal method that handles borrowing properly
     pub async fn establish_session_from_bundle(
         &mut self,
         address: &ProtocolAddress,
@@ -422,7 +422,6 @@ impl MemoryStorage {
         Ok(())
     }
 
-    /// Encrypt message - internal method that handles borrowing properly
     pub async fn encrypt_message(
         &mut self,
         remote_address: &ProtocolAddress,
@@ -433,7 +432,6 @@ impl MemoryStorage {
         message_encrypt(plaintext, remote_address, &mut self.session_store, &mut self.identity_store, now, &mut rng).await
     }
 
-    /// Decrypt message - internal method that handles borrowing properly
     pub async fn decrypt_message(
         &mut self,
         remote_address: &ProtocolAddress,
@@ -494,7 +492,6 @@ mod tests {
         let identity_key_pair = IdentityKeyPair::generate(&mut rng);
         let address = ProtocolAddress::new("test_user".to_string(), DeviceId::new(1)?);
 
-        // Test local identity storage
         storage.identity_store.set_local_identity_key_pair(&identity_key_pair).await?;
         storage.identity_store.set_local_registration_id(12345).await?;
 
@@ -504,7 +501,6 @@ mod tests {
         let retrieved_registration = storage.identity_store.get_local_registration_id().await?;
         assert_eq!(retrieved_registration, 12345);
 
-        // Test remote identity storage
         assert_eq!(storage.identity_store.identity_count().await, 0);
 
         storage.identity_store.save_identity(&address, identity_key_pair.identity_key()).await?;
