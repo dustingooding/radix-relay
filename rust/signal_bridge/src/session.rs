@@ -1,47 +1,13 @@
-//! Session management for libsignal
+//! Session management tests
 //!
-//! This module provides session establishment and management functions
-//! for the Signal Protocol's Double Ratchet algorithm.
-
-use libsignal_protocol::*;
-use crate::memory_storage::MemoryStorage;
-use crate::storage_trait::ExtendedStorageOps;
-
-pub async fn establish_session_from_bundle(
-    address: &ProtocolAddress,
-    bundle: &PreKeyBundle,
-    session_store: &mut dyn SessionStore,
-    identity_store: &mut dyn IdentityKeyStore,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut rng = rand::rng();
-    let timestamp = std::time::SystemTime::now();
-
-    process_prekey_bundle(
-        address,
-        session_store,
-        identity_store,
-        bundle,
-        timestamp,
-        &mut rng,
-        UsePQRatchet::Yes,
-    ).await?;
-
-    Ok(())
-}
-
-pub async fn establish_session_from_bundle_with_storage<S: ExtendedStorageOps>(
-    address: &ProtocolAddress,
-    bundle: &PreKeyBundle,
-    storage: &mut S,
-) -> Result<(), Box<dyn std::error::Error>> {
-    storage.establish_session_from_bundle(address, bundle).await
-}
+//! This module contains tests for session establishment functionality
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
+    use libsignal_protocol::*;
+    use crate::memory_storage::MemoryStorage;
     use crate::storage_trait::{ExtendedIdentityStore, ExtendedSessionStore};
+    use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
 
     #[tokio::test]
     async fn test_establish_session_from_bundle() -> Result<(), Box<dyn std::error::Error>> {
@@ -75,12 +41,7 @@ mod tests {
         main_storage.identity_store.set_local_identity_key_pair(&alice_identity).await?;
         main_storage.identity_store.set_local_registration_id(12346).await?;
 
-        establish_session_from_bundle(
-            &bob_address,
-            &bundle,
-            &mut main_storage.session_store,
-            &mut main_storage.identity_store
-        ).await?;
+        main_storage.establish_session_from_bundle(&bob_address, &bundle).await?;
 
         assert_eq!(main_storage.session_store.session_count().await, 1);
         let session = main_storage.session_store.load_session(&bob_address).await?;
@@ -122,7 +83,7 @@ mod tests {
 
         assert_eq!(storage.session_store.session_count().await, 0);
 
-        establish_session_from_bundle_with_storage(&bob_address, &bundle, &mut storage).await?;
+        storage.establish_session_from_bundle(&bob_address, &bundle).await?;
 
         assert_eq!(storage.session_store.session_count().await, 1);
         let session = storage.session_store.load_session(&bob_address).await?;
