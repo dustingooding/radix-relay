@@ -35,9 +35,6 @@ impl SqliteStorage {
         })
     }
 
-    pub fn storage_type(&self) -> &'static str {
-        "sqlite"
-    }
 
     pub fn is_closed(&self) -> bool {
         self.is_closed
@@ -241,6 +238,14 @@ impl ExtendedSessionStore for SqliteSessionStore {
         conn.execute("DELETE FROM sessions", [])?;
         Ok(())
     }
+    async fn delete_session(&mut self, address: &ProtocolAddress) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        conn.execute(
+            "DELETE FROM sessions WHERE address = ?1 AND device_id = ?2",
+            [address.name(), &u32::from(address.device_id()).to_string()],
+        )?;
+        Ok(())
+    }
 }
 
 pub struct SqliteIdentityStore {
@@ -437,6 +442,36 @@ impl ExtendedIdentityStore for SqliteIdentityStore {
             rusqlite::params![registration_id],
         )?;
 
+        Ok(())
+    }
+    async fn get_peer_identity(&self, address: &ProtocolAddress) -> Result<Option<IdentityKey>, Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT public_key FROM identity_keys WHERE address = ? AND device_id = ?")?;
+        match stmt.query_row([address.name(), &u32::from(address.device_id()).to_string()], |row| {
+            let public_key_bytes: Vec<u8> = row.get(0)?;
+            Ok(public_key_bytes)
+        }) {
+            Ok(key_bytes) => Ok(Some(IdentityKey::decode(&key_bytes)?)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+    async fn delete_identity(&mut self, address: &ProtocolAddress) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        conn.execute(
+            "DELETE FROM identity_keys WHERE address = ? AND device_id = ?",
+            [address.name(), &u32::from(address.device_id()).to_string()],
+        )?;
+        Ok(())
+    }
+    async fn clear_all_identities(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        conn.execute("DELETE FROM identity_keys", [])?;
+        Ok(())
+    }
+    async fn clear_local_identity(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        conn.execute("DELETE FROM local_identity", [])?;
         Ok(())
     }
 }
@@ -1378,6 +1413,317 @@ mod tests {
         let plaintext = b"test message";
         let encrypt_result = storage.encrypt_message(&invalid_address, plaintext).await;
         assert!(encrypt_result.is_err(), "Should fail to encrypt without session");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_extended_storage_ops_integration() -> Result<(), Box<dyn std::error::Error>> {
+        use libsignal_protocol::*;
+
+        use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
+        use crate::sqlite_storage::SqliteStorage;
+        use crate::storage_trait::{ExtendedStorageOps, SignalStorageContainer, ExtendedIdentityStore, ExtendedSessionStore};
+        use std::fs;
+
+        let process_id = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join(format!("test_sqlite_alice_{}_{}.db", process_id, timestamp));
+        let db_path_str = db_path.to_str().unwrap();
+
+        if db_path.exists() {
+            let _ = fs::remove_file(&db_path);
+        }
+
+        let mut alice_storage = SqliteStorage::new(db_path_str).await?;
+        alice_storage.initialize()?;
+
+        let db_path2 = temp_dir.join(format!("test_sqlite_bob_{}_{}.db", process_id, timestamp));
+        let db_path2_str = db_path2.to_str().unwrap();
+
+        if db_path2.exists() {
+            let _ = fs::remove_file(&db_path2);
+        }
+
+        let mut bob_storage = SqliteStorage::new(db_path2_str).await?;
+        bob_storage.initialize()?;
+
+        let mut rng = rand::rng();
+        let alice_identity = generate_identity_key_pair().await?;
+        let alice_registration_id = 11111u32;
+        alice_storage.identity_store().set_local_identity_key_pair(&alice_identity).await?;
+        alice_storage.identity_store().set_local_registration_id(alice_registration_id).await?;
+
+        let bob_identity = generate_identity_key_pair().await?;
+        let bob_registration_id = 22222u32;
+        bob_storage.identity_store().set_local_identity_key_pair(&bob_identity).await?;
+        bob_storage.identity_store().set_local_registration_id(bob_registration_id).await?;
+
+        let alice_address = ProtocolAddress::new("alice".to_string(), DeviceId::new(1)?);
+        let bob_address = ProtocolAddress::new("bob".to_string(), DeviceId::new(1)?);
+
+        let bob_pre_keys = generate_pre_keys(1, 1).await?;
+        let bob_signed_pre_key = generate_signed_pre_key(&bob_identity, 1).await?;
+        bob_storage.pre_key_store().save_pre_key(PreKeyId::from(bob_pre_keys[0].0), &PreKeyRecord::new(PreKeyId::from(bob_pre_keys[0].0), &bob_pre_keys[0].1)).await?;
+        bob_storage.signed_pre_key_store().save_signed_pre_key(SignedPreKeyId::from(1u32), &bob_signed_pre_key).await?;
+
+        let kyber_keypair = libsignal_protocol::kem::KeyPair::generate(libsignal_protocol::kem::KeyType::Kyber1024, &mut rng);
+        let kyber_signature = bob_identity.private_key()
+            .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
+
+        let now = std::time::SystemTime::now();
+        let kyber_record = KyberPreKeyRecord::new(
+            KyberPreKeyId::from(1u32),
+            Timestamp::from_epoch_millis(now.duration_since(std::time::UNIX_EPOCH)?.as_millis() as u64),
+            &kyber_keypair,
+            &kyber_signature,
+        );
+        bob_storage.kyber_pre_key_store().save_kyber_pre_key(KyberPreKeyId::from(1u32), &kyber_record).await?;
+
+        let bob_bundle = PreKeyBundle::new(
+            bob_registration_id,
+            DeviceId::new(1)?,
+            Some((PreKeyId::from(bob_pre_keys[0].0), bob_pre_keys[0].1.public_key)),
+            SignedPreKeyId::from(1u32),
+            bob_signed_pre_key.public_key()?,
+            bob_signed_pre_key.signature()?.to_vec(),
+            KyberPreKeyId::from(1u32),
+            kyber_keypair.public_key,
+            kyber_signature.to_vec(),
+            *bob_identity.identity_key(),
+        )?;
+
+        alice_storage.establish_session_from_bundle(&bob_address, &bob_bundle).await?;
+
+        assert_eq!(alice_storage.session_store().session_count().await, 1, "Alice should have established session with Bob");
+
+        let plaintext = b"Hello Bob! This is an integration test with real SQLite files.";
+        let ciphertext = alice_storage.encrypt_message(&bob_address, plaintext).await?;
+
+        assert!(matches!(ciphertext.message_type(), CiphertextMessageType::PreKey),
+               "First message should be a PreKey message");
+
+        bob_storage.identity_store().save_identity(&alice_address, alice_identity.identity_key()).await?;
+        let decrypted = bob_storage.decrypt_message(&alice_address, &ciphertext).await?;
+
+        assert_eq!(decrypted, plaintext, "Decrypted message should match original");
+
+        let response_plaintext = b"Hello Alice! Integration test successful with persistent SQLite storage!";
+        let response_ciphertext = bob_storage.encrypt_message(&alice_address, response_plaintext).await?;
+
+        assert!(matches!(response_ciphertext.message_type(), CiphertextMessageType::Whisper),
+               "Response message should be a Whisper message");
+
+        let response_decrypted = alice_storage.decrypt_message(&bob_address, &response_ciphertext).await?;
+        assert_eq!(response_decrypted, response_plaintext, "Response should decrypt correctly");
+
+        alice_storage.close()?;
+        bob_storage.close()?;
+
+        assert!(db_path.exists(), "SQLite database file should exist after test");
+        assert!(db_path2.exists(), "Bob's SQLite database file should exist after test");
+
+        drop(alice_storage);
+        drop(bob_storage);
+
+        #[cfg(windows)]
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        let _ = fs::remove_file(&db_path);
+        let _ = fs::remove_file(&db_path2);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_storage_preserves_identity_across_instantiations() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::keys::generate_identity_key_pair;
+        use std::{fs, env};
+
+        let temp_dir = env::temp_dir();
+        let process_id = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let db_path = temp_dir.join(format!("test_identity_persistence_{}_{}.db", process_id, timestamp));
+        let db_path_str = db_path.to_str().unwrap();
+
+        let (original_identity, original_registration_id) = {
+            let mut storage = SqliteStorage::new(db_path_str).await?;
+            storage.initialize()?;
+
+            let identity = generate_identity_key_pair().await?;
+            let registration_id = 12345u32;
+
+            storage.identity_store().set_local_identity_key_pair(&identity).await?;
+            storage.identity_store().set_local_registration_id(registration_id).await?;
+
+            (identity, registration_id)
+        }; // Storage goes out of scope here, simulating program restart
+
+        {
+            let mut storage_reopened = SqliteStorage::new(db_path_str).await?;
+            storage_reopened.initialize()?;
+
+            let retrieved_identity = storage_reopened.identity_store().get_identity_key_pair().await?;
+            let retrieved_registration_id = storage_reopened.identity_store().get_local_registration_id().await?;
+
+            assert_eq!(
+                retrieved_identity.identity_key().serialize(),
+                original_identity.identity_key().serialize(),
+                "Identity key should be preserved across storage instantiations"
+            );
+            assert_eq!(
+                retrieved_registration_id,
+                original_registration_id,
+                "Registration ID should be preserved across storage instantiations"
+            );
+        }
+
+        let _ = fs::remove_file(&db_path);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_session_delete_operations() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
+        use libsignal_protocol::*;
+
+        let mut storage = SqliteStorage::new(":memory:").await?;
+        storage.initialize()?;
+
+        let identity = generate_identity_key_pair().await?;
+        let registration_id = 12345u32;
+        storage.identity_store().set_local_identity_key_pair(&identity).await?;
+        storage.identity_store().set_local_registration_id(registration_id).await?;
+
+        let bob_address = ProtocolAddress::new("bob".to_string(), DeviceId::new(1)?);
+        let charlie_address = ProtocolAddress::new("charlie".to_string(), DeviceId::new(1)?);
+
+        let bob_identity = generate_identity_key_pair().await?;
+        let bob_pre_keys = generate_pre_keys(1, 1).await?;
+        let bob_signed_pre_key = generate_signed_pre_key(&bob_identity, 1).await?;
+
+        let mut rng = rand::rng();
+        let kyber_keypair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
+        let kyber_signature = bob_identity.private_key()
+            .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
+
+        let bob_bundle = PreKeyBundle::new(
+            registration_id,
+            DeviceId::new(1)?,
+            Some((PreKeyId::from(bob_pre_keys[0].0), bob_pre_keys[0].1.public_key)),
+            SignedPreKeyId::from(1u32),
+            bob_signed_pre_key.public_key()?,
+            bob_signed_pre_key.signature()?.to_vec(),
+            KyberPreKeyId::from(1u32),
+            kyber_keypair.public_key,
+            kyber_signature.to_vec(),
+            *bob_identity.identity_key(),
+        )?;
+
+        storage.establish_session_from_bundle(&bob_address, &bob_bundle).await?;
+        storage.establish_session_from_bundle(&charlie_address, &bob_bundle).await?;
+
+        assert_eq!(storage.session_store().session_count().await, 2, "Should have 2 sessions");
+
+        storage.session_store().delete_session(&bob_address).await?;
+        assert_eq!(storage.session_store().session_count().await, 1, "Should have 1 session after deleting Bob's");
+
+        let bob_session = storage.session_store().load_session(&bob_address).await?;
+        assert!(bob_session.is_none(), "Bob's session should be deleted");
+
+        let charlie_session = storage.session_store().load_session(&charlie_address).await?;
+        assert!(charlie_session.is_some(), "Charlie's session should still exist");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_identity_management_operations() -> Result<(), Box<dyn std::error::Error>> {
+        use libsignal_protocol::*;
+        use crate::keys::generate_identity_key_pair;
+
+        let mut storage = SqliteStorage::new(":memory:").await?;
+        storage.initialize()?;
+
+        let local_identity = generate_identity_key_pair().await?;
+        storage.identity_store().set_local_identity_key_pair(&local_identity).await?;
+
+        let bob_address = ProtocolAddress::new("bob".to_string(), DeviceId::new(1)?);
+        let charlie_address = ProtocolAddress::new("charlie".to_string(), DeviceId::new(1)?);
+
+        let bob_identity = generate_identity_key_pair().await?;
+        let charlie_identity = generate_identity_key_pair().await?;
+
+        let result = storage.identity_store().get_peer_identity(&bob_address).await?;
+        assert!(result.is_none(), "Should return None for non-existent peer identity");
+
+        storage.identity_store().save_identity(&bob_address, bob_identity.identity_key()).await?;
+        storage.identity_store().save_identity(&charlie_address, charlie_identity.identity_key()).await?;
+
+        assert_eq!(storage.identity_store().identity_count().await, 2, "Should have 2 peer identities");
+
+        let retrieved_bob = storage.identity_store().get_peer_identity(&bob_address).await?;
+        assert!(retrieved_bob.is_some(), "Should retrieve Bob's identity");
+        assert_eq!(retrieved_bob.unwrap(), *bob_identity.identity_key(), "Retrieved identity should match stored");
+
+        let retrieved_charlie = storage.identity_store().get_peer_identity(&charlie_address).await?;
+        assert!(retrieved_charlie.is_some(), "Should retrieve Charlie's identity");
+        assert_eq!(retrieved_charlie.unwrap(), *charlie_identity.identity_key(), "Retrieved identity should match stored");
+
+        storage.identity_store().delete_identity(&bob_address).await?;
+        assert_eq!(storage.identity_store().identity_count().await, 1, "Should have 1 identity after deleting Bob's");
+
+        let deleted_bob = storage.identity_store().get_peer_identity(&bob_address).await?;
+        assert!(deleted_bob.is_none(), "Bob's identity should be deleted");
+
+        let still_charlie = storage.identity_store().get_peer_identity(&charlie_address).await?;
+        assert!(still_charlie.is_some(), "Charlie's identity should still exist");
+
+        storage.identity_store().clear_all_identities().await?;
+        assert_eq!(storage.identity_store().identity_count().await, 0, "Should have 0 identities after clearing all");
+
+        let cleared_charlie = storage.identity_store().get_peer_identity(&charlie_address).await?;
+        assert!(cleared_charlie.is_none(), "Charlie's identity should be cleared");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_clear_local_identity() -> Result<(), Box<dyn std::error::Error>> {
+        use libsignal_protocol::*;
+        use crate::keys::generate_identity_key_pair;
+
+        let mut storage = SqliteStorage::new(":memory:").await?;
+        storage.initialize()?;
+
+        let identity = generate_identity_key_pair().await?;
+        let registration_id = 12345u32;
+        storage.identity_store().set_local_identity_key_pair(&identity).await?;
+        storage.identity_store().set_local_registration_id(registration_id).await?;
+
+        let retrieved_identity = storage.identity_store().get_identity_key_pair().await?;
+        assert_eq!(retrieved_identity.identity_key().serialize(), identity.identity_key().serialize());
+
+        let retrieved_registration = storage.identity_store().get_local_registration_id().await?;
+        assert_eq!(retrieved_registration, registration_id);
+
+        storage.identity_store().clear_local_identity().await?;
+
+        let result = storage.identity_store().get_identity_key_pair().await;
+        assert!(result.is_err(), "Should return error when local identity is cleared");
+
+        let result = storage.identity_store().get_local_registration_id().await;
+        assert!(result.is_err(), "Should return error when local registration ID is cleared");
 
         Ok(())
     }

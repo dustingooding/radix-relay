@@ -1,33 +1,13 @@
-//! Encryption and decryption functions for libsignal
+//! Encryption and decryption tests
 //!
-//! This module provides message encryption and decryption functions
-//! using the Signal Protocol's Double Ratchet algorithm.
-
-use libsignal_protocol::*;
-use crate::memory_storage::MemoryStorage;
-use crate::storage_trait::ExtendedStorageOps;
-
-pub async fn encrypt_message_with_storage<S: ExtendedStorageOps>(
-    storage: &mut S,
-    remote_address: &ProtocolAddress,
-    plaintext: &[u8],
-) -> Result<CiphertextMessage, SignalProtocolError> {
-    storage.encrypt_message(remote_address, plaintext).await
-}
-
-pub async fn decrypt_message_with_storage<S: ExtendedStorageOps>(
-    storage: &mut S,
-    remote_address: &ProtocolAddress,
-    ciphertext: &CiphertextMessage,
-) -> Result<Vec<u8>, SignalProtocolError> {
-    storage.decrypt_message(remote_address, ciphertext).await
-}
+//! This module contains tests for message encryption and decryption functionality
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
+    use libsignal_protocol::*;
+    use crate::memory_storage::MemoryStorage;
     use crate::storage_trait::ExtendedIdentityStore;
+    use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
 
     #[tokio::test]
     async fn test_encrypt_message_basic() -> Result<(), Box<dyn std::error::Error>> {
@@ -62,7 +42,7 @@ mod tests {
         alice_storage.establish_session_from_bundle(&bob_address, &bundle).await?;
 
         let plaintext = b"Hello, Bob!";
-        let ciphertext = encrypt_message_with_storage(&mut alice_storage, &bob_address, plaintext).await?;
+        let ciphertext = alice_storage.encrypt_message(&bob_address, plaintext).await?;
 
         assert!(!ciphertext.serialize().is_empty());
         assert_ne!(ciphertext.serialize(), plaintext);
@@ -123,10 +103,10 @@ mod tests {
         bob_storage.kyber_pre_key_store.save_kyber_pre_key(KyberPreKeyId::from(1u32), &kyber_pre_key_record).await?;
 
         let plaintext = b"Hello, Bob! This is a secret message.";
-        let ciphertext = encrypt_message_with_storage(&mut alice_storage, &bob_address, plaintext).await?;
+        let ciphertext = alice_storage.encrypt_message(&bob_address, plaintext).await?;
 
         let alice_address = ProtocolAddress::new("alice".to_string(), DeviceId::new(1)?);
-        let decrypted = decrypt_message_with_storage(&mut bob_storage, &alice_address, &ciphertext).await?;
+        let decrypted = bob_storage.decrypt_message(&alice_address, &ciphertext).await?;
 
         assert_eq!(decrypted, plaintext);
 
@@ -143,7 +123,7 @@ mod tests {
         let bob_address = ProtocolAddress::new("bob".to_string(), DeviceId::new(1)?);
         let plaintext = b"Hello, Bob!";
 
-        let result = encrypt_message_with_storage(&mut alice_storage, &bob_address, plaintext).await;
+        let result = alice_storage.encrypt_message(&bob_address, plaintext).await;
         assert!(result.is_err());
 
         Ok(())
@@ -189,7 +169,7 @@ mod tests {
 
         let mut ciphertexts = Vec::new();
         for message in &messages {
-            let ciphertext = encrypt_message_with_storage(&mut alice_storage, &bob_address, message).await?;
+            let ciphertext = alice_storage.encrypt_message(&bob_address, message).await?;
             ciphertexts.push(ciphertext);
         }
 

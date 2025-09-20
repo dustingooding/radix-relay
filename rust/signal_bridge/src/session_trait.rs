@@ -3,20 +3,9 @@
 //! This module provides session establishment and management functions
 //! for the Signal Protocol's Double Ratchet algorithm with dependency injection.
 
-use libsignal_protocol::*;
-use crate::storage_trait::ExtendedStorageOps;
-
-pub async fn establish_session_from_bundle<S: ExtendedStorageOps>(
-    address: &ProtocolAddress,
-    bundle: &PreKeyBundle,
-    storage: &mut S,
-) -> Result<(), Box<dyn std::error::Error>> {
-    storage.establish_session_from_bundle(address, bundle).await
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use libsignal_protocol::*;
     use crate::memory_storage::MemoryStorage;
     use crate::storage_trait::{ExtendedSessionStore, ExtendedIdentityStore};
     use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
@@ -54,7 +43,7 @@ mod tests {
 
         assert_eq!(storage.session_store.session_count().await, 0);
 
-        establish_session_from_bundle(&bob_address, &bundle, &mut storage).await?;
+        storage.establish_session_from_bundle(&bob_address, &bundle).await?;
 
         assert_eq!(storage.session_store.session_count().await, 1);
         let session = storage.session_store.load_session(&bob_address).await?;
@@ -94,7 +83,7 @@ mod tests {
         storage.identity_store.set_local_identity_key_pair(&alice_identity).await?;
         storage.identity_store.set_local_registration_id(12346).await?;
 
-        establish_session_from_bundle(&bob_address, &bundle, &mut storage).await?;
+        storage.establish_session_from_bundle(&bob_address, &bundle).await?;
         assert_eq!(storage.session_store.session_count().await, 1);
 
         let mut new_storage = MemoryStorage::new();
@@ -103,7 +92,7 @@ mod tests {
 
         assert_eq!(new_storage.session_store.session_count().await, 0);
 
-        establish_session_from_bundle(&bob_address, &bundle, &mut new_storage).await?;
+        new_storage.establish_session_from_bundle(&bob_address, &bundle).await?;
         assert_eq!(new_storage.session_store.session_count().await, 1);
 
         Ok(())
