@@ -2,6 +2,7 @@
 
 #include <fmt/core.h>
 #include <radix_relay/cli_utils/cli_parser.hpp>
+#include <radix_relay/concepts/command_handler.hpp>
 #include <radix_relay/node_identity.hpp>
 #include <radix_relay/standard_event_handler.hpp>
 #include <spdlog/spdlog.h>
@@ -37,9 +38,9 @@ inline auto print_available_commands() -> void
     "quit\n\n");
 }
 
-inline auto execute_cli_command(const CliArgs &args) -> bool
+template<concepts::CommandHandler CmdHandler>
+inline auto execute_cli_command(const CliArgs &args, const CmdHandler &command_handler) -> bool
 {
-  const radix_relay::StandardEventHandler::command_handler_t command_handler;
 
   if (args.show_version) {
     command_handler.handle(radix_relay::events::version{});

@@ -5,7 +5,6 @@
 #include <radix_relay/events/events.hpp>
 #include <utility>
 
-// Include node identity utilities
 #include <radix_relay/node_identity.hpp>
 
 #include "internal_use_only/config.hpp"
@@ -14,6 +13,8 @@ namespace radix_relay {
 
 struct CommandHandler
 {
+  explicit CommandHandler(rust::Box<SignalBridge> bridge) : bridge_(std::move(bridge)) {}
+
   template<events::Command T> auto handle(const T &command) const -> void { handle_impl(command); }
 
 private:
@@ -50,9 +51,8 @@ private:
     fmt::print("  BLE Mesh: Not initialized\n");
     fmt::print("  Active Sessions: 0\n");
 
-    // Crypto Status - call to Rust crypto utilities
     fmt::print("\nCrypto Status:\n");
-    std::string node_fingerprint = get_node_fingerprint();
+    std::string node_fingerprint = get_node_fingerprint(*bridge_);
     fmt::print("  Node Fingerprint: {}\n", node_fingerprint);
   }
 
@@ -137,6 +137,7 @@ private:
   }
 
 private:
+  mutable rust::Box<SignalBridge> bridge_;
   bool initialized_ = true;
 };
 

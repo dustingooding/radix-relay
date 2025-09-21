@@ -18,7 +18,6 @@ function(setup_rust_workspace)
         message(FATAL_ERROR "Rust toolchain not found. Please install Rust: https://rustup.rs/")
     endif()
 
-    # Configure Rust build type
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         set(ENV{CARGO_BUILD_TYPE} "debug")
         message(STATUS "  Rust Debug build configured")
@@ -29,50 +28,44 @@ function(setup_rust_workspace)
 
     set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/../rust")
 
-    # Set global Cargo environment before importing crates
     set(ENV{CARGO_TARGET_DIR} "${RUST_TARGET_DIR}")
 
     corrosion_import_crate(
         MANIFEST_PATH "${CMAKE_SOURCE_DIR}/rust/Cargo.toml"
-        CRATES crypto_utils signal_bridge
+        CRATES signal_bridge
     )
 
-    # Add CXX bridge for C++ interoperability
     corrosion_add_cxxbridge(
-        crypto_utils_cxx
-        CRATE crypto_utils
+        signal_bridge_cxx
+        CRATE signal_bridge
         FILES lib.rs
     )
 
-    # Configure CXX bridge C++ compilation to match CMake MSVC runtime library
     if(MSVC)
         if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-            # Ensure CXX bridge C++ code uses debug MSVC runtime (/MDd)
-            corrosion_set_env_vars(crypto_utils
+            corrosion_set_env_vars(signal_bridge
                 "CFLAGS=/MDd /D_ITERATOR_DEBUG_LEVEL=2"
                 "CXXFLAGS=/MDd /D_ITERATOR_DEBUG_LEVEL=2"
             )
             message(STATUS "  CXX bridge: Using MSVC debug runtime (/MDd) with iterator debug level 2")
         else()
-            # Ensure CXX bridge C++ code uses release MSVC runtime (/MD)
-            corrosion_set_env_vars(crypto_utils
+            corrosion_set_env_vars(signal_bridge
                 "CFLAGS=/MD /D_ITERATOR_DEBUG_LEVEL=0"
                 "CXXFLAGS=/MD /D_ITERATOR_DEBUG_LEVEL=0"
             )
             message(STATUS "  CXX bridge: Using MSVC release runtime (/MD) with iterator debug level 0")
         endif()
+        # Link BCrypt library for cryptographic random number generation
+        target_link_libraries(signal_bridge_cxx INTERFACE bcrypt)
     endif()
 
-    # Set environment variables for Rust compilation
     if(APPLE)
-        corrosion_set_env_vars(crypto_utils
-            "CARGO_TARGET_DIR=${RUST_TARGET_DIR}"
-            "MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
         corrosion_set_env_vars(signal_bridge
             "CARGO_TARGET_DIR=${RUST_TARGET_DIR}"
             "MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
+        # Link required system frameworks for Rust dependencies (chrono/iana_time_zone)
+        target_link_libraries(signal_bridge_cxx INTERFACE "-framework CoreFoundation")
     else()
-        corrosion_set_env_vars(crypto_utils "CARGO_TARGET_DIR=${RUST_TARGET_DIR}")
         corrosion_set_env_vars(signal_bridge "CARGO_TARGET_DIR=${RUST_TARGET_DIR}")
     endif()
 
@@ -82,7 +75,6 @@ function(setup_rust_workspace)
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     )
 
-    # Set environment for Rust tests
     if(APPLE)
         set_tests_properties(rust_tests PROPERTIES
             ENVIRONMENT "CARGO_TARGET_DIR=${RUST_TARGET_DIR};MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}"
@@ -97,7 +89,6 @@ function(setup_rust_workspace)
     message(STATUS "  Rust target directory: ${RUST_TARGET_DIR}")
     message(STATUS "  Rust tests added to CTest")
 
-    # Setup Rust quality checks
     radix_relay_setup_rust_quality_checks("${CMAKE_SOURCE_DIR}/rust")
 
 endfunction()

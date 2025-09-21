@@ -235,14 +235,14 @@ jobs:
       - name: Unix - Test and coverage
         if: runner.os != 'Windows'
         run: |
-          ctest --preset=test-${{ steps.preset.outputs.preset }}
+          ctest --preset=test-${{ steps.preset.outputs.preset }} --output-on-failure
           cd out/build/${{ steps.preset.outputs.preset }}
           gcovr -j ${{env.nproc}} --root ../../.. --print-summary --xml-pretty --xml coverage.xml . --gcov-executable '${{ matrix.gcov_executable }}'
 
       - name: Windows - Test and coverage
         if: runner.os == 'Windows'
         run: |
-          OpenCppCoverage.exe --sources src\ --sources include\ --modules *radix_relay*.exe --modules *test*.exe --modules *signal_bridge*.dll --modules *crypto_utils*.dll --export_type cobertura:coverage.xml --cover_children -- ctest --preset=test-${{ steps.preset.outputs.preset }}
+          OpenCppCoverage.exe --sources src\ --sources include\ --modules *radix_relay*.exe --modules *test*.exe --modules *signal_bridge*.dll --modules *crypto_utils*.dll --export_type cobertura:coverage.xml --cover_children -- ctest --preset=test-${{ steps.preset.outputs.preset }} --output-on-failure
           if (Test-Path "coverage.xml") {
             Write-Host "coverage.xml already in root"
           } elseif (Test-Path "out\build\${{ steps.preset.outputs.preset }}\coverage.xml") {

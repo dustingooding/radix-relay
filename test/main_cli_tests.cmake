@@ -5,7 +5,7 @@ add_test(NAME cli.has_help COMMAND radix-relay --help)
 
 add_test(NAME cli.verbose_mode COMMAND radix-relay --verbose peers)
 
-add_test(NAME cli.identity_flag COMMAND radix-relay --identity /tmp/test.key peers)
+add_test(NAME cli.identity_flag COMMAND radix-relay --identity ${CMAKE_CURRENT_BINARY_DIR}/test.db peers)
 
 add_test(NAME cli.mode_internet COMMAND radix-relay --mode internet peers)
 
