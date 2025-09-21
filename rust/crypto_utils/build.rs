@@ -6,7 +6,10 @@ fn main() {
         .compile("test_crate");
 
     // Ensure consistent MSVC runtime library linking on Windows
-    if env::var("TARGET").unwrap_or_default().contains("windows-msvc") {
+    if env::var("TARGET")
+        .unwrap_or_default()
+        .contains("windows-msvc")
+    {
         let cflags = env::var("CFLAGS").unwrap_or_default();
         let cxxflags = env::var("CXXFLAGS").unwrap_or_default();
 

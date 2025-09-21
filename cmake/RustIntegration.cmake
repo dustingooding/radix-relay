@@ -1,6 +1,8 @@
 # Rust Integration via Corrosion
 # This file handles the setup and configuration of Rust compilation within CMake
 
+include(cmake/RustQualityChecks.cmake)
+
 function(setup_rust_workspace)
     find_program(RUST_CARGO cargo REQUIRED)
     find_program(RUST_RUSTC rustc REQUIRED)
@@ -94,5 +96,8 @@ function(setup_rust_workspace)
     message(STATUS "Rust workspace imported successfully")
     message(STATUS "  Rust target directory: ${RUST_TARGET_DIR}")
     message(STATUS "  Rust tests added to CTest")
+
+    # Setup Rust quality checks
+    radix_relay_setup_rust_quality_checks("${CMAKE_SOURCE_DIR}/rust")
 
 endfunction()

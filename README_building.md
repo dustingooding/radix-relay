@@ -223,6 +223,33 @@ For Visual Studio, specify configuration:
 cmake --build ./build -- /p:configuration=Release
 ```
 
+## Quality Checks
+
+### Rust Quality Checks
+
+This project includes automated Rust quality tools that run as part of the build process:
+
+- **rustfmt**: Code formatting (configured via `rustfmt.toml`)
+- **clippy**: Linting and static analysis
+
+#### Running Rust Quality Checks Manually
+
+```bash
+# Check code formatting (without modifying files)
+cmake --build --preset=unixlike-clang-debug --target rust-fmt-check
+
+# Apply code formatting
+cmake --build --preset=unixlike-clang-debug --target rust-fmt
+
+# Run clippy linter
+cmake --build --preset=unixlike-clang-debug --target rust-clippy
+
+# Run all quality checks
+cmake --build --preset=unixlike-clang-debug --target quality-checks
+```
+
+**Note**: Rust quality tools (clippy and rustfmt) are automatically installed via `.envrc` when using direnv.
+
 ## Running the tests
 
 ### Using test presets (recommended)

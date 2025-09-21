@@ -4,11 +4,11 @@
 //! the storage traits. Data is lost when the process terminates.
 
 use crate::storage_trait::*;
+use async_trait::async_trait;
 use libsignal_protocol::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use async_trait::async_trait;
 
 fn address_key(address: &ProtocolAddress) -> String {
     format!("{}:{}", address.name(), u32::from(address.device_id()))
@@ -29,7 +29,10 @@ impl MemorySessionStore {
 
 #[async_trait(?Send)]
 impl SessionStore for MemorySessionStore {
-    async fn load_session(&self, address: &ProtocolAddress) -> Result<Option<SessionRecord>, SignalProtocolError> {
+    async fn load_session(
+        &self,
+        address: &ProtocolAddress,
+    ) -> Result<Option<SessionRecord>, SignalProtocolError> {
         let key = address_key(address);
         let store = self.sessions.lock().await;
         Ok(store.get(&key).cloned())
@@ -59,7 +62,10 @@ impl ExtendedSessionStore for MemorySessionStore {
         store.clear();
         Ok(())
     }
-    async fn delete_session(&mut self, address: &ProtocolAddress) -> Result<(), Box<dyn std::error::Error>> {
+    async fn delete_session(
+        &mut self,
+        address: &ProtocolAddress,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let key = address_key(address);
         let mut store = self.sessions.lock().await;
         store.remove(&key);
@@ -90,7 +96,10 @@ impl IdentityKeyStore for MemoryIdentityStore {
         let store = self.local_identity_key_pair.lock().await;
         match *store {
             Some(identity_key_pair) => Ok(identity_key_pair),
-            None => Err(SignalProtocolError::InvalidState("storage", "Local identity key pair not set".to_string())),
+            None => Err(SignalProtocolError::InvalidState(
+                "storage",
+                "Local identity key pair not set".to_string(),
+            )),
         }
     }
 
@@ -98,7 +107,10 @@ impl IdentityKeyStore for MemoryIdentityStore {
         let store = self.local_registration_id.lock().await;
         match *store {
             Some(registration_id) => Ok(registration_id),
-            None => Err(SignalProtocolError::InvalidState("storage", "Local registration ID not set".to_string())),
+            None => Err(SignalProtocolError::InvalidState(
+                "storage",
+                "Local registration ID not set".to_string(),
+            )),
         }
     }
 
@@ -116,13 +128,9 @@ impl IdentityKeyStore for MemoryIdentityStore {
         match existing {
             Some(existing_key) if existing_key != *identity_key => {
                 Ok(IdentityChange::ReplacedExisting)
-            },
-            Some(_) => {
-                Ok(IdentityChange::NewOrUnchanged)
-            },
-            None => {
-                Ok(IdentityChange::NewOrUnchanged)
-            },
+            }
+            Some(_) => Ok(IdentityChange::NewOrUnchanged),
+            None => Ok(IdentityChange::NewOrUnchanged),
         }
     }
 
@@ -140,7 +148,10 @@ impl IdentityKeyStore for MemoryIdentityStore {
         }
     }
 
-    async fn get_identity(&self, address: &ProtocolAddress) -> Result<Option<IdentityKey>, SignalProtocolError> {
+    async fn get_identity(
+        &self,
+        address: &ProtocolAddress,
+    ) -> Result<Option<IdentityKey>, SignalProtocolError> {
         let key = address_key(address);
         let store = self.identity_keys.lock().await;
         Ok(store.get(&key).copied())
@@ -154,23 +165,35 @@ impl ExtendedIdentityStore for MemoryIdentityStore {
         store.len()
     }
 
-    async fn set_local_identity_key_pair(&self, identity_key_pair: &IdentityKeyPair) -> Result<(), Box<dyn std::error::Error>> {
+    async fn set_local_identity_key_pair(
+        &self,
+        identity_key_pair: &IdentityKeyPair,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut store = self.local_identity_key_pair.lock().await;
         *store = Some(*identity_key_pair);
         Ok(())
     }
 
-    async fn set_local_registration_id(&self, registration_id: u32) -> Result<(), Box<dyn std::error::Error>> {
+    async fn set_local_registration_id(
+        &self,
+        registration_id: u32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut store = self.local_registration_id.lock().await;
         *store = Some(registration_id);
         Ok(())
     }
-    async fn get_peer_identity(&self, address: &ProtocolAddress) -> Result<Option<IdentityKey>, Box<dyn std::error::Error>> {
+    async fn get_peer_identity(
+        &self,
+        address: &ProtocolAddress,
+    ) -> Result<Option<IdentityKey>, Box<dyn std::error::Error>> {
         let key = address_key(address);
         let store = self.identity_keys.lock().await;
         Ok(store.get(&key).cloned())
     }
-    async fn delete_identity(&mut self, address: &ProtocolAddress) -> Result<(), Box<dyn std::error::Error>> {
+    async fn delete_identity(
+        &mut self,
+        address: &ProtocolAddress,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let key = address_key(address);
         let mut store = self.identity_keys.lock().await;
         store.remove(&key);
@@ -260,7 +283,10 @@ impl MemorySignedPreKeyStore {
 
 #[async_trait(?Send)]
 impl SignedPreKeyStore for MemorySignedPreKeyStore {
-    async fn get_signed_pre_key(&self, signed_prekey_id: SignedPreKeyId) -> Result<SignedPreKeyRecord, SignalProtocolError> {
+    async fn get_signed_pre_key(
+        &self,
+        signed_prekey_id: SignedPreKeyId,
+    ) -> Result<SignedPreKeyRecord, SignalProtocolError> {
         let store = self.signed_pre_keys.lock().await;
         match store.get(&u32::from(signed_prekey_id)) {
             Some(record) => Ok(record.clone()),
@@ -308,7 +334,10 @@ impl MemoryKyberPreKeyStore {
 
 #[async_trait(?Send)]
 impl KyberPreKeyStore for MemoryKyberPreKeyStore {
-    async fn get_kyber_pre_key(&self, kyber_prekey_id: KyberPreKeyId) -> Result<KyberPreKeyRecord, SignalProtocolError> {
+    async fn get_kyber_pre_key(
+        &self,
+        kyber_prekey_id: KyberPreKeyId,
+    ) -> Result<KyberPreKeyRecord, SignalProtocolError> {
         let store = self.kyber_pre_keys.lock().await;
         match store.get(&u32::from(kyber_prekey_id)) {
             Some(record) => Ok(record.clone()),
@@ -326,7 +355,10 @@ impl KyberPreKeyStore for MemoryKyberPreKeyStore {
         Ok(())
     }
 
-    async fn mark_kyber_pre_key_used(&mut self, _kyber_prekey_id: KyberPreKeyId) -> Result<(), SignalProtocolError> {
+    async fn mark_kyber_pre_key_used(
+        &mut self,
+        _kyber_prekey_id: KyberPreKeyId,
+    ) -> Result<(), SignalProtocolError> {
         // For memory storage, we don't implement usage tracking since this is atest/development storage
         // In production storage, this would typically mark keys as consumed to prevent reuse
         Ok(())
@@ -454,7 +486,8 @@ impl MemoryStorage {
             timestamp,
             &mut rng,
             UsePQRatchet::Yes,
-        ).await?;
+        )
+        .await?;
 
         Ok(())
     }
@@ -467,7 +500,15 @@ impl MemoryStorage {
     ) -> Result<CiphertextMessage, SignalProtocolError> {
         let mut rng = rand::rng();
         let now = std::time::SystemTime::now();
-        message_encrypt(plaintext, remote_address, &mut self.session_store, &mut self.identity_store, now, &mut rng).await
+        message_encrypt(
+            plaintext,
+            remote_address,
+            &mut self.session_store,
+            &mut self.identity_store,
+            now,
+            &mut rng,
+        )
+        .await
     }
 
     #[allow(dead_code)]
@@ -484,11 +525,12 @@ impl MemoryStorage {
             &mut self.session_store,
             &mut self.identity_store,
             &mut self.pre_key_store,
-            &mut self.signed_pre_key_store,
+            &self.signed_pre_key_store,
             &mut self.kyber_pre_key_store,
             &mut rng,
             UsePQRatchet::Yes,
-        ).await
+        )
+        .await
     }
 }
 
@@ -512,7 +554,10 @@ mod tests {
 
         assert_eq!(storage.session_store.session_count().await, 0);
 
-        storage.session_store.store_session(&address, &session_record).await?;
+        storage
+            .session_store
+            .store_session(&address, &session_record)
+            .await?;
         assert_eq!(storage.session_store.session_count().await, 1);
 
         let loaded = storage.session_store.load_session(&address).await?;
@@ -531,23 +576,38 @@ mod tests {
         let identity_key_pair = IdentityKeyPair::generate(&mut rng);
         let address = ProtocolAddress::new("test_user".to_string(), DeviceId::new(1)?);
 
-        storage.identity_store.set_local_identity_key_pair(&identity_key_pair).await?;
-        storage.identity_store.set_local_registration_id(12345).await?;
+        storage
+            .identity_store
+            .set_local_identity_key_pair(&identity_key_pair)
+            .await?;
+        storage
+            .identity_store
+            .set_local_registration_id(12345)
+            .await?;
 
         let retrieved_identity = storage.identity_store.get_identity_key_pair().await?;
-        assert_eq!(retrieved_identity.identity_key().serialize(), identity_key_pair.identity_key().serialize());
+        assert_eq!(
+            retrieved_identity.identity_key().serialize(),
+            identity_key_pair.identity_key().serialize()
+        );
 
         let retrieved_registration = storage.identity_store.get_local_registration_id().await?;
         assert_eq!(retrieved_registration, 12345);
 
         assert_eq!(storage.identity_store.identity_count().await, 0);
 
-        storage.identity_store.save_identity(&address, identity_key_pair.identity_key()).await?;
+        storage
+            .identity_store
+            .save_identity(&address, identity_key_pair.identity_key())
+            .await?;
         assert_eq!(storage.identity_store.identity_count().await, 1);
 
         let retrieved = storage.identity_store.get_identity(&address).await?;
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().serialize(), identity_key_pair.identity_key().serialize());
+        assert_eq!(
+            retrieved.unwrap().serialize(),
+            identity_key_pair.identity_key().serialize()
+        );
 
         Ok(())
     }
@@ -556,7 +616,9 @@ mod tests {
     async fn test_key_generation_storage_integration() -> Result<(), Box<dyn std::error::Error>> {
         use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
         use crate::memory_storage::MemoryStorage;
-        use crate::storage_trait::{ExtendedIdentityStore, ExtendedPreKeyStore, ExtendedSignedPreKeyStore};
+        use crate::storage_trait::{
+            ExtendedIdentityStore, ExtendedPreKeyStore, ExtendedSignedPreKeyStore,
+        };
 
         let identity_key_pair = generate_identity_key_pair().await?;
         let pre_keys = generate_pre_keys(1, 5).await?;
@@ -565,7 +627,10 @@ mod tests {
         let mut storage = MemoryStorage::new();
 
         let address = ProtocolAddress::new("test_user".to_string(), DeviceId::new(1)?);
-        storage.identity_store.save_identity(&address, identity_key_pair.identity_key()).await?;
+        storage
+            .identity_store
+            .save_identity(&address, identity_key_pair.identity_key())
+            .await?;
         let retrieved_identity = storage.identity_store.get_identity(&address).await?;
         assert!(retrieved_identity.is_some());
         assert_eq!(
@@ -575,7 +640,10 @@ mod tests {
 
         for (key_id, key_pair) in &pre_keys {
             let record = PreKeyRecord::new((*key_id).into(), key_pair);
-            storage.pre_key_store.save_pre_key((*key_id).into(), &record).await?;
+            storage
+                .pre_key_store
+                .save_pre_key((*key_id).into(), &record)
+                .await?;
             let retrieved_record = storage.pre_key_store.get_pre_key((*key_id).into()).await?;
             assert_eq!(
                 retrieved_record.key_pair()?.public_key.serialize(),
@@ -583,12 +651,15 @@ mod tests {
             );
         }
 
-        storage.signed_pre_key_store.save_signed_pre_key(signed_pre_key.id()?, &signed_pre_key).await?;
-        let retrieved_signed_key = storage.signed_pre_key_store.get_signed_pre_key(signed_pre_key.id()?).await?;
-        assert_eq!(
-            retrieved_signed_key.id()?,
-            signed_pre_key.id()?
-        );
+        storage
+            .signed_pre_key_store
+            .save_signed_pre_key(signed_pre_key.id()?, &signed_pre_key)
+            .await?;
+        let retrieved_signed_key = storage
+            .signed_pre_key_store
+            .get_signed_pre_key(signed_pre_key.id()?)
+            .await?;
+        assert_eq!(retrieved_signed_key.id()?, signed_pre_key.id()?);
 
         assert_eq!(storage.identity_store.identity_count().await, 1);
         assert_eq!(storage.pre_key_store.pre_key_count().await, 5);
@@ -606,8 +677,14 @@ mod tests {
 
         let identity = generate_identity_key_pair().await?;
         let registration_id = 12345u32;
-        storage.identity_store.set_local_identity_key_pair(&identity).await?;
-        storage.identity_store.set_local_registration_id(registration_id).await?;
+        storage
+            .identity_store
+            .set_local_identity_key_pair(&identity)
+            .await?;
+        storage
+            .identity_store
+            .set_local_registration_id(registration_id)
+            .await?;
 
         let bob_address = ProtocolAddress::new("bob".to_string(), DeviceId::new(1)?);
         let charlie_address = ProtocolAddress::new("charlie".to_string(), DeviceId::new(1)?);
@@ -618,13 +695,17 @@ mod tests {
 
         let mut rng = rand::rng();
         let kyber_keypair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
-        let kyber_signature = bob_identity.private_key()
+        let kyber_signature = bob_identity
+            .private_key()
             .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
 
         let bob_bundle = PreKeyBundle::new(
             registration_id,
             DeviceId::new(1)?,
-            Some((PreKeyId::from(bob_pre_keys[0].0), bob_pre_keys[0].1.public_key)),
+            Some((
+                PreKeyId::from(bob_pre_keys[0].0),
+                bob_pre_keys[0].1.public_key,
+            )),
             SignedPreKeyId::from(1u32),
             bob_signed_pre_key.public_key()?,
             bob_signed_pre_key.signature()?.to_vec(),
@@ -634,31 +715,50 @@ mod tests {
             *bob_identity.identity_key(),
         )?;
 
-        storage.establish_session_from_bundle(&bob_address, &bob_bundle).await?;
-        storage.establish_session_from_bundle(&charlie_address, &bob_bundle).await?;
-        assert_eq!(storage.session_store.session_count().await, 2, "Should have 2 sessions");
+        storage
+            .establish_session_from_bundle(&bob_address, &bob_bundle)
+            .await?;
+        storage
+            .establish_session_from_bundle(&charlie_address, &bob_bundle)
+            .await?;
+        assert_eq!(
+            storage.session_store.session_count().await,
+            2,
+            "Should have 2 sessions"
+        );
 
         storage.session_store.delete_session(&bob_address).await?;
-        assert_eq!(storage.session_store.session_count().await, 1, "Should have 1 session after deleting Bob's");
+        assert_eq!(
+            storage.session_store.session_count().await,
+            1,
+            "Should have 1 session after deleting Bob's"
+        );
 
         let bob_session = storage.session_store.load_session(&bob_address).await?;
         assert!(bob_session.is_none(), "Bob's session should be deleted");
 
         let charlie_session = storage.session_store.load_session(&charlie_address).await?;
-        assert!(charlie_session.is_some(), "Charlie's session should still exist");
+        assert!(
+            charlie_session.is_some(),
+            "Charlie's session should still exist"
+        );
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_memory_identity_management_operations() -> Result<(), Box<dyn std::error::Error>> {
-        use libsignal_protocol::*;
+    async fn test_memory_identity_management_operations() -> Result<(), Box<dyn std::error::Error>>
+    {
         use crate::keys::generate_identity_key_pair;
+        use libsignal_protocol::*;
 
         let mut storage = MemoryStorage::new();
 
         let local_identity = generate_identity_key_pair().await?;
-        storage.identity_store.set_local_identity_key_pair(&local_identity).await?;
+        storage
+            .identity_store
+            .set_local_identity_key_pair(&local_identity)
+            .await?;
 
         let bob_address = ProtocolAddress::new("bob".to_string(), DeviceId::new(1)?);
         let charlie_address = ProtocolAddress::new("charlie".to_string(), DeviceId::new(1)?);
@@ -666,54 +766,119 @@ mod tests {
         let bob_identity = generate_identity_key_pair().await?;
         let charlie_identity = generate_identity_key_pair().await?;
 
-        let result = storage.identity_store.get_peer_identity(&bob_address).await?;
-        assert!(result.is_none(), "Should return None for non-existent peer identity");
+        let result = storage
+            .identity_store
+            .get_peer_identity(&bob_address)
+            .await?;
+        assert!(
+            result.is_none(),
+            "Should return None for non-existent peer identity"
+        );
 
-        storage.identity_store.save_identity(&bob_address, bob_identity.identity_key()).await?;
-        storage.identity_store.save_identity(&charlie_address, charlie_identity.identity_key()).await?;
+        storage
+            .identity_store
+            .save_identity(&bob_address, bob_identity.identity_key())
+            .await?;
+        storage
+            .identity_store
+            .save_identity(&charlie_address, charlie_identity.identity_key())
+            .await?;
 
-        assert_eq!(storage.identity_store.identity_count().await, 2, "Should have 2 peer identities");
+        assert_eq!(
+            storage.identity_store.identity_count().await,
+            2,
+            "Should have 2 peer identities"
+        );
 
-        let retrieved_bob = storage.identity_store.get_peer_identity(&bob_address).await?;
+        let retrieved_bob = storage
+            .identity_store
+            .get_peer_identity(&bob_address)
+            .await?;
         assert!(retrieved_bob.is_some(), "Should retrieve Bob's identity");
-        assert_eq!(retrieved_bob.unwrap(), *bob_identity.identity_key(), "Retrieved identity should match stored");
+        assert_eq!(
+            retrieved_bob.unwrap(),
+            *bob_identity.identity_key(),
+            "Retrieved identity should match stored"
+        );
 
-        let retrieved_charlie = storage.identity_store.get_peer_identity(&charlie_address).await?;
-        assert!(retrieved_charlie.is_some(), "Should retrieve Charlie's identity");
-        assert_eq!(retrieved_charlie.unwrap(), *charlie_identity.identity_key(), "Retrieved identity should match stored");
+        let retrieved_charlie = storage
+            .identity_store
+            .get_peer_identity(&charlie_address)
+            .await?;
+        assert!(
+            retrieved_charlie.is_some(),
+            "Should retrieve Charlie's identity"
+        );
+        assert_eq!(
+            retrieved_charlie.unwrap(),
+            *charlie_identity.identity_key(),
+            "Retrieved identity should match stored"
+        );
 
         storage.identity_store.delete_identity(&bob_address).await?;
-        assert_eq!(storage.identity_store.identity_count().await, 1, "Should have 1 identity after deleting Bob's");
+        assert_eq!(
+            storage.identity_store.identity_count().await,
+            1,
+            "Should have 1 identity after deleting Bob's"
+        );
 
-        let deleted_bob = storage.identity_store.get_peer_identity(&bob_address).await?;
+        let deleted_bob = storage
+            .identity_store
+            .get_peer_identity(&bob_address)
+            .await?;
         assert!(deleted_bob.is_none(), "Bob's identity should be deleted");
 
-        let still_charlie = storage.identity_store.get_peer_identity(&charlie_address).await?;
-        assert!(still_charlie.is_some(), "Charlie's identity should still exist");
+        let still_charlie = storage
+            .identity_store
+            .get_peer_identity(&charlie_address)
+            .await?;
+        assert!(
+            still_charlie.is_some(),
+            "Charlie's identity should still exist"
+        );
 
         storage.identity_store.clear_all_identities().await?;
-        assert_eq!(storage.identity_store.identity_count().await, 0, "Should have 0 identities after clearing all");
+        assert_eq!(
+            storage.identity_store.identity_count().await,
+            0,
+            "Should have 0 identities after clearing all"
+        );
 
-        let cleared_charlie = storage.identity_store.get_peer_identity(&charlie_address).await?;
-        assert!(cleared_charlie.is_none(), "Charlie's identity should be cleared");
+        let cleared_charlie = storage
+            .identity_store
+            .get_peer_identity(&charlie_address)
+            .await?;
+        assert!(
+            cleared_charlie.is_none(),
+            "Charlie's identity should be cleared"
+        );
 
         Ok(())
     }
 
     #[tokio::test]
     async fn test_memory_clear_local_identity() -> Result<(), Box<dyn std::error::Error>> {
-        use libsignal_protocol::*;
         use crate::keys::generate_identity_key_pair;
+        use libsignal_protocol::*;
 
         let mut storage = MemoryStorage::new();
 
         let identity = generate_identity_key_pair().await?;
         let registration_id = 12345u32;
-        storage.identity_store.set_local_identity_key_pair(&identity).await?;
-        storage.identity_store.set_local_registration_id(registration_id).await?;
+        storage
+            .identity_store
+            .set_local_identity_key_pair(&identity)
+            .await?;
+        storage
+            .identity_store
+            .set_local_registration_id(registration_id)
+            .await?;
 
         let retrieved_identity = storage.identity_store.get_identity_key_pair().await?;
-        assert_eq!(retrieved_identity.identity_key().serialize(), identity.identity_key().serialize());
+        assert_eq!(
+            retrieved_identity.identity_key().serialize(),
+            identity.identity_key().serialize()
+        );
 
         let retrieved_registration = storage.identity_store.get_local_registration_id().await?;
         assert_eq!(retrieved_registration, registration_id);
@@ -721,10 +886,16 @@ mod tests {
         storage.identity_store.clear_local_identity().await?;
 
         let result = storage.identity_store.get_identity_key_pair().await;
-        assert!(result.is_err(), "Should return error when local identity is cleared");
+        assert!(
+            result.is_err(),
+            "Should return error when local identity is cleared"
+        );
 
         let result = storage.identity_store.get_local_registration_id().await;
-        assert!(result.is_err(), "Should return error when local registration ID is cleared");
+        assert!(
+            result.is_err(),
+            "Should return error when local registration ID is cleared"
+        );
 
         Ok(())
     }

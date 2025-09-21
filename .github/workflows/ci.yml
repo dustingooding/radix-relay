@@ -154,6 +154,7 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
+          components: clippy, rustfmt
 
       - name: Verify Rust installation
         run: |
@@ -224,6 +225,12 @@ jobs:
       - name: Build
         run: |
           cmake --build --preset=${{ steps.preset.outputs.preset }}
+
+      - name: Rust Quality Checks
+        if: matrix.packaging_maintainer_mode == 'ON'
+        run: |
+          cmake --build --preset=${{ steps.preset.outputs.preset }} --target rust-fmt-check
+          cmake --build --preset=${{ steps.preset.outputs.preset }} --target rust-clippy
 
       - name: Unix - Test and coverage
         if: runner.os != 'Windows'

@@ -11,7 +11,10 @@ pub async fn generate_identity_key_pair() -> Result<IdentityKeyPair, Box<dyn std
     Ok(identity_key_pair)
 }
 
-pub async fn generate_pre_keys(start_id: u32, count: u32) -> Result<Vec<(u32, KeyPair)>, Box<dyn std::error::Error>> {
+pub async fn generate_pre_keys(
+    start_id: u32,
+    count: u32,
+) -> Result<Vec<(u32, KeyPair)>, Box<dyn std::error::Error>> {
     let mut rng = rand::rng();
     let mut pre_keys = Vec::new();
 
@@ -39,12 +42,8 @@ pub async fn generate_signed_pre_key(
         .private_key()
         .calculate_signature(&key_pair.public_key.serialize(), &mut rng)?;
 
-    let signed_pre_key = SignedPreKeyRecord::new(
-        signed_pre_key_id.into(),
-        timestamp,
-        &key_pair,
-        &signature,
-    );
+    let signed_pre_key =
+        SignedPreKeyRecord::new(signed_pre_key_id.into(), timestamp, &key_pair, &signature);
 
     Ok(signed_pre_key)
 }
@@ -117,7 +116,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_signed_pre_key_signature_verification() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_signed_pre_key_signature_verification() -> Result<(), Box<dyn std::error::Error>>
+    {
         let identity_key_pair = generate_identity_key_pair().await?;
         let signed_pre_key_id = 123;
 
@@ -128,12 +128,18 @@ mod tests {
         let identity_public_key = identity_key_pair.identity_key().public_key();
 
         let is_valid = identity_public_key.verify_signature(&public_key_bytes, &signature);
-        assert!(is_valid, "Signature should be valid when verified with the correct identity key");
+        assert!(
+            is_valid,
+            "Signature should be valid when verified with the correct identity key"
+        );
 
         let different_identity = generate_identity_key_pair().await?;
         let different_public_key = different_identity.identity_key().public_key();
         let is_invalid = different_public_key.verify_signature(&public_key_bytes, &signature);
-        assert!(!is_invalid, "Signature should be invalid when verified with a different identity key");
+        assert!(
+            !is_invalid,
+            "Signature should be invalid when verified with a different identity key"
+        );
 
         Ok(())
     }
@@ -148,8 +154,14 @@ mod tests {
         let identity1_public = identity1.identity_key().public_key().serialize();
         let identity2_public = identity2.identity_key().public_key().serialize();
 
-        assert_ne!(identity1_private, identity2_private, "Identity private keys should be unique");
-        assert_ne!(identity1_public, identity2_public, "Identity public keys should be unique");
+        assert_ne!(
+            identity1_private, identity2_private,
+            "Identity private keys should be unique"
+        );
+        assert_ne!(
+            identity1_public, identity2_public,
+            "Identity public keys should be unique"
+        );
 
         let pre_keys1 = generate_pre_keys(1, 10).await?;
         let pre_keys2 = generate_pre_keys(11, 10).await?;
@@ -161,8 +173,14 @@ mod tests {
                 let key2_private = pre_keys1[j].1.private_key.serialize();
                 let key2_public = pre_keys1[j].1.public_key.serialize();
 
-                assert_ne!(key1_private, key2_private, "Pre-key private keys should be unique within batch");
-                assert_ne!(key1_public, key2_public, "Pre-key public keys should be unique within batch");
+                assert_ne!(
+                    key1_private, key2_private,
+                    "Pre-key private keys should be unique within batch"
+                );
+                assert_ne!(
+                    key1_public, key2_public,
+                    "Pre-key public keys should be unique within batch"
+                );
             }
         }
 
@@ -173,8 +191,14 @@ mod tests {
                 let key2_private = key2.private_key.serialize();
                 let key2_public = key2.public_key.serialize();
 
-                assert_ne!(key1_private, key2_private, "Pre-key private keys should be unique across batches");
-                assert_ne!(key1_public, key2_public, "Pre-key public keys should be unique across batches");
+                assert_ne!(
+                    key1_private, key2_private,
+                    "Pre-key private keys should be unique across batches"
+                );
+                assert_ne!(
+                    key1_public, key2_public,
+                    "Pre-key public keys should be unique across batches"
+                );
             }
         }
 
@@ -186,8 +210,14 @@ mod tests {
         let signed2_private = signed_key2.private_key()?.serialize();
         let signed2_public = signed_key2.public_key()?.serialize();
 
-        assert_ne!(signed1_private, signed2_private, "Signed pre-key private keys should be unique");
-        assert_ne!(signed1_public, signed2_public, "Signed pre-key public keys should be unique");
+        assert_ne!(
+            signed1_private, signed2_private,
+            "Signed pre-key private keys should be unique"
+        );
+        assert_ne!(
+            signed1_public, signed2_public,
+            "Signed pre-key public keys should be unique"
+        );
 
         Ok(())
     }
@@ -205,21 +235,29 @@ mod tests {
 
         let mut tampered_signature = original_signature.clone();
         tampered_signature[0] = tampered_signature[0].wrapping_add(1); // Flip a bit
-        assert!(!identity_public_key.verify_signature(&public_key_bytes, &tampered_signature),
-               "Tampered signature should fail verification");
+        assert!(
+            !identity_public_key.verify_signature(&public_key_bytes, &tampered_signature),
+            "Tampered signature should fail verification"
+        );
 
         let mut tampered_data = public_key_bytes.clone();
         tampered_data[0] = tampered_data[0].wrapping_add(1); // Flip a bit
-        assert!(!identity_public_key.verify_signature(&tampered_data, &original_signature),
-               "Signature should fail verification when data is tampered");
+        assert!(
+            !identity_public_key.verify_signature(&tampered_data, &original_signature),
+            "Signature should fail verification when data is tampered"
+        );
 
         let different_data = vec![0x42; 33]; // Different data of same length
-        assert!(!identity_public_key.verify_signature(&different_data, &original_signature),
-               "Signature should not verify against completely different data");
+        assert!(
+            !identity_public_key.verify_signature(&different_data, &original_signature),
+            "Signature should not verify against completely different data"
+        );
 
         let empty_signature = vec![];
-        assert!(!identity_public_key.verify_signature(&public_key_bytes, &empty_signature),
-               "Empty signature should fail verification");
+        assert!(
+            !identity_public_key.verify_signature(&public_key_bytes, &empty_signature),
+            "Empty signature should fail verification"
+        );
 
         Ok(())
     }
@@ -240,18 +278,26 @@ mod tests {
 
         let timestamp_millis = signed_pre_key.timestamp()?.epoch_millis();
 
-        assert!(timestamp_millis >= before_generation,
-               "Timestamp should not be before generation started");
-        assert!(timestamp_millis <= after_generation,
-               "Timestamp should not be after generation completed");
+        assert!(
+            timestamp_millis >= before_generation,
+            "Timestamp should not be before generation started"
+        );
+        assert!(
+            timestamp_millis <= after_generation,
+            "Timestamp should not be after generation completed"
+        );
 
         let one_hour_ago = before_generation - (60 * 60 * 1000);
-        assert!(timestamp_millis > one_hour_ago,
-               "Timestamp should not be more than 1 hour in the past");
+        assert!(
+            timestamp_millis > one_hour_ago,
+            "Timestamp should not be more than 1 hour in the past"
+        );
 
         let one_minute_future = after_generation + (60 * 1000);
-        assert!(timestamp_millis < one_minute_future,
-               "Timestamp should not be more than 1 minute in the future");
+        assert!(
+            timestamp_millis < one_minute_future,
+            "Timestamp should not be more than 1 minute in the future"
+        );
 
         let signed_key1 = generate_signed_pre_key(&identity_key_pair, 2).await?;
         std::thread::sleep(std::time::Duration::from_millis(1));
@@ -260,8 +306,10 @@ mod tests {
         let timestamp1 = signed_key1.timestamp()?.epoch_millis();
         let timestamp2 = signed_key2.timestamp()?.epoch_millis();
 
-        assert!(timestamp2 >= timestamp1,
-               "Later generated key should have timestamp >= earlier key");
+        assert!(
+            timestamp2 >= timestamp1,
+            "Later generated key should have timestamp >= earlier key"
+        );
 
         Ok(())
     }

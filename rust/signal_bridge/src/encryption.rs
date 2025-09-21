@@ -4,10 +4,10 @@
 
 #[cfg(test)]
 mod tests {
-    use libsignal_protocol::*;
+    use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
     use crate::memory_storage::MemoryStorage;
     use crate::storage_trait::ExtendedIdentityStore;
-    use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
+    use libsignal_protocol::*;
 
     #[tokio::test]
     async fn test_encrypt_message_basic() -> Result<(), Box<dyn std::error::Error>> {
@@ -18,7 +18,8 @@ mod tests {
 
         let mut rng = rand::rng();
         let kyber_keypair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
-        let kyber_signature = bob_identity.private_key()
+        let kyber_signature = bob_identity
+            .private_key()
             .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
 
         let bundle = PreKeyBundle::new(
@@ -36,13 +37,23 @@ mod tests {
 
         let mut alice_storage = MemoryStorage::new();
         let alice_identity = generate_identity_key_pair().await?;
-        alice_storage.identity_store.set_local_identity_key_pair(&alice_identity).await?;
-        alice_storage.identity_store.set_local_registration_id(12346).await?;
+        alice_storage
+            .identity_store
+            .set_local_identity_key_pair(&alice_identity)
+            .await?;
+        alice_storage
+            .identity_store
+            .set_local_registration_id(12346)
+            .await?;
 
-        alice_storage.establish_session_from_bundle(&bob_address, &bundle).await?;
+        alice_storage
+            .establish_session_from_bundle(&bob_address, &bundle)
+            .await?;
 
         let plaintext = b"Hello, Bob!";
-        let ciphertext = alice_storage.encrypt_message(&bob_address, plaintext).await?;
+        let ciphertext = alice_storage
+            .encrypt_message(&bob_address, plaintext)
+            .await?;
 
         assert!(!ciphertext.serialize().is_empty());
         assert_ne!(ciphertext.serialize(), plaintext);
@@ -59,7 +70,8 @@ mod tests {
 
         let mut rng = rand::rng();
         let kyber_keypair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
-        let kyber_signature = bob_identity.private_key()
+        let kyber_signature = bob_identity
+            .private_key()
             .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
 
         let kyber_keypair_for_storage = kyber_keypair.clone();
@@ -79,20 +91,40 @@ mod tests {
 
         let mut alice_storage = MemoryStorage::new();
         let alice_identity = generate_identity_key_pair().await?;
-        alice_storage.identity_store.set_local_identity_key_pair(&alice_identity).await?;
-        alice_storage.identity_store.set_local_registration_id(12346).await?;
+        alice_storage
+            .identity_store
+            .set_local_identity_key_pair(&alice_identity)
+            .await?;
+        alice_storage
+            .identity_store
+            .set_local_registration_id(12346)
+            .await?;
 
-        alice_storage.establish_session_from_bundle(&bob_address, &bundle).await?;
+        alice_storage
+            .establish_session_from_bundle(&bob_address, &bundle)
+            .await?;
 
         let mut bob_storage = MemoryStorage::new();
-        bob_storage.identity_store.set_local_identity_key_pair(&bob_identity).await?;
-        bob_storage.identity_store.set_local_registration_id(12345).await?;
+        bob_storage
+            .identity_store
+            .set_local_identity_key_pair(&bob_identity)
+            .await?;
+        bob_storage
+            .identity_store
+            .set_local_registration_id(12345)
+            .await?;
 
         for (key_id, key_pair) in &bob_pre_keys {
             let record = PreKeyRecord::new((*key_id).into(), key_pair);
-            bob_storage.pre_key_store.save_pre_key((*key_id).into(), &record).await?;
+            bob_storage
+                .pre_key_store
+                .save_pre_key((*key_id).into(), &record)
+                .await?;
         }
-        bob_storage.signed_pre_key_store.save_signed_pre_key(bob_signed_pre_key.id()?, &bob_signed_pre_key).await?;
+        bob_storage
+            .signed_pre_key_store
+            .save_signed_pre_key(bob_signed_pre_key.id()?, &bob_signed_pre_key)
+            .await?;
 
         let kyber_pre_key_record = KyberPreKeyRecord::new(
             KyberPreKeyId::from(1u32),
@@ -100,13 +132,20 @@ mod tests {
             &kyber_keypair_for_storage,
             &kyber_signature,
         );
-        bob_storage.kyber_pre_key_store.save_kyber_pre_key(KyberPreKeyId::from(1u32), &kyber_pre_key_record).await?;
+        bob_storage
+            .kyber_pre_key_store
+            .save_kyber_pre_key(KyberPreKeyId::from(1u32), &kyber_pre_key_record)
+            .await?;
 
         let plaintext = b"Hello, Bob! This is a secret message.";
-        let ciphertext = alice_storage.encrypt_message(&bob_address, plaintext).await?;
+        let ciphertext = alice_storage
+            .encrypt_message(&bob_address, plaintext)
+            .await?;
 
         let alice_address = ProtocolAddress::new("alice".to_string(), DeviceId::new(1)?);
-        let decrypted = bob_storage.decrypt_message(&alice_address, &ciphertext).await?;
+        let decrypted = bob_storage
+            .decrypt_message(&alice_address, &ciphertext)
+            .await?;
 
         assert_eq!(decrypted, plaintext);
 
@@ -117,8 +156,14 @@ mod tests {
     async fn test_encrypt_without_session_fails() -> Result<(), Box<dyn std::error::Error>> {
         let mut alice_storage = MemoryStorage::new();
         let alice_identity = generate_identity_key_pair().await?;
-        alice_storage.identity_store.set_local_identity_key_pair(&alice_identity).await?;
-        alice_storage.identity_store.set_local_registration_id(12346).await?;
+        alice_storage
+            .identity_store
+            .set_local_identity_key_pair(&alice_identity)
+            .await?;
+        alice_storage
+            .identity_store
+            .set_local_registration_id(12346)
+            .await?;
 
         let bob_address = ProtocolAddress::new("bob".to_string(), DeviceId::new(1)?);
         let plaintext = b"Hello, Bob!";
@@ -138,7 +183,8 @@ mod tests {
 
         let mut rng = rand::rng();
         let kyber_keypair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
-        let kyber_signature = bob_identity.private_key()
+        let kyber_signature = bob_identity
+            .private_key()
             .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
 
         let bundle = PreKeyBundle::new(
@@ -156,10 +202,18 @@ mod tests {
 
         let mut alice_storage = MemoryStorage::new();
         let alice_identity = generate_identity_key_pair().await?;
-        alice_storage.identity_store.set_local_identity_key_pair(&alice_identity).await?;
-        alice_storage.identity_store.set_local_registration_id(12346).await?;
+        alice_storage
+            .identity_store
+            .set_local_identity_key_pair(&alice_identity)
+            .await?;
+        alice_storage
+            .identity_store
+            .set_local_registration_id(12346)
+            .await?;
 
-        alice_storage.establish_session_from_bundle(&bob_address, &bundle).await?;
+        alice_storage
+            .establish_session_from_bundle(&bob_address, &bundle)
+            .await?;
 
         let messages = vec![
             b"First message".as_slice(),

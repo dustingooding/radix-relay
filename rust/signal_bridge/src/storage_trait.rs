@@ -3,8 +3,8 @@
 //! This module provides trait definitions for storage backends, allowing
 //! dependency injection of different storage implementations (memory, database, etc.).
 
-use libsignal_protocol::*;
 use async_trait::async_trait;
+use libsignal_protocol::*;
 
 pub trait SignalStorageContainer {
     type SessionStore: SessionStore + ExtendedSessionStore;
@@ -55,16 +55,31 @@ pub trait ExtendedStorageOps {
 pub trait ExtendedSessionStore {
     async fn session_count(&self) -> usize;
     async fn clear_all_sessions(&mut self) -> Result<(), Box<dyn std::error::Error>>;
-    async fn delete_session(&mut self, address: &ProtocolAddress) -> Result<(), Box<dyn std::error::Error>>;
+    async fn delete_session(
+        &mut self,
+        address: &ProtocolAddress,
+    ) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 #[async_trait(?Send)]
 pub trait ExtendedIdentityStore {
     async fn identity_count(&self) -> usize;
-    async fn set_local_identity_key_pair(&self, identity_key_pair: &IdentityKeyPair) -> Result<(), Box<dyn std::error::Error>>;
-    async fn set_local_registration_id(&self, registration_id: u32) -> Result<(), Box<dyn std::error::Error>>;
-    async fn get_peer_identity(&self, address: &ProtocolAddress) -> Result<Option<IdentityKey>, Box<dyn std::error::Error>>;
-    async fn delete_identity(&mut self, address: &ProtocolAddress) -> Result<(), Box<dyn std::error::Error>>;
+    async fn set_local_identity_key_pair(
+        &self,
+        identity_key_pair: &IdentityKeyPair,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    async fn set_local_registration_id(
+        &self,
+        registration_id: u32,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    async fn get_peer_identity(
+        &self,
+        address: &ProtocolAddress,
+    ) -> Result<Option<IdentityKey>, Box<dyn std::error::Error>>;
+    async fn delete_identity(
+        &mut self,
+        address: &ProtocolAddress,
+    ) -> Result<(), Box<dyn std::error::Error>>;
     async fn clear_all_identities(&mut self) -> Result<(), Box<dyn std::error::Error>>;
     async fn clear_local_identity(&mut self) -> Result<(), Box<dyn std::error::Error>>;
 }
