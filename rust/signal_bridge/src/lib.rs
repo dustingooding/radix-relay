@@ -42,7 +42,7 @@ pub struct SignalBridge {
 }
 
 impl SignalBridge {
-    async fn ensure_keys_exist(storage: &mut SqliteStorage) -> Result<IdentityKeyPair, Box<dyn std::error::Error>> {
+    async fn ensure_keys_exist(storage: &mut SqliteStorage) -> Result<IdentityKeyPair, SignalBridgeError> {
         use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
         use crate::storage_trait::{ExtendedIdentityStore, ExtendedPreKeyStore, ExtendedSignedPreKeyStore, ExtendedKyberPreKeyStore};
         use libsignal_protocol::*;
@@ -82,7 +82,8 @@ impl SignalBridge {
             let mut rng = rand::rng();
             let kyber_keypair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
             let kyber_signature = identity_key_pair.private_key()
-                .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
+                .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)
+                .map_err(|e| SignalBridgeError::Protocol(e.to_string()))?;
 
             let now = std::time::SystemTime::now();
             let kyber_record = KyberPreKeyRecord::new(
@@ -97,13 +98,13 @@ impl SignalBridge {
         Ok(identity_key_pair)
     }
 
-    pub async fn new(db_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(db_path: &str) -> Result<Self, SignalBridgeError> {
         let mut storage = SqliteStorage::new(db_path).await?;
         storage.initialize()?;
 
         let schema_version = storage.get_schema_version()?;
         if schema_version < 1 {
-            return Err("Database schema version is too old".into());
+            return Err(SignalBridgeError::SchemaVersionTooOld);
         }
 
         Self::ensure_keys_exist(&mut storage).await?;
@@ -119,29 +120,43 @@ impl SignalBridge {
         Ok(Self { storage })
     }
 
-    pub async fn encrypt_message(&mut self, peer: &str, plaintext: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-        let address = ProtocolAddress::new(peer.to_string(), DeviceId::new(1)?);
+    pub async fn encrypt_message(&mut self, peer: &str, plaintext: &[u8]) -> Result<Vec<u8>, SignalBridgeError> {
+        if peer.is_empty() {
+            return Err(SignalBridgeError::InvalidInput("Specify a peer name".to_string()));
+        }
+
+        let address = ProtocolAddress::new(peer.to_string(),
+            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?);
 
         let session = self.storage.session_store().load_session(&address).await?;
         if session.is_none() {
-            return Err(format!("No session established with peer: {}", peer).into());
+            return Err(SignalBridgeError::SessionNotFound(format!("Establish a session with {} before sending messages", peer)));
         }
 
         let ciphertext = self.storage.encrypt_message(&address, plaintext).await?;
         Ok(ciphertext.serialize().to_vec())
     }
 
-    pub async fn decrypt_message(&mut self, peer: &str, ciphertext_bytes: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    pub async fn decrypt_message(&mut self, peer: &str, ciphertext_bytes: &[u8]) -> Result<Vec<u8>, SignalBridgeError> {
         use libsignal_protocol::{PreKeySignalMessage, SignalMessage};
 
-        let address = ProtocolAddress::new(peer.to_string(), DeviceId::new(1)?);
+        if peer.is_empty() {
+            return Err(SignalBridgeError::InvalidInput("Specify a peer name".to_string()));
+        }
+
+        if ciphertext_bytes.is_empty() {
+            return Err(SignalBridgeError::InvalidInput("Provide a message to decrypt".to_string()));
+        }
+
+        let address = ProtocolAddress::new(peer.to_string(),
+            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?);
 
         let ciphertext = if let Ok(prekey_msg) = PreKeySignalMessage::try_from(ciphertext_bytes) {
             CiphertextMessage::PreKeySignalMessage(prekey_msg)
         } else if let Ok(signal_msg) = SignalMessage::try_from(ciphertext_bytes) {
             CiphertextMessage::SignalMessage(signal_msg)
         } else {
-            return Err("Unable to deserialize ciphertext message".into());
+            return Err(SignalBridgeError::Serialization("Provide a valid Signal Protocol message".to_string()));
         };
 
         let plaintext = self.storage.decrypt_message(&address, &ciphertext).await?;
@@ -149,7 +164,14 @@ impl SignalBridge {
     }
 
 
-    pub async fn establish_session(&mut self, peer: &str, pre_key_bundle_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn establish_session(&mut self, peer: &str, pre_key_bundle_bytes: &[u8]) -> Result<(), SignalBridgeError> {
+        if peer.is_empty() {
+            return Err(SignalBridgeError::InvalidInput("Specify a peer name".to_string()));
+        }
+
+        if pre_key_bundle_bytes.is_empty() {
+            return Err(SignalBridgeError::InvalidInput("Provide a pre-key bundle from the peer".to_string()));
+        }
         use libsignal_protocol::*;
         use crate::storage_trait::ExtendedStorageOps;
 
@@ -157,28 +179,35 @@ impl SignalBridge {
 
         let bundle = PreKeyBundle::new(
             serializable.registration_id,
-            DeviceId::new(serializable.device_id.try_into()?)?,
+            DeviceId::new(serializable.device_id.try_into()
+                .map_err(|e| SignalBridgeError::InvalidInput(format!("Invalid device ID: {}", e)))?)
+                .map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
             serializable.pre_key_id.map(|id| {
-                let public_key = PublicKey::deserialize(&serializable.pre_key_public.as_ref().unwrap())?;
-                Ok::<_, Box<dyn std::error::Error>>((PreKeyId::from(id), public_key))
+                let public_key = PublicKey::deserialize(&serializable.pre_key_public.as_ref().unwrap())
+                    .map_err(|e| SignalBridgeError::Serialization(e.to_string()))?;
+                Ok::<_, SignalBridgeError>((PreKeyId::from(id), public_key))
             }).transpose()?,
             SignedPreKeyId::from(serializable.signed_pre_key_id),
-            PublicKey::deserialize(&serializable.signed_pre_key_public)?,
+            PublicKey::deserialize(&serializable.signed_pre_key_public)
+                .map_err(|e| SignalBridgeError::Serialization(e.to_string()))?,
             serializable.signed_pre_key_signature,
             KyberPreKeyId::from(serializable.kyber_pre_key_id),
-            kem::PublicKey::deserialize(&serializable.kyber_pre_key_public)?,
+            kem::PublicKey::deserialize(&serializable.kyber_pre_key_public)
+                .map_err(|e| SignalBridgeError::Serialization(e.to_string()))?,
             serializable.kyber_pre_key_signature,
-            IdentityKey::decode(&serializable.identity_key)?,
+            IdentityKey::decode(&serializable.identity_key)
+                .map_err(|e| SignalBridgeError::Serialization(e.to_string()))?,
         )?;
 
-        let address = ProtocolAddress::new(peer.to_string(), DeviceId::new(1)?);
+        let address = ProtocolAddress::new(peer.to_string(),
+            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?);
 
         self.storage.establish_session_from_bundle(&address, &bundle).await?;
 
         Ok(())
     }
 
-    pub async fn generate_pre_key_bundle(&mut self) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    pub async fn generate_pre_key_bundle(&mut self) -> Result<Vec<u8>, SignalBridgeError> {
         use libsignal_protocol::*;
 
         let identity_key = *self.storage.identity_store().get_identity_key_pair().await?.identity_key();
@@ -190,7 +219,7 @@ impl SignalBridge {
 
         let bundle = PreKeyBundle::new(
             registration_id,
-            DeviceId::new(1)?,
+            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
             Some((PreKeyId::from(1u32), pre_key_record.key_pair()?.public_key)),
             signed_pre_key_record.id()?,
             signed_pre_key_record.public_key()?,
@@ -218,7 +247,7 @@ impl SignalBridge {
         Ok(bincode::serialize(&serializable)?)
     }
 
-    pub async fn cleanup_all_sessions(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn cleanup_all_sessions(&mut self) -> Result<(), SignalBridgeError> {
         let session_count = self.storage.session_store().session_count().await;
         if session_count > 0 {
             println!("Cleaning up {} sessions", session_count);
@@ -227,8 +256,12 @@ impl SignalBridge {
         Ok(())
     }
 
-    pub async fn clear_peer_session(&mut self, peer: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let address = ProtocolAddress::new(peer.to_string(), DeviceId::new(1)?);
+    pub async fn clear_peer_session(&mut self, peer: &str) -> Result<(), SignalBridgeError> {
+        if peer.is_empty() {
+            return Err(SignalBridgeError::InvalidInput("Specify a peer name".to_string()));
+        }
+        let address = ProtocolAddress::new(peer.to_string(),
+            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?);
 
         self.storage.session_store().delete_session(&address).await?;
 
@@ -240,7 +273,7 @@ impl SignalBridge {
         Ok(())
     }
 
-    pub async fn clear_all_sessions(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn clear_all_sessions(&mut self) -> Result<(), SignalBridgeError> {
         let session_count = self.storage.session_store().session_count().await;
         let identity_count = self.storage.identity_store().identity_count().await;
 
@@ -253,7 +286,7 @@ impl SignalBridge {
         Ok(())
     }
 
-    pub async fn reset_identity(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn reset_identity(&mut self) -> Result<(), SignalBridgeError> {
         use crate::storage_trait::{ExtendedIdentityStore, ExtendedPreKeyStore, ExtendedSignedPreKeyStore, ExtendedKyberPreKeyStore};
 
         println!("WARNING: Resetting identity - all existing sessions will be invalidated");
@@ -282,9 +315,61 @@ impl Drop for SignalBridge {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum SignalBridgeError {
+    #[error("Storage error: {0}")]
+    Storage(String),
+    #[error("Signal Protocol error: {0}")]
+    Protocol(String),
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+    #[error("{0}")]
+    SessionNotFound(String),
+    #[error("Update your database to a newer schema version")]
+    SchemaVersionTooOld,
+}
+
+impl From<libsignal_protocol::SignalProtocolError> for SignalBridgeError {
+    fn from(err: libsignal_protocol::SignalProtocolError) -> Self {
+        SignalBridgeError::Protocol(err.to_string())
+    }
+}
+
+impl From<bincode::Error> for SignalBridgeError {
+    fn from(err: bincode::Error) -> Self {
+        SignalBridgeError::Serialization(err.to_string())
+    }
+}
+
+impl From<std::time::SystemTimeError> for SignalBridgeError {
+    fn from(err: std::time::SystemTimeError) -> Self {
+        SignalBridgeError::Protocol(err.to_string())
+    }
+}
+
+impl From<rusqlite::Error> for SignalBridgeError {
+    fn from(err: rusqlite::Error) -> Self {
+        SignalBridgeError::Storage(err.to_string())
+    }
+}
+
+impl From<Box<dyn std::error::Error>> for SignalBridgeError {
+    fn from(err: Box<dyn std::error::Error>) -> Self {
+        SignalBridgeError::Storage(err.to_string())
+    }
+}
+
+impl From<std::num::TryFromIntError> for SignalBridgeError {
+    fn from(err: std::num::TryFromIntError) -> Self {
+        SignalBridgeError::InvalidInput(format!("Integer conversion error: {}", err))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use libsignal_protocol::*;
+    use super::*;
 
     #[test]
     fn test_libsignal_basic_types() {
@@ -292,6 +377,51 @@ mod tests {
         let protocol_address = ProtocolAddress::new("test_device".to_string(), device_id);
         assert_eq!(protocol_address.name(), "test_device");
         assert_eq!(protocol_address.device_id(), device_id);
+    }
+
+    #[test]
+    fn test_error_types_creation() {
+        let storage_error = SignalBridgeError::Storage("Database connection failed".to_string());
+        assert_eq!(storage_error.to_string(), "Storage error: Database connection failed");
+
+        let protocol_error = SignalBridgeError::Protocol("Invalid device ID".to_string());
+        assert_eq!(protocol_error.to_string(), "Signal Protocol error: Invalid device ID");
+
+        let serialization_error = SignalBridgeError::Serialization("Invalid data format".to_string());
+        assert_eq!(serialization_error.to_string(), "Serialization error: Invalid data format");
+
+        let invalid_input_error = SignalBridgeError::InvalidInput("Empty peer name".to_string());
+        assert_eq!(invalid_input_error.to_string(), "Invalid input: Empty peer name");
+
+        let session_not_found_error = SignalBridgeError::SessionNotFound("Establish a session with alice before sending messages".to_string());
+        assert_eq!(session_not_found_error.to_string(), "Establish a session with alice before sending messages");
+
+        let schema_error = SignalBridgeError::SchemaVersionTooOld;
+        assert_eq!(schema_error.to_string(), "Update your database to a newer schema version");
+    }
+
+    #[test]
+    fn test_error_from_conversions() {
+        let device_result = DeviceId::new(0);
+        if let Err(protocol_err) = device_result {
+            let bridge_error = SignalBridgeError::Protocol(protocol_err.to_string());
+            assert!(matches!(bridge_error, SignalBridgeError::Protocol(_)));
+        }
+
+        let invalid_data = vec![0xFF, 0xFF, 0xFF];
+        let bincode_result: Result<String, bincode::Error> = bincode::deserialize(&invalid_data);
+        if let Err(bincode_err) = bincode_result {
+            let bridge_error: SignalBridgeError = bincode_err.into();
+            assert!(matches!(bridge_error, SignalBridgeError::Serialization(_)));
+        }
+
+        use std::time::{SystemTime, Duration};
+        let bad_time = SystemTime::UNIX_EPOCH - Duration::from_secs(1);
+        let time_result = bad_time.duration_since(SystemTime::UNIX_EPOCH);
+        if let Err(time_err) = time_result {
+            let bridge_error: SignalBridgeError = time_err.into();
+            assert!(matches!(bridge_error, SignalBridgeError::Protocol(_)));
+        }
     }
 
     #[tokio::test]
@@ -504,6 +634,245 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_encrypt_message_empty_peer_name() {
+        use std::env;
+
+        let temp_dir = env::temp_dir();
+        let process_id = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let db_path = temp_dir.join(format!("test_empty_peer_{}_{}.db", process_id, timestamp));
+        let db_path_str = db_path.to_str().unwrap();
+        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+
+        let result = bridge.encrypt_message("", b"test message").await;
+        assert!(result.is_err());
+        if let Err(SignalBridgeError::InvalidInput(msg)) = result {
+            assert_eq!(msg, "Specify a peer name");
+        } else {
+            panic!("Expected InvalidInput error for empty peer name");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_decrypt_message_empty_peer_name() {
+        use std::env;
+
+        let temp_dir = env::temp_dir();
+        let process_id = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let db_path = temp_dir.join(format!("test_empty_peer_decrypt_{}_{}.db", process_id, timestamp));
+        let db_path_str = db_path.to_str().unwrap();
+        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+
+        let result = bridge.decrypt_message("", b"fake_ciphertext").await;
+        assert!(result.is_err());
+        if let Err(SignalBridgeError::InvalidInput(msg)) = result {
+            assert_eq!(msg, "Specify a peer name");
+        } else {
+            panic!("Expected InvalidInput error for empty peer name");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_decrypt_message_empty_ciphertext() {
+        use std::env;
+
+        let temp_dir = env::temp_dir();
+        let process_id = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let db_path = temp_dir.join(format!("test_empty_ciphertext_{}_{}.db", process_id, timestamp));
+        let db_path_str = db_path.to_str().unwrap();
+        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+
+        let result = bridge.decrypt_message("alice", &[]).await;
+        assert!(result.is_err());
+        if let Err(SignalBridgeError::InvalidInput(msg)) = result {
+            assert_eq!(msg, "Provide a message to decrypt");
+        } else {
+            panic!("Expected InvalidInput error for empty ciphertext");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_establish_session_empty_peer_name() {
+        use std::env;
+
+        let temp_dir = env::temp_dir();
+        let process_id = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let db_path = temp_dir.join(format!("test_empty_peer_session_{}_{}.db", process_id, timestamp));
+        let db_path_str = db_path.to_str().unwrap();
+        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+
+        let result = bridge.establish_session("", b"fake_bundle").await;
+        assert!(result.is_err());
+        if let Err(SignalBridgeError::InvalidInput(msg)) = result {
+            assert_eq!(msg, "Specify a peer name");
+        } else {
+            panic!("Expected InvalidInput error for empty peer name");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_establish_session_empty_bundle() {
+        use std::env;
+
+        let temp_dir = env::temp_dir();
+        let process_id = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let db_path = temp_dir.join(format!("test_empty_bundle_{}_{}.db", process_id, timestamp));
+        let db_path_str = db_path.to_str().unwrap();
+        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+
+        let result = bridge.establish_session("alice", &[]).await;
+        assert!(result.is_err());
+        if let Err(SignalBridgeError::InvalidInput(msg)) = result {
+            assert_eq!(msg, "Provide a pre-key bundle from the peer");
+        } else {
+            panic!("Expected InvalidInput error for empty pre-key bundle");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_clear_peer_session_empty_peer_name() {
+        use std::env;
+
+        let temp_dir = env::temp_dir();
+        let process_id = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let db_path = temp_dir.join(format!("test_clear_empty_peer_{}_{}.db", process_id, timestamp));
+        let db_path_str = db_path.to_str().unwrap();
+        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+
+        let result = bridge.clear_peer_session("").await;
+        assert!(result.is_err());
+        if let Err(SignalBridgeError::InvalidInput(msg)) = result {
+            assert_eq!(msg, "Specify a peer name");
+        } else {
+            panic!("Expected InvalidInput error for empty peer name");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_encrypt_message_session_not_found() {
+        use std::env;
+
+        let temp_dir = env::temp_dir();
+        let process_id = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let db_path = temp_dir.join(format!("test_session_not_found_{}_{}.db", process_id, timestamp));
+        let db_path_str = db_path.to_str().unwrap();
+        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+
+        let result = bridge.encrypt_message("unknown_peer", b"test message").await;
+        assert!(result.is_err());
+        if let Err(SignalBridgeError::SessionNotFound(msg)) = result {
+            assert_eq!(msg, "Establish a session with unknown_peer before sending messages");
+        } else {
+            panic!("Expected SessionNotFound error for unknown peer");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_decrypt_message_malformed_ciphertext() {
+        use std::env;
+
+        let temp_dir = env::temp_dir();
+        let process_id = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let db_path = temp_dir.join(format!("test_malformed_ciphertext_{}_{}.db", process_id, timestamp));
+        let db_path_str = db_path.to_str().unwrap();
+        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+
+        let malformed_data = vec![0x01, 0x02, 0x03, 0x04];
+        let result = bridge.decrypt_message("alice", &malformed_data).await;
+        assert!(result.is_err());
+        if let Err(SignalBridgeError::Serialization(msg)) = result {
+            assert_eq!(msg, "Provide a valid Signal Protocol message");
+        } else {
+            panic!("Expected Serialization error for malformed ciphertext");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_establish_session_malformed_bundle() {
+        use std::env;
+
+        let temp_dir = env::temp_dir();
+        let process_id = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let db_path = temp_dir.join(format!("test_malformed_bundle_{}_{}.db", process_id, timestamp));
+        let db_path_str = db_path.to_str().unwrap();
+        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+
+        let malformed_bundle = vec![0xFF, 0xFE, 0xFD, 0xFC];
+        let result = bridge.establish_session("alice", &malformed_bundle).await;
+        assert!(result.is_err());
+        if let Err(SignalBridgeError::Serialization(msg)) = result {
+            assert_eq!(msg, "io error: unexpected end of file");
+        } else {
+            panic!("Expected Serialization error for malformed bundle");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_error_message_formatting() {
+        let storage_error = SignalBridgeError::Storage("Database locked".to_string());
+        assert_eq!(storage_error.to_string(), "Storage error: Database locked");
+
+        let protocol_error = SignalBridgeError::Protocol("Invalid signature".to_string());
+        assert_eq!(protocol_error.to_string(), "Signal Protocol error: Invalid signature");
+
+        let serialization_error = SignalBridgeError::Serialization("Invalid format".to_string());
+        assert_eq!(serialization_error.to_string(), "Serialization error: Invalid format");
+
+        let invalid_input_error = SignalBridgeError::InvalidInput("Name too long".to_string());
+        assert_eq!(invalid_input_error.to_string(), "Invalid input: Name too long");
+
+        let session_not_found_error = SignalBridgeError::SessionNotFound("Establish a session with bob before sending messages".to_string());
+        assert_eq!(session_not_found_error.to_string(), "Establish a session with bob before sending messages");
+
+        let schema_error = SignalBridgeError::SchemaVersionTooOld;
+        assert_eq!(schema_error.to_string(), "Update your database to a newer schema version");
     }
 
 }
