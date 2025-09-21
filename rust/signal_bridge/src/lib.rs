@@ -3,12 +3,12 @@
 //! This crate provides a bridge between Radix Relay's C++ transport layer
 //! and the official Signal Protocol Rust implementation for end-to-end encryption.
 
-mod storage_trait;
-mod memory_storage;
-mod sqlite_storage;
-mod session_trait;
 mod encryption_trait;
 mod keys;
+mod memory_storage;
+mod session_trait;
+mod sqlite_storage;
+mod storage_trait;
 
 #[cfg(test)]
 mod session;
@@ -16,11 +16,15 @@ mod session;
 #[cfg(test)]
 mod encryption;
 
-
 use crate::sqlite_storage::SqliteStorage;
-use crate::storage_trait::{SignalStorageContainer, ExtendedStorageOps, ExtendedSessionStore, ExtendedIdentityStore, ExtendedPreKeyStore, ExtendedSignedPreKeyStore, ExtendedKyberPreKeyStore};
-use libsignal_protocol::{CiphertextMessage, ProtocolAddress, DeviceId, SessionStore, IdentityKeyPair};
-use serde::{Serialize, Deserialize};
+use crate::storage_trait::{
+    ExtendedIdentityStore, ExtendedKyberPreKeyStore, ExtendedPreKeyStore, ExtendedSessionStore,
+    ExtendedSignedPreKeyStore, ExtendedStorageOps, SignalStorageContainer,
+};
+use libsignal_protocol::{
+    CiphertextMessage, DeviceId, IdentityKeyPair, ProtocolAddress, SessionStore,
+};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone)]
 struct SerializablePreKeyBundle {
@@ -42,21 +46,30 @@ pub struct SignalBridge {
 }
 
 impl SignalBridge {
-    async fn ensure_keys_exist(storage: &mut SqliteStorage) -> Result<IdentityKeyPair, SignalBridgeError> {
+    async fn ensure_keys_exist(
+        storage: &mut SqliteStorage,
+    ) -> Result<IdentityKeyPair, SignalBridgeError> {
         use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
-        use crate::storage_trait::{ExtendedIdentityStore, ExtendedPreKeyStore, ExtendedSignedPreKeyStore, ExtendedKyberPreKeyStore};
+        use crate::storage_trait::{
+            ExtendedIdentityStore, ExtendedKyberPreKeyStore, ExtendedPreKeyStore,
+            ExtendedSignedPreKeyStore,
+        };
         use libsignal_protocol::*;
 
         let identity_key_pair = match storage.identity_store().get_identity_key_pair().await {
-            Ok(existing_identity) => {
-                existing_identity
-            }
+            Ok(existing_identity) => existing_identity,
             Err(_) => {
                 let new_identity = generate_identity_key_pair().await?;
                 let new_registration_id = rand::random::<u32>();
 
-                storage.identity_store().set_local_identity_key_pair(&new_identity).await?;
-                storage.identity_store().set_local_registration_id(new_registration_id).await?;
+                storage
+                    .identity_store()
+                    .set_local_identity_key_pair(&new_identity)
+                    .await?;
+                storage
+                    .identity_store()
+                    .set_local_registration_id(new_registration_id)
+                    .await?;
 
                 new_identity
             }
@@ -67,32 +80,45 @@ impl SignalBridge {
             let pre_keys = generate_pre_keys(1, 10).await?;
             for (key_id, key_pair) in &pre_keys {
                 let record = PreKeyRecord::new((*key_id).into(), key_pair);
-                storage.pre_key_store().save_pre_key((*key_id).into(), &record).await?;
+                storage
+                    .pre_key_store()
+                    .save_pre_key((*key_id).into(), &record)
+                    .await?;
             }
         }
 
-        let current_signed_pre_key_count = storage.signed_pre_key_store().signed_pre_key_count().await;
+        let current_signed_pre_key_count =
+            storage.signed_pre_key_store().signed_pre_key_count().await;
         if current_signed_pre_key_count == 0 {
             let signed_pre_key = generate_signed_pre_key(&identity_key_pair, 1).await?;
-            storage.signed_pre_key_store().save_signed_pre_key(signed_pre_key.id()?, &signed_pre_key).await?;
+            storage
+                .signed_pre_key_store()
+                .save_signed_pre_key(signed_pre_key.id()?, &signed_pre_key)
+                .await?;
         }
 
         let current_kyber_pre_key_count = storage.kyber_pre_key_store().kyber_pre_key_count().await;
         if current_kyber_pre_key_count == 0 {
             let mut rng = rand::rng();
             let kyber_keypair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
-            let kyber_signature = identity_key_pair.private_key()
+            let kyber_signature = identity_key_pair
+                .private_key()
                 .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)
                 .map_err(|e| SignalBridgeError::Protocol(e.to_string()))?;
 
             let now = std::time::SystemTime::now();
             let kyber_record = KyberPreKeyRecord::new(
                 KyberPreKeyId::from(1u32),
-                Timestamp::from_epoch_millis(now.duration_since(std::time::UNIX_EPOCH)?.as_millis() as u64),
+                Timestamp::from_epoch_millis(
+                    now.duration_since(std::time::UNIX_EPOCH)?.as_millis() as u64,
+                ),
                 &kyber_keypair,
                 &kyber_signature,
             );
-            storage.kyber_pre_key_store().save_kyber_pre_key(KyberPreKeyId::from(1u32), &kyber_record).await?;
+            storage
+                .kyber_pre_key_store()
+                .save_kyber_pre_key(KyberPreKeyId::from(1u32), &kyber_record)
+                .await?;
         }
 
         Ok(identity_key_pair)
@@ -120,73 +146,108 @@ impl SignalBridge {
         Ok(Self { storage })
     }
 
-    pub async fn encrypt_message(&mut self, peer: &str, plaintext: &[u8]) -> Result<Vec<u8>, SignalBridgeError> {
+    pub async fn encrypt_message(
+        &mut self,
+        peer: &str,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, SignalBridgeError> {
         if peer.is_empty() {
-            return Err(SignalBridgeError::InvalidInput("Specify a peer name".to_string()));
+            return Err(SignalBridgeError::InvalidInput(
+                "Specify a peer name".to_string(),
+            ));
         }
 
-        let address = ProtocolAddress::new(peer.to_string(),
-            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?);
+        let address = ProtocolAddress::new(
+            peer.to_string(),
+            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
+        );
 
         let session = self.storage.session_store().load_session(&address).await?;
         if session.is_none() {
-            return Err(SignalBridgeError::SessionNotFound(format!("Establish a session with {} before sending messages", peer)));
+            return Err(SignalBridgeError::SessionNotFound(format!(
+                "Establish a session with {} before sending messages",
+                peer
+            )));
         }
 
         let ciphertext = self.storage.encrypt_message(&address, plaintext).await?;
         Ok(ciphertext.serialize().to_vec())
     }
 
-    pub async fn decrypt_message(&mut self, peer: &str, ciphertext_bytes: &[u8]) -> Result<Vec<u8>, SignalBridgeError> {
+    pub async fn decrypt_message(
+        &mut self,
+        peer: &str,
+        ciphertext_bytes: &[u8],
+    ) -> Result<Vec<u8>, SignalBridgeError> {
         use libsignal_protocol::{PreKeySignalMessage, SignalMessage};
 
         if peer.is_empty() {
-            return Err(SignalBridgeError::InvalidInput("Specify a peer name".to_string()));
+            return Err(SignalBridgeError::InvalidInput(
+                "Specify a peer name".to_string(),
+            ));
         }
 
         if ciphertext_bytes.is_empty() {
-            return Err(SignalBridgeError::InvalidInput("Provide a message to decrypt".to_string()));
+            return Err(SignalBridgeError::InvalidInput(
+                "Provide a message to decrypt".to_string(),
+            ));
         }
 
-        let address = ProtocolAddress::new(peer.to_string(),
-            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?);
+        let address = ProtocolAddress::new(
+            peer.to_string(),
+            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
+        );
 
         let ciphertext = if let Ok(prekey_msg) = PreKeySignalMessage::try_from(ciphertext_bytes) {
             CiphertextMessage::PreKeySignalMessage(prekey_msg)
         } else if let Ok(signal_msg) = SignalMessage::try_from(ciphertext_bytes) {
             CiphertextMessage::SignalMessage(signal_msg)
         } else {
-            return Err(SignalBridgeError::Serialization("Provide a valid Signal Protocol message".to_string()));
+            return Err(SignalBridgeError::Serialization(
+                "Provide a valid Signal Protocol message".to_string(),
+            ));
         };
 
         let plaintext = self.storage.decrypt_message(&address, &ciphertext).await?;
         Ok(plaintext)
     }
 
-
-    pub async fn establish_session(&mut self, peer: &str, pre_key_bundle_bytes: &[u8]) -> Result<(), SignalBridgeError> {
+    pub async fn establish_session(
+        &mut self,
+        peer: &str,
+        pre_key_bundle_bytes: &[u8],
+    ) -> Result<(), SignalBridgeError> {
         if peer.is_empty() {
-            return Err(SignalBridgeError::InvalidInput("Specify a peer name".to_string()));
+            return Err(SignalBridgeError::InvalidInput(
+                "Specify a peer name".to_string(),
+            ));
         }
 
         if pre_key_bundle_bytes.is_empty() {
-            return Err(SignalBridgeError::InvalidInput("Provide a pre-key bundle from the peer".to_string()));
+            return Err(SignalBridgeError::InvalidInput(
+                "Provide a pre-key bundle from the peer".to_string(),
+            ));
         }
-        use libsignal_protocol::*;
         use crate::storage_trait::ExtendedStorageOps;
+        use libsignal_protocol::*;
 
         let serializable: SerializablePreKeyBundle = bincode::deserialize(pre_key_bundle_bytes)?;
 
         let bundle = PreKeyBundle::new(
             serializable.registration_id,
-            DeviceId::new(serializable.device_id.try_into()
-                .map_err(|e| SignalBridgeError::InvalidInput(format!("Invalid device ID: {}", e)))?)
-                .map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
-            serializable.pre_key_id.map(|id| {
-                let public_key = PublicKey::deserialize(&serializable.pre_key_public.as_ref().unwrap())
-                    .map_err(|e| SignalBridgeError::Serialization(e.to_string()))?;
-                Ok::<_, SignalBridgeError>((PreKeyId::from(id), public_key))
-            }).transpose()?,
+            DeviceId::new(serializable.device_id.try_into().map_err(|e| {
+                SignalBridgeError::InvalidInput(format!("Invalid device ID: {}", e))
+            })?)
+            .map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
+            serializable
+                .pre_key_id
+                .map(|id| {
+                    let public_key =
+                        PublicKey::deserialize(serializable.pre_key_public.as_ref().unwrap())
+                            .map_err(|e| SignalBridgeError::Serialization(e.to_string()))?;
+                    Ok::<_, SignalBridgeError>((PreKeyId::from(id), public_key))
+                })
+                .transpose()?,
             SignedPreKeyId::from(serializable.signed_pre_key_id),
             PublicKey::deserialize(&serializable.signed_pre_key_public)
                 .map_err(|e| SignalBridgeError::Serialization(e.to_string()))?,
@@ -199,10 +260,14 @@ impl SignalBridge {
                 .map_err(|e| SignalBridgeError::Serialization(e.to_string()))?,
         )?;
 
-        let address = ProtocolAddress::new(peer.to_string(),
-            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?);
+        let address = ProtocolAddress::new(
+            peer.to_string(),
+            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
+        );
 
-        self.storage.establish_session_from_bundle(&address, &bundle).await?;
+        self.storage
+            .establish_session_from_bundle(&address, &bundle)
+            .await?;
 
         Ok(())
     }
@@ -210,12 +275,33 @@ impl SignalBridge {
     pub async fn generate_pre_key_bundle(&mut self) -> Result<Vec<u8>, SignalBridgeError> {
         use libsignal_protocol::*;
 
-        let identity_key = *self.storage.identity_store().get_identity_key_pair().await?.identity_key();
-        let registration_id = self.storage.identity_store().get_local_registration_id().await?;
+        let identity_key = *self
+            .storage
+            .identity_store()
+            .get_identity_key_pair()
+            .await?
+            .identity_key();
+        let registration_id = self
+            .storage
+            .identity_store()
+            .get_local_registration_id()
+            .await?;
 
-        let pre_key_record = self.storage.pre_key_store().get_pre_key(PreKeyId::from(1u32)).await?;
-        let signed_pre_key_record = self.storage.signed_pre_key_store().get_signed_pre_key(SignedPreKeyId::from(1u32)).await?;
-        let kyber_pre_key_record = self.storage.kyber_pre_key_store().get_kyber_pre_key(KyberPreKeyId::from(1u32)).await?;
+        let pre_key_record = self
+            .storage
+            .pre_key_store()
+            .get_pre_key(PreKeyId::from(1u32))
+            .await?;
+        let signed_pre_key_record = self
+            .storage
+            .signed_pre_key_store()
+            .get_signed_pre_key(SignedPreKeyId::from(1u32))
+            .await?;
+        let kyber_pre_key_record = self
+            .storage
+            .kyber_pre_key_store()
+            .get_kyber_pre_key(KyberPreKeyId::from(1u32))
+            .await?;
 
         let bundle = PreKeyBundle::new(
             registration_id,
@@ -258,15 +344,31 @@ impl SignalBridge {
 
     pub async fn clear_peer_session(&mut self, peer: &str) -> Result<(), SignalBridgeError> {
         if peer.is_empty() {
-            return Err(SignalBridgeError::InvalidInput("Specify a peer name".to_string()));
+            return Err(SignalBridgeError::InvalidInput(
+                "Specify a peer name".to_string(),
+            ));
         }
-        let address = ProtocolAddress::new(peer.to_string(),
-            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?);
+        let address = ProtocolAddress::new(
+            peer.to_string(),
+            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
+        );
 
-        self.storage.session_store().delete_session(&address).await?;
+        self.storage
+            .session_store()
+            .delete_session(&address)
+            .await?;
 
-        if let Ok(_) = self.storage.identity_store().get_peer_identity(&address).await {
-            self.storage.identity_store().delete_identity(&address).await?;
+        if (self
+            .storage
+            .identity_store()
+            .get_peer_identity(&address)
+            .await)
+            .is_ok()
+        {
+            self.storage
+                .identity_store()
+                .delete_identity(&address)
+                .await?;
         }
 
         println!("Cleared session and identity for peer: {}", peer);
@@ -281,21 +383,33 @@ impl SignalBridge {
             self.storage.session_store().clear_all_sessions().await?;
             self.storage.identity_store().clear_all_identities().await?;
 
-            println!("Cleared all {} sessions and {} peer identities", session_count, identity_count);
+            println!(
+                "Cleared all {} sessions and {} peer identities",
+                session_count, identity_count
+            );
         }
         Ok(())
     }
 
     pub async fn reset_identity(&mut self) -> Result<(), SignalBridgeError> {
-        use crate::storage_trait::{ExtendedIdentityStore, ExtendedPreKeyStore, ExtendedSignedPreKeyStore, ExtendedKyberPreKeyStore};
+        use crate::storage_trait::{
+            ExtendedIdentityStore, ExtendedKyberPreKeyStore, ExtendedPreKeyStore,
+            ExtendedSignedPreKeyStore,
+        };
 
         println!("WARNING: Resetting identity - all existing sessions will be invalidated");
 
         self.clear_all_sessions().await?;
 
         self.storage.pre_key_store().clear_all_pre_keys().await?;
-        self.storage.signed_pre_key_store().clear_all_signed_pre_keys().await?;
-        self.storage.kyber_pre_key_store().clear_all_kyber_pre_keys().await?;
+        self.storage
+            .signed_pre_key_store()
+            .clear_all_signed_pre_keys()
+            .await?;
+        self.storage
+            .kyber_pre_key_store()
+            .clear_all_kyber_pre_keys()
+            .await?;
         self.storage.identity_store().clear_local_identity().await?;
 
         Self::ensure_keys_exist(&mut self.storage).await?;
@@ -382,22 +496,43 @@ mod tests {
     #[test]
     fn test_error_types_creation() {
         let storage_error = SignalBridgeError::Storage("Database connection failed".to_string());
-        assert_eq!(storage_error.to_string(), "Storage error: Database connection failed");
+        assert_eq!(
+            storage_error.to_string(),
+            "Storage error: Database connection failed"
+        );
 
         let protocol_error = SignalBridgeError::Protocol("Invalid device ID".to_string());
-        assert_eq!(protocol_error.to_string(), "Signal Protocol error: Invalid device ID");
+        assert_eq!(
+            protocol_error.to_string(),
+            "Signal Protocol error: Invalid device ID"
+        );
 
-        let serialization_error = SignalBridgeError::Serialization("Invalid data format".to_string());
-        assert_eq!(serialization_error.to_string(), "Serialization error: Invalid data format");
+        let serialization_error =
+            SignalBridgeError::Serialization("Invalid data format".to_string());
+        assert_eq!(
+            serialization_error.to_string(),
+            "Serialization error: Invalid data format"
+        );
 
         let invalid_input_error = SignalBridgeError::InvalidInput("Empty peer name".to_string());
-        assert_eq!(invalid_input_error.to_string(), "Invalid input: Empty peer name");
+        assert_eq!(
+            invalid_input_error.to_string(),
+            "Invalid input: Empty peer name"
+        );
 
-        let session_not_found_error = SignalBridgeError::SessionNotFound("Establish a session with alice before sending messages".to_string());
-        assert_eq!(session_not_found_error.to_string(), "Establish a session with alice before sending messages");
+        let session_not_found_error = SignalBridgeError::SessionNotFound(
+            "Establish a session with alice before sending messages".to_string(),
+        );
+        assert_eq!(
+            session_not_found_error.to_string(),
+            "Establish a session with alice before sending messages"
+        );
 
         let schema_error = SignalBridgeError::SchemaVersionTooOld;
-        assert_eq!(schema_error.to_string(), "Update your database to a newer schema version");
+        assert_eq!(
+            schema_error.to_string(),
+            "Update your database to a newer schema version"
+        );
     }
 
     #[test]
@@ -415,7 +550,7 @@ mod tests {
             assert!(matches!(bridge_error, SignalBridgeError::Serialization(_)));
         }
 
-        use std::time::{SystemTime, Duration};
+        use std::time::{Duration, SystemTime};
         let bad_time = SystemTime::UNIX_EPOCH - Duration::from_secs(1);
         let time_result = bad_time.duration_since(SystemTime::UNIX_EPOCH);
         if let Err(time_err) = time_result {
@@ -470,7 +605,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_signalbridge_persistence_across_instantiations() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_signalbridge_persistence_across_instantiations(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use crate::SignalBridge;
         use std::env;
 
@@ -481,9 +617,15 @@ mod tests {
             .unwrap()
             .as_millis();
 
-        let alice_db_path = temp_dir.join(format!("test_persistence_alice_{}_{}.db", process_id, timestamp));
+        let alice_db_path = temp_dir.join(format!(
+            "test_persistence_alice_{}_{}.db",
+            process_id, timestamp
+        ));
         let alice_db_str = alice_db_path.to_str().unwrap();
-        let bob_db_path = temp_dir.join(format!("test_persistence_bob_{}_{}.db", process_id, timestamp));
+        let bob_db_path = temp_dir.join(format!(
+            "test_persistence_bob_{}_{}.db",
+            process_id, timestamp
+        ));
         let bob_db_str = bob_db_path.to_str().unwrap();
 
         let original_plaintext = b"Hello Bob! This is Alice testing persistence.";
@@ -501,7 +643,9 @@ mod tests {
             let mut alice_reopened = SignalBridge::new(alice_db_str).await?;
 
             let second_message = b"Second message after restart";
-            let second_ciphertext = alice_reopened.encrypt_message("bob", second_message).await?;
+            let second_ciphertext = alice_reopened
+                .encrypt_message("bob", second_message)
+                .await?;
 
             assert!(!second_ciphertext.is_empty());
             assert_ne!(ciphertext, second_ciphertext);
@@ -529,9 +673,15 @@ mod tests {
             .unwrap()
             .as_millis();
 
-        let alice_db_path = temp_dir.join(format!("test_clear_peer_alice_{}_{}.db", process_id, timestamp));
+        let alice_db_path = temp_dir.join(format!(
+            "test_clear_peer_alice_{}_{}.db",
+            process_id, timestamp
+        ));
         let alice_db_str = alice_db_path.to_str().unwrap();
-        let bob_db_path = temp_dir.join(format!("test_clear_peer_bob_{}_{}.db", process_id, timestamp));
+        let bob_db_path = temp_dir.join(format!(
+            "test_clear_peer_bob_{}_{}.db",
+            process_id, timestamp
+        ));
         let bob_db_str = bob_db_path.to_str().unwrap();
 
         let mut alice = SignalBridge::new(alice_db_str).await?;
@@ -546,7 +696,10 @@ mod tests {
         alice.clear_peer_session("bob").await?;
 
         let result = alice.encrypt_message("bob", message).await;
-        assert!(result.is_err(), "Encryption should fail after clearing peer session");
+        assert!(
+            result.is_err(),
+            "Encryption should fail after clearing peer session"
+        );
 
         Ok(())
     }
@@ -563,11 +716,20 @@ mod tests {
             .unwrap()
             .as_millis();
 
-        let alice_db_path = temp_dir.join(format!("test_clear_all_alice_{}_{}.db", process_id, timestamp));
+        let alice_db_path = temp_dir.join(format!(
+            "test_clear_all_alice_{}_{}.db",
+            process_id, timestamp
+        ));
         let alice_db_str = alice_db_path.to_str().unwrap();
-        let bob_db_path = temp_dir.join(format!("test_clear_all_bob_{}_{}.db", process_id, timestamp));
+        let bob_db_path = temp_dir.join(format!(
+            "test_clear_all_bob_{}_{}.db",
+            process_id, timestamp
+        ));
         let bob_db_str = bob_db_path.to_str().unwrap();
-        let charlie_db_path = temp_dir.join(format!("test_clear_all_charlie_{}_{}.db", process_id, timestamp));
+        let charlie_db_path = temp_dir.join(format!(
+            "test_clear_all_charlie_{}_{}.db",
+            process_id, timestamp
+        ));
         let charlie_db_str = charlie_db_path.to_str().unwrap();
 
         let mut alice = SignalBridge::new(alice_db_str).await?;
@@ -588,8 +750,14 @@ mod tests {
 
         let result1 = alice.encrypt_message("bob", message).await;
         let result2 = alice.encrypt_message("charlie", message).await;
-        assert!(result1.is_err(), "Encryption to Bob should fail after clearing all sessions");
-        assert!(result2.is_err(), "Encryption to Charlie should fail after clearing all sessions");
+        assert!(
+            result1.is_err(),
+            "Encryption to Bob should fail after clearing all sessions"
+        );
+        assert!(
+            result2.is_err(),
+            "Encryption to Charlie should fail after clearing all sessions"
+        );
 
         Ok(())
     }
@@ -606,9 +774,15 @@ mod tests {
             .unwrap()
             .as_millis();
 
-        let alice_db_path = temp_dir.join(format!("test_reset_identity_alice_{}_{}.db", process_id, timestamp));
+        let alice_db_path = temp_dir.join(format!(
+            "test_reset_identity_alice_{}_{}.db",
+            process_id, timestamp
+        ));
         let alice_db_str = alice_db_path.to_str().unwrap();
-        let bob_db_path = temp_dir.join(format!("test_reset_identity_bob_{}_{}.db", process_id, timestamp));
+        let bob_db_path = temp_dir.join(format!(
+            "test_reset_identity_bob_{}_{}.db",
+            process_id, timestamp
+        ));
         let bob_db_str = bob_db_path.to_str().unwrap();
 
         let original_alice_bundle = {
@@ -626,11 +800,17 @@ mod tests {
             alice.reset_identity().await?;
 
             let new_alice_bundle = alice.generate_pre_key_bundle().await?;
-            assert_ne!(original_alice_bundle, new_alice_bundle, "Alice's identity should be different after reset");
+            assert_ne!(
+                original_alice_bundle, new_alice_bundle,
+                "Alice's identity should be different after reset"
+            );
 
             let message = b"Test message";
             let result = alice.encrypt_message("bob", message).await;
-            assert!(result.is_err(), "Encryption should fail after identity reset");
+            assert!(
+                result.is_err(),
+                "Encryption should fail after identity reset"
+            );
         }
 
         Ok(())
@@ -649,7 +829,9 @@ mod tests {
 
         let db_path = temp_dir.join(format!("test_empty_peer_{}_{}.db", process_id, timestamp));
         let db_path_str = db_path.to_str().unwrap();
-        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+        let mut bridge = SignalBridge::new(db_path_str)
+            .await
+            .expect("Failed to create bridge");
 
         let result = bridge.encrypt_message("", b"test message").await;
         assert!(result.is_err());
@@ -671,9 +853,14 @@ mod tests {
             .unwrap()
             .as_millis();
 
-        let db_path = temp_dir.join(format!("test_empty_peer_decrypt_{}_{}.db", process_id, timestamp));
+        let db_path = temp_dir.join(format!(
+            "test_empty_peer_decrypt_{}_{}.db",
+            process_id, timestamp
+        ));
         let db_path_str = db_path.to_str().unwrap();
-        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+        let mut bridge = SignalBridge::new(db_path_str)
+            .await
+            .expect("Failed to create bridge");
 
         let result = bridge.decrypt_message("", b"fake_ciphertext").await;
         assert!(result.is_err());
@@ -695,9 +882,14 @@ mod tests {
             .unwrap()
             .as_millis();
 
-        let db_path = temp_dir.join(format!("test_empty_ciphertext_{}_{}.db", process_id, timestamp));
+        let db_path = temp_dir.join(format!(
+            "test_empty_ciphertext_{}_{}.db",
+            process_id, timestamp
+        ));
         let db_path_str = db_path.to_str().unwrap();
-        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+        let mut bridge = SignalBridge::new(db_path_str)
+            .await
+            .expect("Failed to create bridge");
 
         let result = bridge.decrypt_message("alice", &[]).await;
         assert!(result.is_err());
@@ -719,9 +911,14 @@ mod tests {
             .unwrap()
             .as_millis();
 
-        let db_path = temp_dir.join(format!("test_empty_peer_session_{}_{}.db", process_id, timestamp));
+        let db_path = temp_dir.join(format!(
+            "test_empty_peer_session_{}_{}.db",
+            process_id, timestamp
+        ));
         let db_path_str = db_path.to_str().unwrap();
-        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+        let mut bridge = SignalBridge::new(db_path_str)
+            .await
+            .expect("Failed to create bridge");
 
         let result = bridge.establish_session("", b"fake_bundle").await;
         assert!(result.is_err());
@@ -745,7 +942,9 @@ mod tests {
 
         let db_path = temp_dir.join(format!("test_empty_bundle_{}_{}.db", process_id, timestamp));
         let db_path_str = db_path.to_str().unwrap();
-        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+        let mut bridge = SignalBridge::new(db_path_str)
+            .await
+            .expect("Failed to create bridge");
 
         let result = bridge.establish_session("alice", &[]).await;
         assert!(result.is_err());
@@ -767,9 +966,14 @@ mod tests {
             .unwrap()
             .as_millis();
 
-        let db_path = temp_dir.join(format!("test_clear_empty_peer_{}_{}.db", process_id, timestamp));
+        let db_path = temp_dir.join(format!(
+            "test_clear_empty_peer_{}_{}.db",
+            process_id, timestamp
+        ));
         let db_path_str = db_path.to_str().unwrap();
-        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+        let mut bridge = SignalBridge::new(db_path_str)
+            .await
+            .expect("Failed to create bridge");
 
         let result = bridge.clear_peer_session("").await;
         assert!(result.is_err());
@@ -791,14 +995,24 @@ mod tests {
             .unwrap()
             .as_millis();
 
-        let db_path = temp_dir.join(format!("test_session_not_found_{}_{}.db", process_id, timestamp));
+        let db_path = temp_dir.join(format!(
+            "test_session_not_found_{}_{}.db",
+            process_id, timestamp
+        ));
         let db_path_str = db_path.to_str().unwrap();
-        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+        let mut bridge = SignalBridge::new(db_path_str)
+            .await
+            .expect("Failed to create bridge");
 
-        let result = bridge.encrypt_message("unknown_peer", b"test message").await;
+        let result = bridge
+            .encrypt_message("unknown_peer", b"test message")
+            .await;
         assert!(result.is_err());
         if let Err(SignalBridgeError::SessionNotFound(msg)) = result {
-            assert_eq!(msg, "Establish a session with unknown_peer before sending messages");
+            assert_eq!(
+                msg,
+                "Establish a session with unknown_peer before sending messages"
+            );
         } else {
             panic!("Expected SessionNotFound error for unknown peer");
         }
@@ -815,9 +1029,14 @@ mod tests {
             .unwrap()
             .as_millis();
 
-        let db_path = temp_dir.join(format!("test_malformed_ciphertext_{}_{}.db", process_id, timestamp));
+        let db_path = temp_dir.join(format!(
+            "test_malformed_ciphertext_{}_{}.db",
+            process_id, timestamp
+        ));
         let db_path_str = db_path.to_str().unwrap();
-        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+        let mut bridge = SignalBridge::new(db_path_str)
+            .await
+            .expect("Failed to create bridge");
 
         let malformed_data = vec![0x01, 0x02, 0x03, 0x04];
         let result = bridge.decrypt_message("alice", &malformed_data).await;
@@ -840,9 +1059,14 @@ mod tests {
             .unwrap()
             .as_millis();
 
-        let db_path = temp_dir.join(format!("test_malformed_bundle_{}_{}.db", process_id, timestamp));
+        let db_path = temp_dir.join(format!(
+            "test_malformed_bundle_{}_{}.db",
+            process_id, timestamp
+        ));
         let db_path_str = db_path.to_str().unwrap();
-        let mut bridge = SignalBridge::new(db_path_str).await.expect("Failed to create bridge");
+        let mut bridge = SignalBridge::new(db_path_str)
+            .await
+            .expect("Failed to create bridge");
 
         let malformed_bundle = vec![0xFF, 0xFE, 0xFD, 0xFC];
         let result = bridge.establish_session("alice", &malformed_bundle).await;
@@ -860,19 +1084,35 @@ mod tests {
         assert_eq!(storage_error.to_string(), "Storage error: Database locked");
 
         let protocol_error = SignalBridgeError::Protocol("Invalid signature".to_string());
-        assert_eq!(protocol_error.to_string(), "Signal Protocol error: Invalid signature");
+        assert_eq!(
+            protocol_error.to_string(),
+            "Signal Protocol error: Invalid signature"
+        );
 
         let serialization_error = SignalBridgeError::Serialization("Invalid format".to_string());
-        assert_eq!(serialization_error.to_string(), "Serialization error: Invalid format");
+        assert_eq!(
+            serialization_error.to_string(),
+            "Serialization error: Invalid format"
+        );
 
         let invalid_input_error = SignalBridgeError::InvalidInput("Name too long".to_string());
-        assert_eq!(invalid_input_error.to_string(), "Invalid input: Name too long");
+        assert_eq!(
+            invalid_input_error.to_string(),
+            "Invalid input: Name too long"
+        );
 
-        let session_not_found_error = SignalBridgeError::SessionNotFound("Establish a session with bob before sending messages".to_string());
-        assert_eq!(session_not_found_error.to_string(), "Establish a session with bob before sending messages");
+        let session_not_found_error = SignalBridgeError::SessionNotFound(
+            "Establish a session with bob before sending messages".to_string(),
+        );
+        assert_eq!(
+            session_not_found_error.to_string(),
+            "Establish a session with bob before sending messages"
+        );
 
         let schema_error = SignalBridgeError::SchemaVersionTooOld;
-        assert_eq!(schema_error.to_string(), "Update your database to a newer schema version");
+        assert_eq!(
+            schema_error.to_string(),
+            "Update your database to a newer schema version"
+        );
     }
-
 }

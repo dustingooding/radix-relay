@@ -1,5 +1,5 @@
-use sha2::{Sha256, Digest};
 use crate::ffi::NodeIdentity;
+use sha2::{Digest, Sha256};
 
 #[cxx::bridge(namespace = "radix_relay")]
 mod ffi {
@@ -49,7 +49,10 @@ mod tests {
         };
 
         let fingerprint = generate_node_fingerprint(&identity);
-        assert_eq!(fingerprint, "RDX:dae7dd5b261f004b5a5f08f9af5c468b5ef6d18a7ef9d066f5489341c4932348");
+        assert_eq!(
+            fingerprint,
+            "RDX:dae7dd5b261f004b5a5f08f9af5c468b5ef6d18a7ef9d066f5489341c4932348"
+        );
     }
 
     #[test]
@@ -64,6 +67,9 @@ mod tests {
         };
 
         let fingerprint = generate_node_fingerprint(&identity);
-        assert_eq!(fingerprint, "RDX:175568d645658bd89cd35d8f9857624b36b27bcb41163539ebe46ec49601217d");
+        assert_eq!(
+            fingerprint,
+            "RDX:175568d645658bd89cd35d8f9857624b36b27bcb41163539ebe46ec49601217d"
+        );
     }
 }

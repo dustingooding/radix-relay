@@ -3,11 +3,16 @@
 //! This module provides a SQLite-backed storage implementation that persists
 //! data across application restarts, unlike the in-memory storage.
 
-use rusqlite::Connection;
 use crate::storage_trait::*;
 use async_trait::async_trait;
-use libsignal_protocol::{IdentityKeyPair, SessionStore, ProtocolAddress, SessionRecord, SignalProtocolError, IdentityKeyStore, IdentityKey, IdentityChange, Direction, PreKeyStore, PreKeyId, PreKeyRecord, SignedPreKeyStore, SignedPreKeyId, SignedPreKeyRecord, KyberPreKeyStore, KyberPreKeyId, KyberPreKeyRecord, GenericSignedPreKey, CiphertextMessage, process_prekey_bundle, message_encrypt, message_decrypt, UsePQRatchet, PreKeyBundle};
-use rand;
+use libsignal_protocol::{
+    message_decrypt, message_encrypt, process_prekey_bundle, CiphertextMessage, Direction,
+    GenericSignedPreKey, IdentityChange, IdentityKey, IdentityKeyPair, IdentityKeyStore,
+    KyberPreKeyId, KyberPreKeyRecord, KyberPreKeyStore, PreKeyBundle, PreKeyId, PreKeyRecord,
+    PreKeyStore, ProtocolAddress, SessionRecord, SessionStore, SignalProtocolError, SignedPreKeyId,
+    SignedPreKeyRecord, SignedPreKeyStore, UsePQRatchet,
+};
+use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 
 pub struct SqliteStorage {
@@ -35,7 +40,6 @@ impl SqliteStorage {
         })
     }
 
-
     pub fn is_closed(&self) -> bool {
         self.is_closed
     }
@@ -52,10 +56,7 @@ impl SqliteStorage {
                 [],
             )?;
 
-            conn.execute(
-                "INSERT OR IGNORE INTO schema_info (version) VALUES (1)",
-                [],
-            )?;
+            conn.execute("INSERT OR IGNORE INTO schema_info (version) VALUES (1)", [])?;
 
             SqliteIdentityStore::create_tables(&conn)?;
             SqliteSessionStore::create_tables(&conn)?;
@@ -92,35 +93,45 @@ impl SignalStorageContainer for SqliteStorage {
         if self.is_closed {
             panic!("Storage has been closed");
         }
-        self.session_store.as_mut().expect("Storage not initialized")
+        self.session_store
+            .as_mut()
+            .expect("Storage not initialized")
     }
 
     fn identity_store(&mut self) -> &mut Self::IdentityStore {
         if self.is_closed {
             panic!("Storage has been closed");
         }
-        self.identity_store.as_mut().expect("Storage not initialized")
+        self.identity_store
+            .as_mut()
+            .expect("Storage not initialized")
     }
 
     fn pre_key_store(&mut self) -> &mut Self::PreKeyStore {
         if self.is_closed {
             panic!("Storage has been closed");
         }
-        self.pre_key_store.as_mut().expect("Storage not initialized")
+        self.pre_key_store
+            .as_mut()
+            .expect("Storage not initialized")
     }
 
     fn signed_pre_key_store(&mut self) -> &mut Self::SignedPreKeyStore {
         if self.is_closed {
             panic!("Storage has been closed");
         }
-        self.signed_pre_key_store.as_mut().expect("Storage not initialized")
+        self.signed_pre_key_store
+            .as_mut()
+            .expect("Storage not initialized")
     }
 
     fn kyber_pre_key_store(&mut self) -> &mut Self::KyberPreKeyStore {
         if self.is_closed {
             panic!("Storage has been closed");
         }
-        self.kyber_pre_key_store.as_mut().expect("Storage not initialized")
+        self.kyber_pre_key_store
+            .as_mut()
+            .expect("Storage not initialized")
     }
 
     fn initialize(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -182,24 +193,43 @@ impl SqliteSessionStore {
 
 #[async_trait(?Send)]
 impl SessionStore for SqliteSessionStore {
-    async fn load_session(&self, address: &ProtocolAddress) -> Result<Option<SessionRecord>, SignalProtocolError> {
+    async fn load_session(
+        &self,
+        address: &ProtocolAddress,
+    ) -> Result<Option<SessionRecord>, SignalProtocolError> {
         let conn = self.connection.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT session_data FROM sessions WHERE address = ? AND device_id = ?")
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to prepare statement: {}", e)))?;
+        let mut stmt = conn
+            .prepare("SELECT session_data FROM sessions WHERE address = ? AND device_id = ?")
+            .map_err(|e| {
+                SignalProtocolError::InvalidState(
+                    "storage",
+                    format!("Failed to prepare statement: {}", e),
+                )
+            })?;
 
-        let result = stmt.query_row([address.name(), &u32::from(address.device_id()).to_string()], |row| {
-            let data: Vec<u8> = row.get(0)?;
-            Ok(data)
-        });
+        let result = stmt.query_row(
+            [address.name(), &u32::from(address.device_id()).to_string()],
+            |row| {
+                let data: Vec<u8> = row.get(0)?;
+                Ok(data)
+            },
+        );
 
         match result {
             Ok(data) => {
-                let session = SessionRecord::deserialize(&data)
-                    .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to deserialize session: {}", e)))?;
+                let session = SessionRecord::deserialize(&data).map_err(|e| {
+                    SignalProtocolError::InvalidState(
+                        "storage",
+                        format!("Failed to deserialize session: {}", e),
+                    )
+                })?;
                 Ok(Some(session))
-            },
+            }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(SignalProtocolError::InvalidState("storage", format!("Database error: {}", e))),
+            Err(e) => Err(SignalProtocolError::InvalidState(
+                "storage",
+                format!("Database error: {}", e),
+            )),
         }
     }
 
@@ -209,14 +239,21 @@ impl SessionStore for SqliteSessionStore {
         record: &SessionRecord,
     ) -> Result<(), SignalProtocolError> {
         let conn = self.connection.lock().unwrap();
-        let serialized = record.serialize()
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to serialize session: {}", e)))?;
+        let serialized = record.serialize().map_err(|e| {
+            SignalProtocolError::InvalidState(
+                "storage",
+                format!("Failed to serialize session: {}", e),
+            )
+        })?;
 
         conn.execute(
             "INSERT OR REPLACE INTO sessions (address, device_id, session_data, updated_at)
              VALUES (?, ?, ?, strftime('%s', 'now'))",
             rusqlite::params![address.name(), u32::from(address.device_id()), &serialized],
-        ).map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to store session: {}", e)))?;
+        )
+        .map_err(|e| {
+            SignalProtocolError::InvalidState("storage", format!("Failed to store session: {}", e))
+        })?;
 
         Ok(())
     }
@@ -230,7 +267,8 @@ impl ExtendedSessionStore for SqliteSessionStore {
         stmt.query_row([], |row| {
             let count: i64 = row.get(0)?;
             Ok(count as usize)
-        }).unwrap_or(0)
+        })
+        .unwrap_or(0)
     }
 
     async fn clear_all_sessions(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -238,7 +276,10 @@ impl ExtendedSessionStore for SqliteSessionStore {
         conn.execute("DELETE FROM sessions", [])?;
         Ok(())
     }
-    async fn delete_session(&mut self, address: &ProtocolAddress) -> Result<(), Box<dyn std::error::Error>> {
+    async fn delete_session(
+        &mut self,
+        address: &ProtocolAddress,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let conn = self.connection.lock().unwrap();
         conn.execute(
             "DELETE FROM sessions WHERE address = ?1 AND device_id = ?2",
@@ -293,8 +334,14 @@ impl IdentityKeyStore for SqliteIdentityStore {
     async fn get_identity_key_pair(&self) -> Result<IdentityKeyPair, SignalProtocolError> {
         let conn = self.connection.lock().unwrap();
 
-        let mut stmt = conn.prepare("SELECT private_key FROM local_identity WHERE id = 1")
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to prepare statement: {}", e)))?;
+        let mut stmt = conn
+            .prepare("SELECT private_key FROM local_identity WHERE id = 1")
+            .map_err(|e| {
+                SignalProtocolError::InvalidState(
+                    "storage",
+                    format!("Failed to prepare statement: {}", e),
+                )
+            })?;
 
         let result = stmt.query_row([], |row| {
             let serialized_keypair: Vec<u8> = row.get(0)?;
@@ -304,21 +351,36 @@ impl IdentityKeyStore for SqliteIdentityStore {
         match result {
             Ok(serialized_keypair) => {
                 let identity_key_pair = IdentityKeyPair::try_from(&serialized_keypair[..])
-                    .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to deserialize identity key pair: {}", e)))?;
+                    .map_err(|e| {
+                        SignalProtocolError::InvalidState(
+                            "storage",
+                            format!("Failed to deserialize identity key pair: {}", e),
+                        )
+                    })?;
                 Ok(identity_key_pair)
-            },
-            Err(rusqlite::Error::QueryReturnedNoRows) => {
-                Err(SignalProtocolError::InvalidState("storage", "Local identity key pair not set".to_string()))
-            },
-            Err(e) => Err(SignalProtocolError::InvalidState("storage", format!("Database error: {}", e))),
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Err(SignalProtocolError::InvalidState(
+                "storage",
+                "Local identity key pair not set".to_string(),
+            )),
+            Err(e) => Err(SignalProtocolError::InvalidState(
+                "storage",
+                format!("Database error: {}", e),
+            )),
         }
     }
 
     async fn get_local_registration_id(&self) -> Result<u32, SignalProtocolError> {
         let conn = self.connection.lock().unwrap();
 
-        let mut stmt = conn.prepare("SELECT registration_id FROM local_identity WHERE id = 1")
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to prepare statement: {}", e)))?;
+        let mut stmt = conn
+            .prepare("SELECT registration_id FROM local_identity WHERE id = 1")
+            .map_err(|e| {
+                SignalProtocolError::InvalidState(
+                    "storage",
+                    format!("Failed to prepare statement: {}", e),
+                )
+            })?;
 
         let result = stmt.query_row([], |row| {
             let registration_id: u32 = row.get(0)?;
@@ -327,10 +389,14 @@ impl IdentityKeyStore for SqliteIdentityStore {
 
         match result {
             Ok(registration_id) => Ok(registration_id),
-            Err(rusqlite::Error::QueryReturnedNoRows) => {
-                Err(SignalProtocolError::InvalidState("storage", "Local registration ID not set".to_string()))
-            },
-            Err(e) => Err(SignalProtocolError::InvalidState("storage", format!("Database error: {}", e))),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Err(SignalProtocolError::InvalidState(
+                "storage",
+                "Local registration ID not set".to_string(),
+            )),
+            Err(e) => Err(SignalProtocolError::InvalidState(
+                "storage",
+                format!("Database error: {}", e),
+            )),
         }
     }
 
@@ -342,13 +408,22 @@ impl IdentityKeyStore for SqliteIdentityStore {
         let conn = self.connection.lock().unwrap();
         let serialized_key = identity_key.serialize();
 
-        let mut stmt = conn.prepare("SELECT public_key FROM identity_keys WHERE address = ? AND device_id = ?")
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to prepare statement: {}", e)))?;
+        let mut stmt = conn
+            .prepare("SELECT public_key FROM identity_keys WHERE address = ? AND device_id = ?")
+            .map_err(|e| {
+                SignalProtocolError::InvalidState(
+                    "storage",
+                    format!("Failed to prepare statement: {}", e),
+                )
+            })?;
 
-        let existing_key = stmt.query_row([address.name(), &u32::from(address.device_id()).to_string()], |row| {
-            let key_data: Vec<u8> = row.get(0)?;
-            Ok(key_data)
-        });
+        let existing_key = stmt.query_row(
+            [address.name(), &u32::from(address.device_id()).to_string()],
+            |row| {
+                let key_data: Vec<u8> = row.get(0)?;
+                Ok(key_data)
+            },
+        );
 
         let change_type = match existing_key {
             Ok(existing_data) => {
@@ -357,16 +432,28 @@ impl IdentityKeyStore for SqliteIdentityStore {
                 } else {
                     IdentityChange::ReplacedExisting
                 }
-            },
+            }
             Err(rusqlite::Error::QueryReturnedNoRows) => IdentityChange::NewOrUnchanged,
-            Err(e) => return Err(SignalProtocolError::InvalidState("storage", format!("Database error: {}", e))),
+            Err(e) => {
+                return Err(SignalProtocolError::InvalidState(
+                    "storage",
+                    format!("Database error: {}", e),
+                ))
+            }
         };
 
         conn.execute(
             "INSERT OR REPLACE INTO identity_keys (address, device_id, public_key, last_seen)
              VALUES (?, ?, ?, strftime('%s', 'now'))",
-            rusqlite::params![address.name(), u32::from(address.device_id()), &serialized_key.as_ref()],
-        ).map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to store identity: {}", e)))?;
+            rusqlite::params![
+                address.name(),
+                u32::from(address.device_id()),
+                &serialized_key.as_ref()
+            ],
+        )
+        .map_err(|e| {
+            SignalProtocolError::InvalidState("storage", format!("Failed to store identity: {}", e))
+        })?;
 
         Ok(change_type)
     }
@@ -385,24 +472,43 @@ impl IdentityKeyStore for SqliteIdentityStore {
         }
     }
 
-    async fn get_identity(&self, address: &ProtocolAddress) -> Result<Option<IdentityKey>, SignalProtocolError> {
+    async fn get_identity(
+        &self,
+        address: &ProtocolAddress,
+    ) -> Result<Option<IdentityKey>, SignalProtocolError> {
         let conn = self.connection.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT public_key FROM identity_keys WHERE address = ? AND device_id = ?")
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to prepare statement: {}", e)))?;
+        let mut stmt = conn
+            .prepare("SELECT public_key FROM identity_keys WHERE address = ? AND device_id = ?")
+            .map_err(|e| {
+                SignalProtocolError::InvalidState(
+                    "storage",
+                    format!("Failed to prepare statement: {}", e),
+                )
+            })?;
 
-        let result = stmt.query_row([address.name(), &u32::from(address.device_id()).to_string()], |row| {
-            let key_data: Vec<u8> = row.get(0)?;
-            Ok(key_data)
-        });
+        let result = stmt.query_row(
+            [address.name(), &u32::from(address.device_id()).to_string()],
+            |row| {
+                let key_data: Vec<u8> = row.get(0)?;
+                Ok(key_data)
+            },
+        );
 
         match result {
             Ok(key_data) => {
-                let identity_key = IdentityKey::try_from(&key_data[..])
-                    .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to deserialize identity key: {}", e)))?;
+                let identity_key = IdentityKey::try_from(&key_data[..]).map_err(|e| {
+                    SignalProtocolError::InvalidState(
+                        "storage",
+                        format!("Failed to deserialize identity key: {}", e),
+                    )
+                })?;
                 Ok(Some(identity_key))
-            },
+            }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(SignalProtocolError::InvalidState("storage", format!("Database error: {}", e))),
+            Err(e) => Err(SignalProtocolError::InvalidState(
+                "storage",
+                format!("Database error: {}", e),
+            )),
         }
     }
 }
@@ -415,10 +521,14 @@ impl ExtendedIdentityStore for SqliteIdentityStore {
         stmt.query_row([], |row| {
             let count: i64 = row.get(0)?;
             Ok(count as usize)
-        }).unwrap_or(0)
+        })
+        .unwrap_or(0)
     }
 
-    async fn set_local_identity_key_pair(&self, identity_key_pair: &IdentityKeyPair) -> Result<(), Box<dyn std::error::Error>> {
+    async fn set_local_identity_key_pair(
+        &self,
+        identity_key_pair: &IdentityKeyPair,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let conn = self.connection.lock().unwrap();
 
         let serialized_keypair = identity_key_pair.serialize();
@@ -433,7 +543,10 @@ impl ExtendedIdentityStore for SqliteIdentityStore {
         Ok(())
     }
 
-    async fn set_local_registration_id(&self, registration_id: u32) -> Result<(), Box<dyn std::error::Error>> {
+    async fn set_local_registration_id(
+        &self,
+        registration_id: u32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let conn = self.connection.lock().unwrap();
 
         conn.execute(
@@ -444,19 +557,29 @@ impl ExtendedIdentityStore for SqliteIdentityStore {
 
         Ok(())
     }
-    async fn get_peer_identity(&self, address: &ProtocolAddress) -> Result<Option<IdentityKey>, Box<dyn std::error::Error>> {
+    async fn get_peer_identity(
+        &self,
+        address: &ProtocolAddress,
+    ) -> Result<Option<IdentityKey>, Box<dyn std::error::Error>> {
         let conn = self.connection.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT public_key FROM identity_keys WHERE address = ? AND device_id = ?")?;
-        match stmt.query_row([address.name(), &u32::from(address.device_id()).to_string()], |row| {
-            let public_key_bytes: Vec<u8> = row.get(0)?;
-            Ok(public_key_bytes)
-        }) {
+        let mut stmt = conn
+            .prepare("SELECT public_key FROM identity_keys WHERE address = ? AND device_id = ?")?;
+        match stmt.query_row(
+            [address.name(), &u32::from(address.device_id()).to_string()],
+            |row| {
+                let public_key_bytes: Vec<u8> = row.get(0)?;
+                Ok(public_key_bytes)
+            },
+        ) {
             Ok(key_bytes) => Ok(Some(IdentityKey::decode(&key_bytes)?)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
     }
-    async fn delete_identity(&mut self, address: &ProtocolAddress) -> Result<(), Box<dyn std::error::Error>> {
+    async fn delete_identity(
+        &mut self,
+        address: &ProtocolAddress,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let conn = self.connection.lock().unwrap();
         conn.execute(
             "DELETE FROM identity_keys WHERE address = ? AND device_id = ?",
@@ -503,8 +626,14 @@ impl SqlitePreKeyStore {
 impl PreKeyStore for SqlitePreKeyStore {
     async fn get_pre_key(&self, prekey_id: PreKeyId) -> Result<PreKeyRecord, SignalProtocolError> {
         let conn = self.connection.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT key_data FROM pre_keys WHERE id = ?")
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to prepare statement: {}", e)))?;
+        let mut stmt = conn
+            .prepare("SELECT key_data FROM pre_keys WHERE id = ?")
+            .map_err(|e| {
+                SignalProtocolError::InvalidState(
+                    "storage",
+                    format!("Failed to prepare statement: {}", e),
+                )
+            })?;
 
         let result = stmt.query_row([u32::from(prekey_id)], |row| {
             let key_data: Vec<u8> = row.get(0)?;
@@ -513,12 +642,19 @@ impl PreKeyStore for SqlitePreKeyStore {
 
         match result {
             Ok(key_data) => {
-                let prekey_record = PreKeyRecord::deserialize(&key_data)
-                    .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to deserialize pre key: {}", e)))?;
+                let prekey_record = PreKeyRecord::deserialize(&key_data).map_err(|e| {
+                    SignalProtocolError::InvalidState(
+                        "storage",
+                        format!("Failed to deserialize pre key: {}", e),
+                    )
+                })?;
                 Ok(prekey_record)
-            },
+            }
             Err(rusqlite::Error::QueryReturnedNoRows) => Err(SignalProtocolError::InvalidPreKeyId),
-            Err(e) => Err(SignalProtocolError::InvalidState("storage", format!("Database error: {}", e))),
+            Err(e) => Err(SignalProtocolError::InvalidState(
+                "storage",
+                format!("Database error: {}", e),
+            )),
         }
     }
 
@@ -528,14 +664,21 @@ impl PreKeyStore for SqlitePreKeyStore {
         record: &PreKeyRecord,
     ) -> Result<(), SignalProtocolError> {
         let conn = self.connection.lock().unwrap();
-        let serialized = record.serialize()
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to serialize pre key: {}", e)))?;
+        let serialized = record.serialize().map_err(|e| {
+            SignalProtocolError::InvalidState(
+                "storage",
+                format!("Failed to serialize pre key: {}", e),
+            )
+        })?;
 
         conn.execute(
             "INSERT OR REPLACE INTO pre_keys (id, key_data, created_at, used_at)
              VALUES (?, ?, strftime('%s', 'now'), NULL)",
             rusqlite::params![u32::from(prekey_id), &serialized],
-        ).map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to store pre key: {}", e)))?;
+        )
+        .map_err(|e| {
+            SignalProtocolError::InvalidState("storage", format!("Failed to store pre key: {}", e))
+        })?;
 
         Ok(())
     }
@@ -545,7 +688,10 @@ impl PreKeyStore for SqlitePreKeyStore {
         conn.execute(
             "DELETE FROM pre_keys WHERE id = ?",
             rusqlite::params![u32::from(prekey_id)],
-        ).map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to remove pre key: {}", e)))?;
+        )
+        .map_err(|e| {
+            SignalProtocolError::InvalidState("storage", format!("Failed to remove pre key: {}", e))
+        })?;
         Ok(())
     }
 }
@@ -558,7 +704,8 @@ impl ExtendedPreKeyStore for SqlitePreKeyStore {
         stmt.query_row([], |row| {
             let count: i64 = row.get(0)?;
             Ok(count as usize)
-        }).unwrap_or(0)
+        })
+        .unwrap_or(0)
     }
 
     async fn clear_all_pre_keys(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -595,10 +742,19 @@ impl SqliteSignedPreKeyStore {
 
 #[async_trait(?Send)]
 impl SignedPreKeyStore for SqliteSignedPreKeyStore {
-    async fn get_signed_pre_key(&self, signed_prekey_id: SignedPreKeyId) -> Result<SignedPreKeyRecord, SignalProtocolError> {
+    async fn get_signed_pre_key(
+        &self,
+        signed_prekey_id: SignedPreKeyId,
+    ) -> Result<SignedPreKeyRecord, SignalProtocolError> {
         let conn = self.connection.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT key_data FROM signed_pre_keys WHERE id = ?")
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to prepare statement: {}", e)))?;
+        let mut stmt = conn
+            .prepare("SELECT key_data FROM signed_pre_keys WHERE id = ?")
+            .map_err(|e| {
+                SignalProtocolError::InvalidState(
+                    "storage",
+                    format!("Failed to prepare statement: {}", e),
+                )
+            })?;
 
         let result = stmt.query_row([u32::from(signed_prekey_id)], |row| {
             let key_data: Vec<u8> = row.get(0)?;
@@ -607,12 +763,22 @@ impl SignedPreKeyStore for SqliteSignedPreKeyStore {
 
         match result {
             Ok(key_data) => {
-                let signed_prekey_record = SignedPreKeyRecord::deserialize(&key_data)
-                    .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to deserialize signed pre key: {}", e)))?;
+                let signed_prekey_record =
+                    SignedPreKeyRecord::deserialize(&key_data).map_err(|e| {
+                        SignalProtocolError::InvalidState(
+                            "storage",
+                            format!("Failed to deserialize signed pre key: {}", e),
+                        )
+                    })?;
                 Ok(signed_prekey_record)
-            },
-            Err(rusqlite::Error::QueryReturnedNoRows) => Err(SignalProtocolError::InvalidSignedPreKeyId),
-            Err(e) => Err(SignalProtocolError::InvalidState("storage", format!("Database error: {}", e))),
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                Err(SignalProtocolError::InvalidSignedPreKeyId)
+            }
+            Err(e) => Err(SignalProtocolError::InvalidState(
+                "storage",
+                format!("Database error: {}", e),
+            )),
         }
     }
 
@@ -622,14 +788,24 @@ impl SignedPreKeyStore for SqliteSignedPreKeyStore {
         record: &SignedPreKeyRecord,
     ) -> Result<(), SignalProtocolError> {
         let conn = self.connection.lock().unwrap();
-        let serialized = record.serialize()
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to serialize signed pre key: {}", e)))?;
+        let serialized = record.serialize().map_err(|e| {
+            SignalProtocolError::InvalidState(
+                "storage",
+                format!("Failed to serialize signed pre key: {}", e),
+            )
+        })?;
 
         // Set expiration to 30 days from now (Signal Protocol recommendation)
         let expires_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to get timestamp: {}", e)))?
-            .as_secs() + (30 * 24 * 60 * 60); // 30 days in seconds
+            .map_err(|e| {
+                SignalProtocolError::InvalidState(
+                    "storage",
+                    format!("Failed to get timestamp: {}", e),
+                )
+            })?
+            .as_secs()
+            + (30 * 24 * 60 * 60); // 30 days in seconds
 
         conn.execute(
             "INSERT OR REPLACE INTO signed_pre_keys (id, key_data, signature, created_at, expires_at, is_current)
@@ -645,11 +821,14 @@ impl SignedPreKeyStore for SqliteSignedPreKeyStore {
 impl ExtendedSignedPreKeyStore for SqliteSignedPreKeyStore {
     async fn signed_pre_key_count(&self) -> usize {
         let conn = self.connection.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT COUNT(*) FROM signed_pre_keys").unwrap();
+        let mut stmt = conn
+            .prepare("SELECT COUNT(*) FROM signed_pre_keys")
+            .unwrap();
         stmt.query_row([], |row| {
             let count: i64 = row.get(0)?;
             Ok(count as usize)
-        }).unwrap_or(0)
+        })
+        .unwrap_or(0)
     }
 
     async fn clear_all_signed_pre_keys(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -686,10 +865,19 @@ impl SqliteKyberPreKeyStore {
 
 #[async_trait(?Send)]
 impl KyberPreKeyStore for SqliteKyberPreKeyStore {
-    async fn get_kyber_pre_key(&self, kyber_prekey_id: KyberPreKeyId) -> Result<KyberPreKeyRecord, SignalProtocolError> {
+    async fn get_kyber_pre_key(
+        &self,
+        kyber_prekey_id: KyberPreKeyId,
+    ) -> Result<KyberPreKeyRecord, SignalProtocolError> {
         let conn = self.connection.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT key_data FROM kyber_pre_keys WHERE id = ?")
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to prepare statement: {}", e)))?;
+        let mut stmt = conn
+            .prepare("SELECT key_data FROM kyber_pre_keys WHERE id = ?")
+            .map_err(|e| {
+                SignalProtocolError::InvalidState(
+                    "storage",
+                    format!("Failed to prepare statement: {}", e),
+                )
+            })?;
 
         let result = stmt.query_row([u32::from(kyber_prekey_id)], |row| {
             let key_data: Vec<u8> = row.get(0)?;
@@ -698,12 +886,22 @@ impl KyberPreKeyStore for SqliteKyberPreKeyStore {
 
         match result {
             Ok(key_data) => {
-                let kyber_prekey_record = KyberPreKeyRecord::deserialize(&key_data)
-                    .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to deserialize kyber pre key: {}", e)))?;
+                let kyber_prekey_record =
+                    KyberPreKeyRecord::deserialize(&key_data).map_err(|e| {
+                        SignalProtocolError::InvalidState(
+                            "storage",
+                            format!("Failed to deserialize kyber pre key: {}", e),
+                        )
+                    })?;
                 Ok(kyber_prekey_record)
-            },
-            Err(rusqlite::Error::QueryReturnedNoRows) => Err(SignalProtocolError::InvalidKyberPreKeyId),
-            Err(e) => Err(SignalProtocolError::InvalidState("storage", format!("Database error: {}", e))),
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                Err(SignalProtocolError::InvalidKyberPreKeyId)
+            }
+            Err(e) => Err(SignalProtocolError::InvalidState(
+                "storage",
+                format!("Database error: {}", e),
+            )),
         }
     }
 
@@ -713,14 +911,24 @@ impl KyberPreKeyStore for SqliteKyberPreKeyStore {
         record: &KyberPreKeyRecord,
     ) -> Result<(), SignalProtocolError> {
         let conn = self.connection.lock().unwrap();
-        let serialized = record.serialize()
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to serialize kyber pre key: {}", e)))?;
+        let serialized = record.serialize().map_err(|e| {
+            SignalProtocolError::InvalidState(
+                "storage",
+                format!("Failed to serialize kyber pre key: {}", e),
+            )
+        })?;
 
         // Set expiration to 30 days from now (Signal Protocol recommendation)
         let expires_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to get timestamp: {}", e)))?
-            .as_secs() + (30 * 24 * 60 * 60); // 30 days in seconds
+            .map_err(|e| {
+                SignalProtocolError::InvalidState(
+                    "storage",
+                    format!("Failed to get timestamp: {}", e),
+                )
+            })?
+            .as_secs()
+            + (30 * 24 * 60 * 60); // 30 days in seconds
 
         conn.execute(
             "INSERT OR REPLACE INTO kyber_pre_keys (id, key_data, signature, created_at, expires_at, is_current)
@@ -731,12 +939,21 @@ impl KyberPreKeyStore for SqliteKyberPreKeyStore {
         Ok(())
     }
 
-    async fn mark_kyber_pre_key_used(&mut self, kyber_prekey_id: KyberPreKeyId) -> Result<(), SignalProtocolError> {
+    async fn mark_kyber_pre_key_used(
+        &mut self,
+        kyber_prekey_id: KyberPreKeyId,
+    ) -> Result<(), SignalProtocolError> {
         let conn = self.connection.lock().unwrap();
         conn.execute(
             "UPDATE kyber_pre_keys SET is_current = FALSE WHERE id = ?",
             rusqlite::params![u32::from(kyber_prekey_id)],
-        ).map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to mark kyber pre key as used: {}", e)))?;
+        )
+        .map_err(|e| {
+            SignalProtocolError::InvalidState(
+                "storage",
+                format!("Failed to mark kyber pre key as used: {}", e),
+            )
+        })?;
         Ok(())
     }
 }
@@ -749,7 +966,8 @@ impl ExtendedKyberPreKeyStore for SqliteKyberPreKeyStore {
         stmt.query_row([], |row| {
             let count: i64 = row.get(0)?;
             Ok(count as usize)
-        }).unwrap_or(0)
+        })
+        .unwrap_or(0)
     }
 
     async fn clear_all_kyber_pre_keys(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -771,13 +989,18 @@ impl ExtendedStorageOps for SqliteStorage {
 
         process_prekey_bundle(
             address,
-            self.session_store.as_mut().expect("Storage not initialized"),
-            self.identity_store.as_mut().expect("Storage not initialized"),
+            self.session_store
+                .as_mut()
+                .expect("Storage not initialized"),
+            self.identity_store
+                .as_mut()
+                .expect("Storage not initialized"),
             bundle,
             timestamp,
             &mut rng,
             UsePQRatchet::Yes,
-        ).await?;
+        )
+        .await?;
 
         Ok(())
     }
@@ -793,11 +1016,16 @@ impl ExtendedStorageOps for SqliteStorage {
         message_encrypt(
             plaintext,
             remote_address,
-            self.session_store.as_mut().expect("Storage not initialized"),
-            self.identity_store.as_mut().expect("Storage not initialized"),
+            self.session_store
+                .as_mut()
+                .expect("Storage not initialized"),
+            self.identity_store
+                .as_mut()
+                .expect("Storage not initialized"),
             now,
-            &mut rng
-        ).await
+            &mut rng,
+        )
+        .await
     }
 
     async fn decrypt_message(
@@ -810,22 +1038,32 @@ impl ExtendedStorageOps for SqliteStorage {
         message_decrypt(
             ciphertext,
             remote_address,
-            self.session_store.as_mut().expect("Storage not initialized"),
-            self.identity_store.as_mut().expect("Storage not initialized"),
-            self.pre_key_store.as_mut().expect("Storage not initialized"),
-            self.signed_pre_key_store.as_mut().expect("Storage not initialized"),
-            self.kyber_pre_key_store.as_mut().expect("Storage not initialized"),
+            self.session_store
+                .as_mut()
+                .expect("Storage not initialized"),
+            self.identity_store
+                .as_mut()
+                .expect("Storage not initialized"),
+            self.pre_key_store
+                .as_mut()
+                .expect("Storage not initialized"),
+            self.signed_pre_key_store
+                .as_mut()
+                .expect("Storage not initialized"),
+            self.kyber_pre_key_store
+                .as_mut()
+                .expect("Storage not initialized"),
             &mut rng,
             UsePQRatchet::Yes,
-        ).await
+        )
+        .await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libsignal_protocol::{DeviceId, kem, PreKeyBundle, process_prekey_bundle, Timestamp};
-    use rand;
+    use libsignal_protocol::{kem, process_prekey_bundle, DeviceId, PreKeyBundle, Timestamp};
 
     #[tokio::test]
     async fn test_sqlite_storage_creation() -> Result<(), Box<dyn std::error::Error>> {
@@ -879,7 +1117,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_sqlite_signed_pre_key_store_count_empty() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_sqlite_signed_pre_key_store_count_empty() -> Result<(), Box<dyn std::error::Error>>
+    {
         let connection = Arc::new(Mutex::new(Connection::open(":memory:")?));
         SqliteSignedPreKeyStore::create_tables(&connection.lock().unwrap())?;
         let signed_pre_key_store = SqliteSignedPreKeyStore::new(connection);
@@ -889,7 +1128,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_sqlite_kyber_pre_key_store_count_empty() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_sqlite_kyber_pre_key_store_count_empty() -> Result<(), Box<dyn std::error::Error>>
+    {
         let connection = Arc::new(Mutex::new(Connection::open(":memory:")?));
         SqliteKyberPreKeyStore::create_tables(&connection.lock().unwrap())?;
         let kyber_pre_key_store = SqliteKyberPreKeyStore::new(connection);
@@ -918,14 +1158,23 @@ mod tests {
         let mut rng = rand::rng();
         let identity_key_pair = IdentityKeyPair::generate(&mut rng);
 
-        storage.identity_store().set_local_identity_key_pair(&identity_key_pair).await?;
-        storage.identity_store().set_local_registration_id(12345).await?;
+        storage
+            .identity_store()
+            .set_local_identity_key_pair(&identity_key_pair)
+            .await?;
+        storage
+            .identity_store()
+            .set_local_registration_id(12345)
+            .await?;
 
         let retrieved_registration = storage.identity_store().get_local_registration_id().await?;
         assert_eq!(retrieved_registration, 12345);
 
         let retrieved_identity = storage.identity_store().get_identity_key_pair().await?;
-        assert_eq!(retrieved_identity.identity_key().serialize(), identity_key_pair.identity_key().serialize());
+        assert_eq!(
+            retrieved_identity.identity_key().serialize(),
+            identity_key_pair.identity_key().serialize()
+        );
 
         Ok(())
     }
@@ -941,11 +1190,16 @@ mod tests {
         let prekey_id = PreKeyId::from(42u32);
         let prekey_record = PreKeyRecord::new(prekey_id, &key_pair);
 
-        pre_key_store.save_pre_key(prekey_id, &prekey_record).await?;
+        pre_key_store
+            .save_pre_key(prekey_id, &prekey_record)
+            .await?;
         let retrieved_prekey = pre_key_store.get_pre_key(prekey_id).await?;
 
         assert_eq!(retrieved_prekey.id()?, prekey_id);
-        assert_eq!(retrieved_prekey.public_key()?.serialize(), prekey_record.public_key()?.serialize());
+        assert_eq!(
+            retrieved_prekey.public_key()?.serialize(),
+            prekey_record.public_key()?.serialize()
+        );
 
         let non_existent_id = PreKeyId::from(999u32);
         let result = pre_key_store.get_pre_key(non_existent_id).await;
@@ -964,18 +1218,34 @@ mod tests {
         let identity_key_pair = IdentityKeyPair::generate(&mut rng);
         let key_pair = libsignal_protocol::KeyPair::generate(&mut rng);
         let signed_prekey_id = SignedPreKeyId::from(42u32);
-        let timestamp = Timestamp::from_epoch_millis(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis() as u64);
-        let signature = identity_key_pair.private_key().calculate_signature(&key_pair.public_key.serialize(), &mut rng)?;
-        let signed_prekey_record = SignedPreKeyRecord::new(signed_prekey_id, timestamp, &key_pair, &signature);
+        let timestamp = Timestamp::from_epoch_millis(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_millis() as u64,
+        );
+        let signature = identity_key_pair
+            .private_key()
+            .calculate_signature(&key_pair.public_key.serialize(), &mut rng)?;
+        let signed_prekey_record =
+            SignedPreKeyRecord::new(signed_prekey_id, timestamp, &key_pair, &signature);
 
-        signed_pre_key_store.save_signed_pre_key(signed_prekey_id, &signed_prekey_record).await?;
-        let retrieved_prekey = signed_pre_key_store.get_signed_pre_key(signed_prekey_id).await?;
+        signed_pre_key_store
+            .save_signed_pre_key(signed_prekey_id, &signed_prekey_record)
+            .await?;
+        let retrieved_prekey = signed_pre_key_store
+            .get_signed_pre_key(signed_prekey_id)
+            .await?;
 
         assert_eq!(retrieved_prekey.id()?, signed_prekey_id);
-        assert_eq!(retrieved_prekey.public_key()?.serialize(), signed_prekey_record.public_key()?.serialize());
+        assert_eq!(
+            retrieved_prekey.public_key()?.serialize(),
+            signed_prekey_record.public_key()?.serialize()
+        );
 
         let non_existent_id = SignedPreKeyId::from(999u32);
-        let result = signed_pre_key_store.get_signed_pre_key(non_existent_id).await;
+        let result = signed_pre_key_store
+            .get_signed_pre_key(non_existent_id)
+            .await;
         assert!(result.is_err());
 
         Ok(())
@@ -988,21 +1258,36 @@ mod tests {
         let mut identity_store = SqliteIdentityStore::new(connection);
 
         let mut rng = rand::rng();
-        let alice_address = ProtocolAddress::new("alice@example.com".to_string(), DeviceId::new(1)?);
+        let alice_address =
+            ProtocolAddress::new("alice@example.com".to_string(), DeviceId::new(1)?);
         let bob_address = ProtocolAddress::new("bob@example.com".to_string(), DeviceId::new(1)?);
-        let alice_identity = IdentityKey::new(libsignal_protocol::KeyPair::generate(&mut rng).public_key);
+        let alice_identity =
+            IdentityKey::new(libsignal_protocol::KeyPair::generate(&mut rng).public_key);
 
-        let result = identity_store.save_identity(&alice_address, &alice_identity).await?;
+        let result = identity_store
+            .save_identity(&alice_address, &alice_identity)
+            .await?;
         assert_eq!(result, IdentityChange::NewOrUnchanged);
 
         let retrieved_identity = identity_store.get_identity(&alice_address).await?;
         assert_eq!(retrieved_identity, Some(alice_identity));
 
-        assert!(identity_store.is_trusted_identity(&alice_address, &alice_identity, Direction::Receiving).await?);
-        assert!(identity_store.is_trusted_identity(&alice_address, &alice_identity, Direction::Sending).await?);
+        assert!(
+            identity_store
+                .is_trusted_identity(&alice_address, &alice_identity, Direction::Receiving)
+                .await?
+        );
+        assert!(
+            identity_store
+                .is_trusted_identity(&alice_address, &alice_identity, Direction::Sending)
+                .await?
+        );
 
-        let alice_new_identity = IdentityKey::new(libsignal_protocol::KeyPair::generate(&mut rng).public_key);
-        let result = identity_store.save_identity(&alice_address, &alice_new_identity).await?;
+        let alice_new_identity =
+            IdentityKey::new(libsignal_protocol::KeyPair::generate(&mut rng).public_key);
+        let result = identity_store
+            .save_identity(&alice_address, &alice_new_identity)
+            .await?;
         assert_eq!(result, IdentityChange::ReplacedExisting);
 
         let unknown_identity = identity_store.get_identity(&bob_address).await?;
@@ -1018,7 +1303,10 @@ mod tests {
 
         let mut rng = rand::rng();
         let identity_key_pair = IdentityKeyPair::generate(&mut rng);
-        storage.identity_store().set_local_identity_key_pair(&identity_key_pair).await?;
+        storage
+            .identity_store()
+            .set_local_identity_key_pair(&identity_key_pair)
+            .await?;
 
         storage.close()?;
 
@@ -1038,17 +1326,31 @@ mod tests {
         let mut rng = rand::rng();
         let key_pair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
         let kyber_prekey_id = KyberPreKeyId::from(42u32);
-        let timestamp = Timestamp::from_epoch_millis(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis() as u64);
+        let timestamp = Timestamp::from_epoch_millis(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_millis() as u64,
+        );
         let signature = b"test_signature";
-        let kyber_prekey_record = KyberPreKeyRecord::new(kyber_prekey_id, timestamp, &key_pair, signature);
+        let kyber_prekey_record =
+            KyberPreKeyRecord::new(kyber_prekey_id, timestamp, &key_pair, signature);
 
-        kyber_pre_key_store.save_kyber_pre_key(kyber_prekey_id, &kyber_prekey_record).await?;
-        let retrieved_prekey = kyber_pre_key_store.get_kyber_pre_key(kyber_prekey_id).await?;
+        kyber_pre_key_store
+            .save_kyber_pre_key(kyber_prekey_id, &kyber_prekey_record)
+            .await?;
+        let retrieved_prekey = kyber_pre_key_store
+            .get_kyber_pre_key(kyber_prekey_id)
+            .await?;
 
         assert_eq!(retrieved_prekey.id()?, kyber_prekey_id);
-        assert_eq!(retrieved_prekey.public_key()?.serialize(), kyber_prekey_record.public_key()?.serialize());
+        assert_eq!(
+            retrieved_prekey.public_key()?.serialize(),
+            kyber_prekey_record.public_key()?.serialize()
+        );
 
-        kyber_pre_key_store.mark_kyber_pre_key_used(kyber_prekey_id).await?;
+        kyber_pre_key_store
+            .mark_kyber_pre_key_used(kyber_prekey_id)
+            .await?;
 
         let non_existent_id = KyberPreKeyId::from(999u32);
         let result = kyber_pre_key_store.get_kyber_pre_key(non_existent_id).await;
@@ -1098,7 +1400,10 @@ mod tests {
             Ok(true)
         }
 
-        async fn get_identity(&self, _address: &ProtocolAddress) -> Result<Option<IdentityKey>, SignalProtocolError> {
+        async fn get_identity(
+            &self,
+            _address: &ProtocolAddress,
+        ) -> Result<Option<IdentityKey>, SignalProtocolError> {
             Ok(None)
         }
     }
@@ -1112,7 +1417,10 @@ mod tests {
         let address = ProtocolAddress::new("test_user".to_string(), DeviceId::new(1)?);
 
         let initial_result = session_store.load_session(&address).await?;
-        assert!(initial_result.is_none(), "No session should exist initially");
+        assert!(
+            initial_result.is_none(),
+            "No session should exist initially"
+        );
 
         // NOTE: Using process_prekey_bundle to create SessionRecord for testing since SessionRecord constructors aren't public
         // This is the intended way to create sessions in libsignal and tests the actual production code path
@@ -1123,7 +1431,8 @@ mod tests {
         let bob_pre_keys = crate::keys::generate_pre_keys(1, 1).await?;
         let bob_signed_pre_key = crate::keys::generate_signed_pre_key(&bob_identity, 1).await?;
         let kyber_keypair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
-        let kyber_signature = bob_identity.private_key()
+        let kyber_signature = bob_identity
+            .private_key()
             .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
 
         let bundle = PreKeyBundle::new(
@@ -1139,8 +1448,8 @@ mod tests {
             *bob_identity.identity_key(),
         )?;
 
-        use std::time::SystemTime;
         use libsignal_protocol::UsePQRatchet;
+        use std::time::SystemTime;
 
         process_prekey_bundle(
             &address,
@@ -1150,10 +1459,14 @@ mod tests {
             SystemTime::now(),
             &mut rng,
             UsePQRatchet::Yes,
-        ).await?;
+        )
+        .await?;
 
         let loaded_session = session_store.load_session(&address).await?;
-        assert!(loaded_session.is_some(), "Session should exist after process_prekey_bundle");
+        assert!(
+            loaded_session.is_some(),
+            "Session should exist after process_prekey_bundle"
+        );
 
         let loaded_session = loaded_session.unwrap();
         let _serialized = loaded_session.serialize()?;
@@ -1172,7 +1485,9 @@ mod tests {
         let prekey_id = PreKeyId::from(42u32);
         let prekey_record = PreKeyRecord::new(prekey_id, &key_pair);
 
-        pre_key_store.save_pre_key(prekey_id, &prekey_record).await?;
+        pre_key_store
+            .save_pre_key(prekey_id, &prekey_record)
+            .await?;
 
         let retrieved_prekey = pre_key_store.get_pre_key(prekey_id).await?;
         assert_eq!(retrieved_prekey.id()?, prekey_id);
@@ -1180,7 +1495,10 @@ mod tests {
         pre_key_store.remove_pre_key(prekey_id).await?;
 
         let result = pre_key_store.get_pre_key(prekey_id).await;
-        assert!(result.is_err(), "PreKey should be removed and no longer retrievable");
+        assert!(
+            result.is_err(),
+            "PreKey should be removed and no longer retrievable"
+        );
 
         pre_key_store.remove_pre_key(prekey_id).await?;
 
@@ -1205,18 +1523,34 @@ mod tests {
         let result = pre_key_store.get_pre_key(PreKeyId::from(999u32)).await;
         assert!(result.is_err(), "Getting nonexistent PreKey should fail");
 
-        let result = signed_pre_key_store.get_signed_pre_key(SignedPreKeyId::from(999u32)).await;
-        assert!(result.is_err(), "Getting nonexistent SignedPreKey should fail");
+        let result = signed_pre_key_store
+            .get_signed_pre_key(SignedPreKeyId::from(999u32))
+            .await;
+        assert!(
+            result.is_err(),
+            "Getting nonexistent SignedPreKey should fail"
+        );
 
-        let result = kyber_pre_key_store.get_kyber_pre_key(KyberPreKeyId::from(999u32)).await;
-        assert!(result.is_err(), "Getting nonexistent KyberPreKey should fail");
+        let result = kyber_pre_key_store
+            .get_kyber_pre_key(KyberPreKeyId::from(999u32))
+            .await;
+        assert!(
+            result.is_err(),
+            "Getting nonexistent KyberPreKey should fail"
+        );
 
         let address = ProtocolAddress::new("nonexistent".to_string(), DeviceId::new(1)?);
         let result = session_store.load_session(&address).await?;
-        assert!(result.is_none(), "Loading nonexistent session should return None");
+        assert!(
+            result.is_none(),
+            "Loading nonexistent session should return None"
+        );
 
         let result = identity_store.get_identity(&address).await?;
-        assert!(result.is_none(), "Getting nonexistent remote identity should return None");
+        assert!(
+            result.is_none(),
+            "Getting nonexistent remote identity should return None"
+        );
 
         Ok(())
     }
@@ -1234,12 +1568,19 @@ mod tests {
         let prekey_record1 = PreKeyRecord::new(prekey_id, &key_pair1);
         let prekey_record2 = PreKeyRecord::new(prekey_id, &key_pair2);
 
-        pre_key_store.save_pre_key(prekey_id, &prekey_record1).await?;
+        pre_key_store
+            .save_pre_key(prekey_id, &prekey_record1)
+            .await?;
 
-        pre_key_store.save_pre_key(prekey_id, &prekey_record2).await?;
+        pre_key_store
+            .save_pre_key(prekey_id, &prekey_record2)
+            .await?;
 
         let retrieved = pre_key_store.get_pre_key(prekey_id).await?;
-        assert_eq!(retrieved.public_key()?.serialize(), prekey_record2.public_key()?.serialize());
+        assert_eq!(
+            retrieved.public_key()?.serialize(),
+            prekey_record2.public_key()?.serialize()
+        );
 
         Ok(())
     }
@@ -1255,24 +1596,47 @@ mod tests {
         let identity2 = IdentityKeyPair::generate(&mut rng);
         let address = ProtocolAddress::new("test_user".to_string(), DeviceId::new(1)?);
 
-        let result = identity_store.save_identity(&address, identity1.identity_key()).await?;
-        assert_eq!(result, IdentityChange::NewOrUnchanged, "First save should be NewOrUnchanged");
+        let result = identity_store
+            .save_identity(&address, identity1.identity_key())
+            .await?;
+        assert_eq!(
+            result,
+            IdentityChange::NewOrUnchanged,
+            "First save should be NewOrUnchanged"
+        );
 
-        let result = identity_store.save_identity(&address, identity1.identity_key()).await?;
-        assert_eq!(result, IdentityChange::NewOrUnchanged, "Same identity should be NewOrUnchanged");
+        let result = identity_store
+            .save_identity(&address, identity1.identity_key())
+            .await?;
+        assert_eq!(
+            result,
+            IdentityChange::NewOrUnchanged,
+            "Same identity should be NewOrUnchanged"
+        );
 
-        let result = identity_store.save_identity(&address, identity2.identity_key()).await?;
-        assert_eq!(result, IdentityChange::ReplacedExisting, "Different identity should be ReplacedExisting");
+        let result = identity_store
+            .save_identity(&address, identity2.identity_key())
+            .await?;
+        assert_eq!(
+            result,
+            IdentityChange::ReplacedExisting,
+            "Different identity should be ReplacedExisting"
+        );
 
         let retrieved = identity_store.get_identity(&address).await?;
         assert!(retrieved.is_some(), "Identity should be retrievable");
-        assert_eq!(retrieved.unwrap().serialize(), identity2.identity_key().serialize(), "New identity should be stored");
+        assert_eq!(
+            retrieved.unwrap().serialize(),
+            identity2.identity_key().serialize(),
+            "New identity should be stored"
+        );
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_extended_storage_ops_session_establishment() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_extended_storage_ops_session_establishment(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
         use libsignal_protocol::*;
 
@@ -1283,8 +1647,18 @@ mod tests {
         let identity_key_pair = generate_identity_key_pair().await?;
         let registration_id = 12345u32;
 
-        storage.identity_store.as_mut().unwrap().set_local_identity_key_pair(&identity_key_pair).await?;
-        storage.identity_store.as_mut().unwrap().set_local_registration_id(registration_id).await?;
+        storage
+            .identity_store
+            .as_mut()
+            .unwrap()
+            .set_local_identity_key_pair(&identity_key_pair)
+            .await?;
+        storage
+            .identity_store
+            .as_mut()
+            .unwrap()
+            .set_local_registration_id(registration_id)
+            .await?;
 
         let bob_address = ProtocolAddress::new("bob".to_string(), DeviceId::new(1)?);
 
@@ -1292,14 +1666,21 @@ mod tests {
         let bob_pre_keys = generate_pre_keys(1, 1).await?;
         let bob_signed_pre_key = generate_signed_pre_key(&bob_identity, 1).await?;
 
-        let kyber_keypair = libsignal_protocol::kem::KeyPair::generate(libsignal_protocol::kem::KeyType::Kyber1024, &mut rng);
-        let kyber_signature = bob_identity.private_key()
+        let kyber_keypair = libsignal_protocol::kem::KeyPair::generate(
+            libsignal_protocol::kem::KeyType::Kyber1024,
+            &mut rng,
+        );
+        let kyber_signature = bob_identity
+            .private_key()
             .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
 
         let bob_bundle = PreKeyBundle::new(
             registration_id,
             DeviceId::new(1)?,
-            Some((PreKeyId::from(bob_pre_keys[0].0), bob_pre_keys[0].1.public_key)),
+            Some((
+                PreKeyId::from(bob_pre_keys[0].0),
+                bob_pre_keys[0].1.public_key,
+            )),
             SignedPreKeyId::from(1u32),
             bob_signed_pre_key.public_key()?,
             bob_signed_pre_key.signature()?.to_vec(),
@@ -1312,19 +1693,29 @@ mod tests {
         let session_count_before = storage.session_store().session_count().await;
         assert_eq!(session_count_before, 0, "Should start with no sessions");
 
-        storage.establish_session_from_bundle(&bob_address, &bob_bundle).await?;
+        storage
+            .establish_session_from_bundle(&bob_address, &bob_bundle)
+            .await?;
 
         let session_count_after = storage.session_store().session_count().await;
-        assert_eq!(session_count_after, 1, "Should have one session after establishment");
+        assert_eq!(
+            session_count_after, 1,
+            "Should have one session after establishment"
+        );
 
-        let has_session = storage.session_store().load_session(&bob_address).await?.is_some();
+        let has_session = storage
+            .session_store()
+            .load_session(&bob_address)
+            .await?
+            .is_some();
         assert!(has_session, "Session should exist for Bob");
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_extended_storage_ops_encrypt_decrypt_message() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_extended_storage_ops_encrypt_decrypt_message(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
         use libsignal_protocol::*;
 
@@ -1336,39 +1727,86 @@ mod tests {
         let mut rng = rand::rng();
         let alice_identity = generate_identity_key_pair().await?;
         let alice_registration_id = 11111u32;
-        alice_storage.identity_store.as_mut().unwrap().set_local_identity_key_pair(&alice_identity).await?;
-        alice_storage.identity_store.as_mut().unwrap().set_local_registration_id(alice_registration_id).await?;
+        alice_storage
+            .identity_store
+            .as_mut()
+            .unwrap()
+            .set_local_identity_key_pair(&alice_identity)
+            .await?;
+        alice_storage
+            .identity_store
+            .as_mut()
+            .unwrap()
+            .set_local_registration_id(alice_registration_id)
+            .await?;
 
         let bob_identity = generate_identity_key_pair().await?;
         let bob_registration_id = 22222u32;
-        bob_storage.identity_store.as_mut().unwrap().set_local_identity_key_pair(&bob_identity).await?;
-        bob_storage.identity_store.as_mut().unwrap().set_local_registration_id(bob_registration_id).await?;
+        bob_storage
+            .identity_store
+            .as_mut()
+            .unwrap()
+            .set_local_identity_key_pair(&bob_identity)
+            .await?;
+        bob_storage
+            .identity_store
+            .as_mut()
+            .unwrap()
+            .set_local_registration_id(bob_registration_id)
+            .await?;
 
         let alice_address = ProtocolAddress::new("alice".to_string(), DeviceId::new(1)?);
         let bob_address = ProtocolAddress::new("bob".to_string(), DeviceId::new(1)?);
 
         let bob_pre_keys = generate_pre_keys(1, 1).await?;
         let bob_signed_pre_key = generate_signed_pre_key(&bob_identity, 1).await?;
-        bob_storage.pre_key_store.as_mut().unwrap().save_pre_key(PreKeyId::from(bob_pre_keys[0].0), &PreKeyRecord::new(PreKeyId::from(bob_pre_keys[0].0), &bob_pre_keys[0].1)).await?;
-        bob_storage.signed_pre_key_store.as_mut().unwrap().save_signed_pre_key(SignedPreKeyId::from(1u32), &bob_signed_pre_key).await?;
+        bob_storage
+            .pre_key_store
+            .as_mut()
+            .unwrap()
+            .save_pre_key(
+                PreKeyId::from(bob_pre_keys[0].0),
+                &PreKeyRecord::new(PreKeyId::from(bob_pre_keys[0].0), &bob_pre_keys[0].1),
+            )
+            .await?;
+        bob_storage
+            .signed_pre_key_store
+            .as_mut()
+            .unwrap()
+            .save_signed_pre_key(SignedPreKeyId::from(1u32), &bob_signed_pre_key)
+            .await?;
 
-        let kyber_keypair = libsignal_protocol::kem::KeyPair::generate(libsignal_protocol::kem::KeyType::Kyber1024, &mut rng);
-        let kyber_signature = bob_identity.private_key()
+        let kyber_keypair = libsignal_protocol::kem::KeyPair::generate(
+            libsignal_protocol::kem::KeyType::Kyber1024,
+            &mut rng,
+        );
+        let kyber_signature = bob_identity
+            .private_key()
             .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
 
         let now = std::time::SystemTime::now();
         let kyber_record = KyberPreKeyRecord::new(
             KyberPreKeyId::from(1u32),
-            Timestamp::from_epoch_millis(now.duration_since(std::time::UNIX_EPOCH)?.as_millis() as u64),
+            Timestamp::from_epoch_millis(
+                now.duration_since(std::time::UNIX_EPOCH)?.as_millis() as u64
+            ),
             &kyber_keypair,
             &kyber_signature,
         );
-        bob_storage.kyber_pre_key_store.as_mut().unwrap().save_kyber_pre_key(KyberPreKeyId::from(1u32), &kyber_record).await?;
+        bob_storage
+            .kyber_pre_key_store
+            .as_mut()
+            .unwrap()
+            .save_kyber_pre_key(KyberPreKeyId::from(1u32), &kyber_record)
+            .await?;
 
         let bob_bundle = PreKeyBundle::new(
             bob_registration_id,
             DeviceId::new(1)?,
-            Some((PreKeyId::from(bob_pre_keys[0].0), bob_pre_keys[0].1.public_key)),
+            Some((
+                PreKeyId::from(bob_pre_keys[0].0),
+                bob_pre_keys[0].1.public_key,
+            )),
             SignedPreKeyId::from(1u32),
             bob_signed_pre_key.public_key()?,
             bob_signed_pre_key.signature()?.to_vec(),
@@ -1378,27 +1816,55 @@ mod tests {
             *bob_identity.identity_key(),
         )?;
 
-        alice_storage.establish_session_from_bundle(&bob_address, &bob_bundle).await?;
+        alice_storage
+            .establish_session_from_bundle(&bob_address, &bob_bundle)
+            .await?;
 
         let plaintext = b"Hello, Bob! This is a test message.";
-        let ciphertext = alice_storage.encrypt_message(&bob_address, plaintext).await?;
+        let ciphertext = alice_storage
+            .encrypt_message(&bob_address, plaintext)
+            .await?;
 
-        assert!(matches!(ciphertext.message_type(), CiphertextMessageType::PreKey),
-               "First message should be a PreKey message");
+        assert!(
+            matches!(ciphertext.message_type(), CiphertextMessageType::PreKey),
+            "First message should be a PreKey message"
+        );
 
-        bob_storage.identity_store.as_mut().unwrap().save_identity(&alice_address, alice_identity.identity_key()).await?;
-        let decrypted = bob_storage.decrypt_message(&alice_address, &ciphertext).await?;
+        bob_storage
+            .identity_store
+            .as_mut()
+            .unwrap()
+            .save_identity(&alice_address, alice_identity.identity_key())
+            .await?;
+        let decrypted = bob_storage
+            .decrypt_message(&alice_address, &ciphertext)
+            .await?;
 
-        assert_eq!(decrypted, plaintext, "Decrypted message should match original");
+        assert_eq!(
+            decrypted, plaintext,
+            "Decrypted message should match original"
+        );
 
         let response_plaintext = b"Hello, Alice! Got your message.";
-        let response_ciphertext = bob_storage.encrypt_message(&alice_address, response_plaintext).await?;
+        let response_ciphertext = bob_storage
+            .encrypt_message(&alice_address, response_plaintext)
+            .await?;
 
-        assert!(matches!(response_ciphertext.message_type(), CiphertextMessageType::Whisper),
-               "Response message should be a Whisper message");
+        assert!(
+            matches!(
+                response_ciphertext.message_type(),
+                CiphertextMessageType::Whisper
+            ),
+            "Response message should be a Whisper message"
+        );
 
-        let response_decrypted = alice_storage.decrypt_message(&bob_address, &response_ciphertext).await?;
-        assert_eq!(response_decrypted, response_plaintext, "Response should decrypt correctly");
+        let response_decrypted = alice_storage
+            .decrypt_message(&bob_address, &response_ciphertext)
+            .await?;
+        assert_eq!(
+            response_decrypted, response_plaintext,
+            "Response should decrypt correctly"
+        );
 
         Ok(())
     }
@@ -1412,18 +1878,24 @@ mod tests {
 
         let plaintext = b"test message";
         let encrypt_result = storage.encrypt_message(&invalid_address, plaintext).await;
-        assert!(encrypt_result.is_err(), "Should fail to encrypt without session");
+        assert!(
+            encrypt_result.is_err(),
+            "Should fail to encrypt without session"
+        );
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_sqlite_extended_storage_ops_integration() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_sqlite_extended_storage_ops_integration() -> Result<(), Box<dyn std::error::Error>>
+    {
         use libsignal_protocol::*;
 
         use crate::keys::{generate_identity_key_pair, generate_pre_keys, generate_signed_pre_key};
         use crate::sqlite_storage::SqliteStorage;
-        use crate::storage_trait::{ExtendedStorageOps, SignalStorageContainer, ExtendedIdentityStore, ExtendedSessionStore};
+        use crate::storage_trait::{
+            ExtendedIdentityStore, ExtendedSessionStore, ExtendedStorageOps, SignalStorageContainer,
+        };
         use std::fs;
 
         let process_id = std::process::id();
@@ -1456,39 +1928,72 @@ mod tests {
         let mut rng = rand::rng();
         let alice_identity = generate_identity_key_pair().await?;
         let alice_registration_id = 11111u32;
-        alice_storage.identity_store().set_local_identity_key_pair(&alice_identity).await?;
-        alice_storage.identity_store().set_local_registration_id(alice_registration_id).await?;
+        alice_storage
+            .identity_store()
+            .set_local_identity_key_pair(&alice_identity)
+            .await?;
+        alice_storage
+            .identity_store()
+            .set_local_registration_id(alice_registration_id)
+            .await?;
 
         let bob_identity = generate_identity_key_pair().await?;
         let bob_registration_id = 22222u32;
-        bob_storage.identity_store().set_local_identity_key_pair(&bob_identity).await?;
-        bob_storage.identity_store().set_local_registration_id(bob_registration_id).await?;
+        bob_storage
+            .identity_store()
+            .set_local_identity_key_pair(&bob_identity)
+            .await?;
+        bob_storage
+            .identity_store()
+            .set_local_registration_id(bob_registration_id)
+            .await?;
 
         let alice_address = ProtocolAddress::new("alice".to_string(), DeviceId::new(1)?);
         let bob_address = ProtocolAddress::new("bob".to_string(), DeviceId::new(1)?);
 
         let bob_pre_keys = generate_pre_keys(1, 1).await?;
         let bob_signed_pre_key = generate_signed_pre_key(&bob_identity, 1).await?;
-        bob_storage.pre_key_store().save_pre_key(PreKeyId::from(bob_pre_keys[0].0), &PreKeyRecord::new(PreKeyId::from(bob_pre_keys[0].0), &bob_pre_keys[0].1)).await?;
-        bob_storage.signed_pre_key_store().save_signed_pre_key(SignedPreKeyId::from(1u32), &bob_signed_pre_key).await?;
+        bob_storage
+            .pre_key_store()
+            .save_pre_key(
+                PreKeyId::from(bob_pre_keys[0].0),
+                &PreKeyRecord::new(PreKeyId::from(bob_pre_keys[0].0), &bob_pre_keys[0].1),
+            )
+            .await?;
+        bob_storage
+            .signed_pre_key_store()
+            .save_signed_pre_key(SignedPreKeyId::from(1u32), &bob_signed_pre_key)
+            .await?;
 
-        let kyber_keypair = libsignal_protocol::kem::KeyPair::generate(libsignal_protocol::kem::KeyType::Kyber1024, &mut rng);
-        let kyber_signature = bob_identity.private_key()
+        let kyber_keypair = libsignal_protocol::kem::KeyPair::generate(
+            libsignal_protocol::kem::KeyType::Kyber1024,
+            &mut rng,
+        );
+        let kyber_signature = bob_identity
+            .private_key()
             .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
 
         let now = std::time::SystemTime::now();
         let kyber_record = KyberPreKeyRecord::new(
             KyberPreKeyId::from(1u32),
-            Timestamp::from_epoch_millis(now.duration_since(std::time::UNIX_EPOCH)?.as_millis() as u64),
+            Timestamp::from_epoch_millis(
+                now.duration_since(std::time::UNIX_EPOCH)?.as_millis() as u64
+            ),
             &kyber_keypair,
             &kyber_signature,
         );
-        bob_storage.kyber_pre_key_store().save_kyber_pre_key(KyberPreKeyId::from(1u32), &kyber_record).await?;
+        bob_storage
+            .kyber_pre_key_store()
+            .save_kyber_pre_key(KyberPreKeyId::from(1u32), &kyber_record)
+            .await?;
 
         let bob_bundle = PreKeyBundle::new(
             bob_registration_id,
             DeviceId::new(1)?,
-            Some((PreKeyId::from(bob_pre_keys[0].0), bob_pre_keys[0].1.public_key)),
+            Some((
+                PreKeyId::from(bob_pre_keys[0].0),
+                bob_pre_keys[0].1.public_key,
+            )),
             SignedPreKeyId::from(1u32),
             bob_signed_pre_key.public_key()?,
             bob_signed_pre_key.signature()?.to_vec(),
@@ -1498,35 +2003,72 @@ mod tests {
             *bob_identity.identity_key(),
         )?;
 
-        alice_storage.establish_session_from_bundle(&bob_address, &bob_bundle).await?;
+        alice_storage
+            .establish_session_from_bundle(&bob_address, &bob_bundle)
+            .await?;
 
-        assert_eq!(alice_storage.session_store().session_count().await, 1, "Alice should have established session with Bob");
+        assert_eq!(
+            alice_storage.session_store().session_count().await,
+            1,
+            "Alice should have established session with Bob"
+        );
 
         let plaintext = b"Hello Bob! This is an integration test with real SQLite files.";
-        let ciphertext = alice_storage.encrypt_message(&bob_address, plaintext).await?;
+        let ciphertext = alice_storage
+            .encrypt_message(&bob_address, plaintext)
+            .await?;
 
-        assert!(matches!(ciphertext.message_type(), CiphertextMessageType::PreKey),
-               "First message should be a PreKey message");
+        assert!(
+            matches!(ciphertext.message_type(), CiphertextMessageType::PreKey),
+            "First message should be a PreKey message"
+        );
 
-        bob_storage.identity_store().save_identity(&alice_address, alice_identity.identity_key()).await?;
-        let decrypted = bob_storage.decrypt_message(&alice_address, &ciphertext).await?;
+        bob_storage
+            .identity_store()
+            .save_identity(&alice_address, alice_identity.identity_key())
+            .await?;
+        let decrypted = bob_storage
+            .decrypt_message(&alice_address, &ciphertext)
+            .await?;
 
-        assert_eq!(decrypted, plaintext, "Decrypted message should match original");
+        assert_eq!(
+            decrypted, plaintext,
+            "Decrypted message should match original"
+        );
 
-        let response_plaintext = b"Hello Alice! Integration test successful with persistent SQLite storage!";
-        let response_ciphertext = bob_storage.encrypt_message(&alice_address, response_plaintext).await?;
+        let response_plaintext =
+            b"Hello Alice! Integration test successful with persistent SQLite storage!";
+        let response_ciphertext = bob_storage
+            .encrypt_message(&alice_address, response_plaintext)
+            .await?;
 
-        assert!(matches!(response_ciphertext.message_type(), CiphertextMessageType::Whisper),
-               "Response message should be a Whisper message");
+        assert!(
+            matches!(
+                response_ciphertext.message_type(),
+                CiphertextMessageType::Whisper
+            ),
+            "Response message should be a Whisper message"
+        );
 
-        let response_decrypted = alice_storage.decrypt_message(&bob_address, &response_ciphertext).await?;
-        assert_eq!(response_decrypted, response_plaintext, "Response should decrypt correctly");
+        let response_decrypted = alice_storage
+            .decrypt_message(&bob_address, &response_ciphertext)
+            .await?;
+        assert_eq!(
+            response_decrypted, response_plaintext,
+            "Response should decrypt correctly"
+        );
 
         alice_storage.close()?;
         bob_storage.close()?;
 
-        assert!(db_path.exists(), "SQLite database file should exist after test");
-        assert!(db_path2.exists(), "Bob's SQLite database file should exist after test");
+        assert!(
+            db_path.exists(),
+            "SQLite database file should exist after test"
+        );
+        assert!(
+            db_path2.exists(),
+            "Bob's SQLite database file should exist after test"
+        );
 
         drop(alice_storage);
         drop(bob_storage);
@@ -1541,9 +2083,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_sqlite_storage_preserves_identity_across_instantiations() -> Result<(), Box<dyn std::error::Error>> {
+    async fn test_sqlite_storage_preserves_identity_across_instantiations(
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use crate::keys::generate_identity_key_pair;
-        use std::{fs, env};
+        use std::{env, fs};
 
         let temp_dir = env::temp_dir();
         let process_id = std::process::id();
@@ -1552,7 +2095,10 @@ mod tests {
             .unwrap()
             .as_millis();
 
-        let db_path = temp_dir.join(format!("test_identity_persistence_{}_{}.db", process_id, timestamp));
+        let db_path = temp_dir.join(format!(
+            "test_identity_persistence_{}_{}.db",
+            process_id, timestamp
+        ));
         let db_path_str = db_path.to_str().unwrap();
 
         let (original_identity, original_registration_id) = {
@@ -1562,8 +2108,14 @@ mod tests {
             let identity = generate_identity_key_pair().await?;
             let registration_id = 12345u32;
 
-            storage.identity_store().set_local_identity_key_pair(&identity).await?;
-            storage.identity_store().set_local_registration_id(registration_id).await?;
+            storage
+                .identity_store()
+                .set_local_identity_key_pair(&identity)
+                .await?;
+            storage
+                .identity_store()
+                .set_local_registration_id(registration_id)
+                .await?;
 
             (identity, registration_id)
         }; // Storage goes out of scope here, simulating program restart
@@ -1572,8 +2124,14 @@ mod tests {
             let mut storage_reopened = SqliteStorage::new(db_path_str).await?;
             storage_reopened.initialize()?;
 
-            let retrieved_identity = storage_reopened.identity_store().get_identity_key_pair().await?;
-            let retrieved_registration_id = storage_reopened.identity_store().get_local_registration_id().await?;
+            let retrieved_identity = storage_reopened
+                .identity_store()
+                .get_identity_key_pair()
+                .await?;
+            let retrieved_registration_id = storage_reopened
+                .identity_store()
+                .get_local_registration_id()
+                .await?;
 
             assert_eq!(
                 retrieved_identity.identity_key().serialize(),
@@ -1581,8 +2139,7 @@ mod tests {
                 "Identity key should be preserved across storage instantiations"
             );
             assert_eq!(
-                retrieved_registration_id,
-                original_registration_id,
+                retrieved_registration_id, original_registration_id,
                 "Registration ID should be preserved across storage instantiations"
             );
         }
@@ -1602,8 +2159,14 @@ mod tests {
 
         let identity = generate_identity_key_pair().await?;
         let registration_id = 12345u32;
-        storage.identity_store().set_local_identity_key_pair(&identity).await?;
-        storage.identity_store().set_local_registration_id(registration_id).await?;
+        storage
+            .identity_store()
+            .set_local_identity_key_pair(&identity)
+            .await?;
+        storage
+            .identity_store()
+            .set_local_registration_id(registration_id)
+            .await?;
 
         let bob_address = ProtocolAddress::new("bob".to_string(), DeviceId::new(1)?);
         let charlie_address = ProtocolAddress::new("charlie".to_string(), DeviceId::new(1)?);
@@ -1614,13 +2177,17 @@ mod tests {
 
         let mut rng = rand::rng();
         let kyber_keypair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
-        let kyber_signature = bob_identity.private_key()
+        let kyber_signature = bob_identity
+            .private_key()
             .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
 
         let bob_bundle = PreKeyBundle::new(
             registration_id,
             DeviceId::new(1)?,
-            Some((PreKeyId::from(bob_pre_keys[0].0), bob_pre_keys[0].1.public_key)),
+            Some((
+                PreKeyId::from(bob_pre_keys[0].0),
+                bob_pre_keys[0].1.public_key,
+            )),
             SignedPreKeyId::from(1u32),
             bob_signed_pre_key.public_key()?,
             bob_signed_pre_key.signature()?.to_vec(),
@@ -1630,33 +2197,54 @@ mod tests {
             *bob_identity.identity_key(),
         )?;
 
-        storage.establish_session_from_bundle(&bob_address, &bob_bundle).await?;
-        storage.establish_session_from_bundle(&charlie_address, &bob_bundle).await?;
+        storage
+            .establish_session_from_bundle(&bob_address, &bob_bundle)
+            .await?;
+        storage
+            .establish_session_from_bundle(&charlie_address, &bob_bundle)
+            .await?;
 
-        assert_eq!(storage.session_store().session_count().await, 2, "Should have 2 sessions");
+        assert_eq!(
+            storage.session_store().session_count().await,
+            2,
+            "Should have 2 sessions"
+        );
 
         storage.session_store().delete_session(&bob_address).await?;
-        assert_eq!(storage.session_store().session_count().await, 1, "Should have 1 session after deleting Bob's");
+        assert_eq!(
+            storage.session_store().session_count().await,
+            1,
+            "Should have 1 session after deleting Bob's"
+        );
 
         let bob_session = storage.session_store().load_session(&bob_address).await?;
         assert!(bob_session.is_none(), "Bob's session should be deleted");
 
-        let charlie_session = storage.session_store().load_session(&charlie_address).await?;
-        assert!(charlie_session.is_some(), "Charlie's session should still exist");
+        let charlie_session = storage
+            .session_store()
+            .load_session(&charlie_address)
+            .await?;
+        assert!(
+            charlie_session.is_some(),
+            "Charlie's session should still exist"
+        );
 
         Ok(())
     }
 
     #[tokio::test]
     async fn test_identity_management_operations() -> Result<(), Box<dyn std::error::Error>> {
-        use libsignal_protocol::*;
         use crate::keys::generate_identity_key_pair;
+        use libsignal_protocol::*;
 
         let mut storage = SqliteStorage::new(":memory:").await?;
         storage.initialize()?;
 
         let local_identity = generate_identity_key_pair().await?;
-        storage.identity_store().set_local_identity_key_pair(&local_identity).await?;
+        storage
+            .identity_store()
+            .set_local_identity_key_pair(&local_identity)
+            .await?;
 
         let bob_address = ProtocolAddress::new("bob".to_string(), DeviceId::new(1)?);
         let charlie_address = ProtocolAddress::new("charlie".to_string(), DeviceId::new(1)?);
@@ -1664,55 +2252,123 @@ mod tests {
         let bob_identity = generate_identity_key_pair().await?;
         let charlie_identity = generate_identity_key_pair().await?;
 
-        let result = storage.identity_store().get_peer_identity(&bob_address).await?;
-        assert!(result.is_none(), "Should return None for non-existent peer identity");
+        let result = storage
+            .identity_store()
+            .get_peer_identity(&bob_address)
+            .await?;
+        assert!(
+            result.is_none(),
+            "Should return None for non-existent peer identity"
+        );
 
-        storage.identity_store().save_identity(&bob_address, bob_identity.identity_key()).await?;
-        storage.identity_store().save_identity(&charlie_address, charlie_identity.identity_key()).await?;
+        storage
+            .identity_store()
+            .save_identity(&bob_address, bob_identity.identity_key())
+            .await?;
+        storage
+            .identity_store()
+            .save_identity(&charlie_address, charlie_identity.identity_key())
+            .await?;
 
-        assert_eq!(storage.identity_store().identity_count().await, 2, "Should have 2 peer identities");
+        assert_eq!(
+            storage.identity_store().identity_count().await,
+            2,
+            "Should have 2 peer identities"
+        );
 
-        let retrieved_bob = storage.identity_store().get_peer_identity(&bob_address).await?;
+        let retrieved_bob = storage
+            .identity_store()
+            .get_peer_identity(&bob_address)
+            .await?;
         assert!(retrieved_bob.is_some(), "Should retrieve Bob's identity");
-        assert_eq!(retrieved_bob.unwrap(), *bob_identity.identity_key(), "Retrieved identity should match stored");
+        assert_eq!(
+            retrieved_bob.unwrap(),
+            *bob_identity.identity_key(),
+            "Retrieved identity should match stored"
+        );
 
-        let retrieved_charlie = storage.identity_store().get_peer_identity(&charlie_address).await?;
-        assert!(retrieved_charlie.is_some(), "Should retrieve Charlie's identity");
-        assert_eq!(retrieved_charlie.unwrap(), *charlie_identity.identity_key(), "Retrieved identity should match stored");
+        let retrieved_charlie = storage
+            .identity_store()
+            .get_peer_identity(&charlie_address)
+            .await?;
+        assert!(
+            retrieved_charlie.is_some(),
+            "Should retrieve Charlie's identity"
+        );
+        assert_eq!(
+            retrieved_charlie.unwrap(),
+            *charlie_identity.identity_key(),
+            "Retrieved identity should match stored"
+        );
 
-        storage.identity_store().delete_identity(&bob_address).await?;
-        assert_eq!(storage.identity_store().identity_count().await, 1, "Should have 1 identity after deleting Bob's");
+        storage
+            .identity_store()
+            .delete_identity(&bob_address)
+            .await?;
+        assert_eq!(
+            storage.identity_store().identity_count().await,
+            1,
+            "Should have 1 identity after deleting Bob's"
+        );
 
-        let deleted_bob = storage.identity_store().get_peer_identity(&bob_address).await?;
+        let deleted_bob = storage
+            .identity_store()
+            .get_peer_identity(&bob_address)
+            .await?;
         assert!(deleted_bob.is_none(), "Bob's identity should be deleted");
 
-        let still_charlie = storage.identity_store().get_peer_identity(&charlie_address).await?;
-        assert!(still_charlie.is_some(), "Charlie's identity should still exist");
+        let still_charlie = storage
+            .identity_store()
+            .get_peer_identity(&charlie_address)
+            .await?;
+        assert!(
+            still_charlie.is_some(),
+            "Charlie's identity should still exist"
+        );
 
         storage.identity_store().clear_all_identities().await?;
-        assert_eq!(storage.identity_store().identity_count().await, 0, "Should have 0 identities after clearing all");
+        assert_eq!(
+            storage.identity_store().identity_count().await,
+            0,
+            "Should have 0 identities after clearing all"
+        );
 
-        let cleared_charlie = storage.identity_store().get_peer_identity(&charlie_address).await?;
-        assert!(cleared_charlie.is_none(), "Charlie's identity should be cleared");
+        let cleared_charlie = storage
+            .identity_store()
+            .get_peer_identity(&charlie_address)
+            .await?;
+        assert!(
+            cleared_charlie.is_none(),
+            "Charlie's identity should be cleared"
+        );
 
         Ok(())
     }
 
     #[tokio::test]
     async fn test_clear_local_identity() -> Result<(), Box<dyn std::error::Error>> {
-        use libsignal_protocol::*;
         use crate::keys::generate_identity_key_pair;
+        use libsignal_protocol::*;
 
         let mut storage = SqliteStorage::new(":memory:").await?;
         storage.initialize()?;
 
         let identity = generate_identity_key_pair().await?;
         let registration_id = 12345u32;
-        storage.identity_store().set_local_identity_key_pair(&identity).await?;
-        storage.identity_store().set_local_registration_id(registration_id).await?;
+        storage
+            .identity_store()
+            .set_local_identity_key_pair(&identity)
+            .await?;
+        storage
+            .identity_store()
+            .set_local_registration_id(registration_id)
+            .await?;
 
         let retrieved_identity = storage.identity_store().get_identity_key_pair().await?;
-        assert_eq!(retrieved_identity.identity_key().serialize(), identity.identity_key().serialize());
+        assert_eq!(
+            retrieved_identity.identity_key().serialize(),
+            identity.identity_key().serialize()
+        );
 
         let retrieved_registration = storage.identity_store().get_local_registration_id().await?;
         assert_eq!(retrieved_registration, registration_id);
@@ -1720,10 +2376,16 @@ mod tests {
         storage.identity_store().clear_local_identity().await?;
 
         let result = storage.identity_store().get_identity_key_pair().await;
-        assert!(result.is_err(), "Should return error when local identity is cleared");
+        assert!(
+            result.is_err(),
+            "Should return error when local identity is cleared"
+        );
 
         let result = storage.identity_store().get_local_registration_id().await;
-        assert!(result.is_err(), "Should return error when local registration ID is cleared");
+        assert!(
+            result.is_err(),
+            "Should return error when local registration ID is cleared"
+        );
 
         Ok(())
     }

@@ -1,0 +1,15 @@
+# Rust formatting configuration for radix-relay
+# This file configures rustfmt to maintain consistent code style across the project
+
+# Basic formatting options
+edition = "2021"
+max_width = 100
+hard_tabs = false
+tab_spaces = 4
+
+# Code style preferences
+newline_style = "Unix"
+use_small_heuristics = "Default"
+
+# Function and method formatting
+fn_params_layout = "Tall"
