@@ -6,7 +6,7 @@ target_link_libraries(
   radix_relay_core
   INTERFACE
           fmt::fmt
-          crypto_utils_cxx)
+          signal_bridge_cxx)
 
 target_include_directories(radix_relay_core ${WARNING_GUARD} INTERFACE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
                                                                      $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>

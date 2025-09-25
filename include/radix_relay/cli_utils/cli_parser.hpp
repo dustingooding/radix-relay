@@ -1,7 +1,7 @@
 #pragma once
 
 #include <CLI/CLI.hpp>
-#include <cstdlib>
+#include <radix_relay/platform/env_utils.hpp>
 #include <spdlog/spdlog.h>
 #include <string>
 
@@ -9,7 +9,7 @@ namespace radix_relay {
 
 struct CliArgs
 {
-  std::string identity_path = "~/.radix/identity.key";
+  std::string identity_path = "~/.radix/identity.db";
   std::string mode = "hybrid";
   bool verbose = false;
   bool show_version = false;
@@ -37,6 +37,8 @@ inline auto parse_cli_args(int argc, char **argv) -> CliArgs
     app.exit(e);
     std::exit(e.get_exit_code());
   }
+
+  args.identity_path = platform::expand_tilde_path(args.identity_path);
 
   return args;
 }

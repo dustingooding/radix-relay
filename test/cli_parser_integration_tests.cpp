@@ -160,7 +160,7 @@ TEST_CASE("CLI parsing defaults", "[cli_utils][cli_parser][integration]")
 
     auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.identity_path == "~/.radix/identity.key");
+    REQUIRE(parsed.identity_path.ends_with("/.radix/identity.db"));
     REQUIRE(parsed.mode == "hybrid");
     REQUIRE(parsed.verbose == false);
     REQUIRE(parsed.show_version == false);

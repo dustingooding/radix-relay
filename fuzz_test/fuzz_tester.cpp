@@ -1,6 +1,9 @@
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <radix_relay/cli.hpp>
+#include <radix_relay/node_identity.hpp>
+#include <radix_relay/platform/env_utils.hpp>
 #include <radix_relay/standard_event_handler.hpp>
 #include <string>
 #include <utility>
@@ -12,13 +15,19 @@ extern "C" auto LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) -> int
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   const std::string input(reinterpret_cast<const char *>(Data), Size);
 
-  const radix_relay::StandardEventHandler::command_handler_t command_handler;
+  auto db_path =
+    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "fuzz_signal_bridge.db").string();
+  auto bridge = radix_relay::new_signal_bridge(db_path.c_str());
+  const radix_relay::StandardEventHandler::command_handler_t command_handler{ std::move(bridge) };
   const radix_relay::StandardEventHandler event_handler{ command_handler };
   radix_relay::InteractiveCli cli("fuzz-node", "hybrid", event_handler);
 
   using CliType = decltype(cli);
   std::ignore = CliType::should_quit(input);
   std::ignore = cli.handle_command(input);
+
+  // Cleanup: Remove the temporary database file
+  std::ignore = std::filesystem::remove(db_path);
 
   return 0;
 }

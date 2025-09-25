@@ -1,15 +1,20 @@
 #include <catch2/catch_test_macros.hpp>
+#include <cstdio>
+#include <filesystem>
 #include <sstream>
+#include <tuple>
 #include <vector>
 
 #include <radix_relay/cli_utils/app_init.hpp>
 #include <radix_relay/cli_utils/cli_parser.hpp>
+#include <radix_relay/node_identity.hpp>
+#include <radix_relay/platform/env_utils.hpp>
 
 TEST_CASE("CliArgs default values", "[cli_utils][cli_parser]")
 {
   radix_relay::CliArgs args;
 
-  REQUIRE(args.identity_path == "~/.radix/identity.key");
+  REQUIRE(args.identity_path == "~/.radix/identity.db");
   REQUIRE(args.mode == "hybrid");
   REQUIRE(args.verbose == false);
   REQUIRE(args.show_version == false);
@@ -94,43 +99,76 @@ TEST_CASE("validate_cli_args validates send command", "[cli_utils][cli_parser]")
 
 TEST_CASE("execute_cli_command handles version flag", "[cli_utils][app_init]")
 {
+  auto bridge = radix_relay::new_signal_bridge(
+    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_version.db").string());
+  const radix_relay::StandardEventHandler::command_handler_t command_handler{ std::move(bridge) };
   radix_relay::CliArgs args;
   args.show_version = true;
 
-  REQUIRE(radix_relay::execute_cli_command(args) == true);
+  REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
+  std::ignore =
+    std::remove((std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_version.db")
+        .string()
+        .c_str());
 }
 
 TEST_CASE("execute_cli_command handles send command", "[cli_utils][app_init]")
 {
+  auto bridge = radix_relay::new_signal_bridge(
+    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_send.db").string());
+  const radix_relay::StandardEventHandler::command_handler_t command_handler{ std::move(bridge) };
   radix_relay::CliArgs args;
   args.send_parsed = true;
   args.send_recipient = "alice";
   args.send_message = "test message";
 
-  REQUIRE(radix_relay::execute_cli_command(args) == true);
+  REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
+  std::ignore = std::remove(
+    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_send.db").string().c_str());
 }
 
 TEST_CASE("execute_cli_command handles peers command", "[cli_utils][app_init]")
 {
+  auto bridge = radix_relay::new_signal_bridge(
+    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_peers.db").string());
+  const radix_relay::StandardEventHandler::command_handler_t command_handler{ std::move(bridge) };
   radix_relay::CliArgs args;
   args.peers_parsed = true;
 
-  REQUIRE(radix_relay::execute_cli_command(args) == true);
+  REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
+  std::ignore =
+    std::remove((std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_peers.db")
+        .string()
+        .c_str());
 }
 
 TEST_CASE("execute_cli_command handles status command", "[cli_utils][app_init]")
 {
+  auto bridge = radix_relay::new_signal_bridge(
+    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_status.db").string());
+  const radix_relay::StandardEventHandler::command_handler_t command_handler{ std::move(bridge) };
   radix_relay::CliArgs args;
   args.status_parsed = true;
 
-  REQUIRE(radix_relay::execute_cli_command(args) == true);
+  REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
+  std::ignore =
+    std::remove((std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_status.db")
+        .string()
+        .c_str());
 }
 
 TEST_CASE("execute_cli_command returns false for no commands", "[cli_utils][app_init]")
 {
+  auto bridge = radix_relay::new_signal_bridge(
+    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_false.db").string());
+  const radix_relay::StandardEventHandler::command_handler_t command_handler{ std::move(bridge) };
   const radix_relay::CliArgs args;
 
-  REQUIRE(radix_relay::execute_cli_command(args) == false);
+  REQUIRE(radix_relay::execute_cli_command(args, command_handler) == false);
+  std::ignore =
+    std::remove((std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_false.db")
+        .string()
+        .c_str());
 }
 
 TEST_CASE("configure_logging sets debug level when verbose", "[cli_utils][app_init]")
@@ -152,11 +190,19 @@ TEST_CASE("configure_logging sets debug level when verbose", "[cli_utils][app_in
 
 TEST_CASE("get_node_fingerprint returns valid fingerprint", "[cli_utils][app_init]")
 {
-  auto fingerprint = radix_relay::get_node_fingerprint();
+  auto bridge = radix_relay::new_signal_bridge(
+    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_cli_utils_fingerprint.db").string());
+  auto fingerprint = radix_relay::get_node_fingerprint(*bridge);
 
   REQUIRE_FALSE(fingerprint.empty());
   REQUIRE(fingerprint.starts_with("RDX:"));
   REQUIRE(fingerprint.length() == 68);
+
+  // Clean up test database
+  std::ignore =
+    std::remove((std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_cli_utils_fingerprint.db")
+        .string()
+        .c_str());
 }
 
 TEST_CASE("AppState construction", "[cli_utils][app_init]")

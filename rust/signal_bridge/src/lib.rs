@@ -22,9 +22,19 @@ use crate::storage_trait::{
     ExtendedSignedPreKeyStore, ExtendedStorageOps, SignalStorageContainer,
 };
 use libsignal_protocol::{
-    CiphertextMessage, DeviceId, IdentityKeyPair, ProtocolAddress, SessionStore,
+    CiphertextMessage, DeviceId, IdentityKeyPair, IdentityKeyStore, ProtocolAddress, SessionStore,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NodeIdentity {
+    pub hostname: String,
+    pub username: String,
+    pub platform: String,
+    pub mac_address: String,
+    pub install_id: String,
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 struct SerializablePreKeyBundle {
@@ -125,6 +135,10 @@ impl SignalBridge {
     }
 
     pub async fn new(db_path: &str) -> Result<Self, SignalBridgeError> {
+        if let Some(parent) = std::path::Path::new(db_path).parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
         let mut storage = SqliteStorage::new(db_path).await?;
         storage.initialize()?;
 
@@ -135,7 +149,7 @@ impl SignalBridge {
 
         Self::ensure_keys_exist(&mut storage).await?;
 
-        println!("SignalBridge initialized with {} storage, {} existing sessions, {} identities, {} pre-keys, {} signed pre-keys, {} kyber pre-keys",
+        println!("SignalBridge initialized with {} storage, {} existing sessions, {} peer identities, {} pre-keys, {} signed pre-keys, {} kyber pre-keys",
                  storage.storage_type(),
                  storage.session_store().session_count().await,
                  storage.identity_store().identity_count().await,
@@ -417,6 +431,38 @@ impl SignalBridge {
         println!("Identity reset complete - new identity generated with fresh keys");
         Ok(())
     }
+
+    pub async fn generate_node_fingerprint(
+        &mut self,
+        node_identity: &NodeIdentity,
+    ) -> Result<String, SignalBridgeError> {
+        let identity_key_pair = self
+            .storage
+            .identity_store()
+            .get_identity_key_pair()
+            .await?;
+        let registration_id = self
+            .storage
+            .identity_store()
+            .get_local_registration_id()
+            .await?;
+
+        let mut hasher = Sha256::new();
+
+        hasher.update(identity_key_pair.identity_key().serialize());
+        hasher.update(registration_id.to_be_bytes());
+
+        hasher.update(node_identity.hostname.as_bytes());
+        hasher.update(node_identity.username.as_bytes());
+        hasher.update(node_identity.platform.as_bytes());
+        hasher.update(node_identity.mac_address.as_bytes());
+        hasher.update(node_identity.install_id.as_bytes());
+
+        hasher.update(b"radix-node-fingerprint");
+
+        let result = hasher.finalize();
+        Ok(format!("RDX:{:x}", result))
+    }
 }
 
 impl Drop for SignalBridge {
@@ -479,6 +525,118 @@ impl From<std::num::TryFromIntError> for SignalBridgeError {
     fn from(err: std::num::TryFromIntError) -> Self {
         SignalBridgeError::InvalidInput(format!("Integer conversion error: {}", err))
     }
+}
+
+impl From<std::io::Error> for SignalBridgeError {
+    fn from(err: std::io::Error) -> Self {
+        SignalBridgeError::Storage(format!("Filesystem error: {}", err))
+    }
+}
+
+// CXX Bridge for C++ interop
+// Note: CXX doesn't support async functions, so we use sync wrappers with internal Tokio runtime
+#[cxx::bridge(namespace = "radix_relay")]
+mod ffi {
+    #[derive(Debug)]
+    pub struct NodeIdentity {
+        pub hostname: String,
+        pub username: String,
+        pub platform: String,
+        pub mac_address: String,
+        pub install_id: String,
+    }
+
+    extern "Rust" {
+        type SignalBridge;
+
+        // RAII: Single constructor handles all complexity
+        fn new_signal_bridge(db_path: &str) -> Box<SignalBridge>;
+
+        // Core crypto operations - sync wrappers for async functions
+        fn encrypt_message(bridge: &mut SignalBridge, peer: &str, plaintext: &[u8]) -> Vec<u8>;
+
+        fn decrypt_message(bridge: &mut SignalBridge, peer: &str, ciphertext: &[u8]) -> Vec<u8>;
+
+        fn establish_session(bridge: &mut SignalBridge, peer: &str, bundle: &[u8]);
+
+        fn generate_pre_key_bundle(bridge: &mut SignalBridge) -> Vec<u8>;
+
+        // Session management
+        fn clear_peer_session(bridge: &mut SignalBridge, peer: &str);
+
+        fn clear_all_sessions(bridge: &mut SignalBridge);
+
+        fn reset_identity(bridge: &mut SignalBridge);
+
+        // Node fingerprint generation
+        fn generate_node_fingerprint(bridge: &mut SignalBridge, identity: NodeIdentity) -> String;
+    }
+}
+
+// CXX Bridge implementation functions - sync wrappers for async methods
+// Note: Panics on error for simplicity. C++ can catch exceptions.
+pub fn new_signal_bridge(db_path: &str) -> Box<SignalBridge> {
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    let bridge = rt
+        .block_on(SignalBridge::new(db_path))
+        .expect("Failed to create SignalBridge");
+    Box::new(bridge)
+}
+
+pub fn encrypt_message(bridge: &mut SignalBridge, peer: &str, plaintext: &[u8]) -> Vec<u8> {
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    rt.block_on(bridge.encrypt_message(peer, plaintext))
+        .expect("Failed to encrypt message")
+}
+
+pub fn decrypt_message(bridge: &mut SignalBridge, peer: &str, ciphertext: &[u8]) -> Vec<u8> {
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    rt.block_on(bridge.decrypt_message(peer, ciphertext))
+        .expect("Failed to decrypt message")
+}
+
+pub fn establish_session(bridge: &mut SignalBridge, peer: &str, bundle: &[u8]) {
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    rt.block_on(bridge.establish_session(peer, bundle))
+        .expect("Failed to establish session");
+}
+
+pub fn generate_pre_key_bundle(bridge: &mut SignalBridge) -> Vec<u8> {
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    rt.block_on(bridge.generate_pre_key_bundle())
+        .expect("Failed to generate pre-key bundle")
+}
+
+pub fn clear_peer_session(bridge: &mut SignalBridge, peer: &str) {
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    rt.block_on(bridge.clear_peer_session(peer))
+        .expect("Failed to clear peer session");
+}
+
+pub fn clear_all_sessions(bridge: &mut SignalBridge) {
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    rt.block_on(bridge.clear_all_sessions())
+        .expect("Failed to clear all sessions");
+}
+
+pub fn reset_identity(bridge: &mut SignalBridge) {
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    rt.block_on(bridge.reset_identity())
+        .expect("Failed to reset identity");
+}
+
+pub fn generate_node_fingerprint(bridge: &mut SignalBridge, identity: ffi::NodeIdentity) -> String {
+    let node_identity = NodeIdentity {
+        hostname: identity.hostname,
+        username: identity.username,
+        platform: identity.platform,
+        mac_address: identity.mac_address,
+        install_id: identity.install_id,
+    };
+
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    rt.block_on(bridge.generate_node_fingerprint(&node_identity))
+        .expect("Failed to generate node fingerprint")
 }
 
 #[cfg(test)]
