@@ -84,6 +84,17 @@ jobs:
         gcovr: false
         opencppcoverage: false
 
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        components: clippy, rustfmt
+
+    - name: Verify Rust installation
+      run: |
+        rustc --version
+        cargo --version
+
       # make sure coverage is only enabled for Debug builds, since it sets -O0 to make sure coverage
       # has meaningful results
     - name: Configure CMake

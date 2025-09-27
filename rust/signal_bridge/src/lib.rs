@@ -21,9 +21,11 @@ use crate::storage_trait::{
     ExtendedIdentityStore, ExtendedKyberPreKeyStore, ExtendedPreKeyStore, ExtendedSessionStore,
     ExtendedSignedPreKeyStore, ExtendedStorageOps, SignalStorageContainer,
 };
+use ::hkdf::Hkdf;
 use libsignal_protocol::{
     CiphertextMessage, DeviceId, IdentityKeyPair, IdentityKeyStore, ProtocolAddress, SessionStore,
 };
+use nostr::{Keys, PublicKey, SecretKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -34,6 +36,41 @@ pub struct NodeIdentity {
     pub platform: String,
     pub mac_address: String,
     pub install_id: String,
+}
+
+pub struct NostrIdentity;
+
+impl NostrIdentity {
+    pub fn derive_from_signal_identity(
+        identity_key_pair: &IdentityKeyPair,
+    ) -> Result<Keys, SignalBridgeError> {
+        let identity_public_key = identity_key_pair.identity_key();
+
+        let hk = Hkdf::<sha2::Sha256>::new(None, &identity_public_key.serialize());
+        let mut derived_key = [0u8; 32];
+        hk.expand(b"radix_relay_nostr_derivation", &mut derived_key)
+            .map_err(|_| SignalBridgeError::KeyDerivation("HKDF expansion failed".to_string()))?;
+
+        let secret_key = SecretKey::from_slice(&derived_key)
+            .map_err(|e| SignalBridgeError::KeyDerivation(format!("Invalid secret key: {}", e)))?;
+
+        Ok(Keys::new(secret_key))
+    }
+
+    pub fn derive_public_key_from_peer_identity(
+        peer_identity: &libsignal_protocol::IdentityKey,
+    ) -> Result<PublicKey, SignalBridgeError> {
+        let hk = Hkdf::<sha2::Sha256>::new(None, &peer_identity.serialize());
+        let mut derived_key = [0u8; 32];
+        hk.expand(b"radix_relay_nostr_derivation", &mut derived_key)
+            .map_err(|_| SignalBridgeError::KeyDerivation("HKDF expansion failed".to_string()))?;
+
+        let secret_key = SecretKey::from_slice(&derived_key)
+            .map_err(|e| SignalBridgeError::KeyDerivation(format!("Invalid secret key: {}", e)))?;
+
+        let full_keys = Keys::new(secret_key);
+        Ok(full_keys.public_key())
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -432,6 +469,36 @@ impl SignalBridge {
         Ok(())
     }
 
+    pub async fn derive_nostr_keypair(&mut self) -> Result<Keys, SignalBridgeError> {
+        let identity_key_pair = self
+            .storage
+            .identity_store()
+            .get_identity_key_pair()
+            .await?;
+        NostrIdentity::derive_from_signal_identity(&identity_key_pair)
+    }
+
+    pub async fn derive_peer_nostr_key(
+        &mut self,
+        peer: &str,
+    ) -> Result<Vec<u8>, SignalBridgeError> {
+        let peer_identity = self
+            .storage
+            .identity_store()
+            .get_identity(&ProtocolAddress::new(
+                peer.to_string(),
+                DeviceId::new(1).unwrap(),
+            ))
+            .await?
+            .ok_or_else(|| {
+                SignalBridgeError::SessionNotFound(format!("No identity found for peer: {}", peer))
+            })?;
+
+        let peer_nostr_public_key =
+            NostrIdentity::derive_public_key_from_peer_identity(&peer_identity)?;
+        Ok(peer_nostr_public_key.to_bytes().to_vec())
+    }
+
     pub async fn generate_node_fingerprint(
         &mut self,
         node_identity: &NodeIdentity,
@@ -487,6 +554,8 @@ pub enum SignalBridgeError {
     InvalidInput(String),
     #[error("{0}")]
     SessionNotFound(String),
+    #[error("Key derivation error: {0}")]
+    KeyDerivation(String),
     #[error("Update your database to a newer schema version")]
     SchemaVersionTooOld,
 }
@@ -570,6 +639,9 @@ mod ffi {
 
         // Node fingerprint generation
         fn generate_node_fingerprint(bridge: &mut SignalBridge, identity: NodeIdentity) -> String;
+        // Nostr key derivation
+        fn derive_my_nostr_keypair(bridge: &mut SignalBridge) -> Vec<u8>;
+        fn derive_peer_nostr_pubkey(bridge: &mut SignalBridge, peer: &str) -> Vec<u8>;
     }
 }
 
@@ -639,6 +711,20 @@ pub fn generate_node_fingerprint(bridge: &mut SignalBridge, identity: ffi::NodeI
         .expect("Failed to generate node fingerprint")
 }
 
+pub fn derive_my_nostr_keypair(bridge: &mut SignalBridge) -> Vec<u8> {
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    let keys = rt
+        .block_on(bridge.derive_nostr_keypair())
+        .expect("Failed to derive nostr keypair");
+    keys.public_key().to_bytes().to_vec()
+}
+
+pub fn derive_peer_nostr_pubkey(bridge: &mut SignalBridge, peer: &str) -> Vec<u8> {
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    rt.block_on(bridge.derive_peer_nostr_key(peer))
+        .expect("Failed to derive peer nostr key")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -649,6 +735,45 @@ mod tests {
         let protocol_address = ProtocolAddress::new("test_device".to_string(), device_id);
         assert_eq!(protocol_address.name(), "test_device");
         assert_eq!(protocol_address.device_id(), device_id);
+    }
+
+    #[tokio::test]
+    async fn test_nostr_key_derivation_deterministic() {
+        let temp_dir = std::env::temp_dir();
+        let db_path = temp_dir.join("test_nostr_derivation.db");
+        let mut bridge = SignalBridge::new(db_path.to_str().unwrap()).await.unwrap();
+
+        let nostr_keypair1 = bridge.derive_nostr_keypair().await.unwrap();
+        let nostr_keypair2 = bridge.derive_nostr_keypair().await.unwrap();
+
+        assert_eq!(nostr_keypair1.secret_key(), nostr_keypair2.secret_key());
+        assert_eq!(nostr_keypair1.public_key(), nostr_keypair2.public_key());
+
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[tokio::test]
+    async fn test_peer_nostr_key_derivation() {
+        let temp_dir = std::env::temp_dir();
+        let alice_db = temp_dir.join("test_alice_nostr.db");
+        let bob_db = temp_dir.join("test_bob_nostr.db");
+
+        let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
+        let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
+
+        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+        alice.establish_session("bob", &bob_bundle).await.unwrap();
+
+        let bob_nostr_key = alice.derive_peer_nostr_key("bob").await.unwrap();
+
+        let bob_actual_nostr = bob.derive_nostr_keypair().await.unwrap();
+        assert_eq!(
+            bob_nostr_key,
+            bob_actual_nostr.public_key().to_bytes().to_vec()
+        );
+
+        let _ = std::fs::remove_file(&alice_db);
+        let _ = std::fs::remove_file(&bob_db);
     }
 
     #[test]
