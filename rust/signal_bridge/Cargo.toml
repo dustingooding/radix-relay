@@ -35,5 +35,11 @@ cxx = "1.0"
 # Cryptographic hashing
 sha2 = "0.10"
 
+# HKDF for key derivation
+hkdf = "0.12"
+
+# Nostr protocol implementation
+nostr = "0.35"
+
 [build-dependencies]
 cxx-build = "1.0"
