@@ -39,6 +39,65 @@ TEST_CASE("SignalBridge Node Fingerprint Integration", "[signal][fingerprint][cx
   }
 }
 
+TEST_CASE("SignalBridge Nostr Key Derivation", "[signal][nostr][cxx]")
+{
+  SECTION("derive_my_nostr_keypair returns deterministic public key")
+  {
+    auto timestamp =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto db_path = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                    / ("test_nostr_derivation_" + std::to_string(timestamp) + ".db"))
+                     .string();
+
+    {
+      auto bridge = radix_relay::new_signal_bridge(db_path.c_str());
+
+      auto nostr_key1 = radix_relay::derive_my_nostr_keypair(*bridge);
+      auto nostr_key2 = radix_relay::derive_my_nostr_keypair(*bridge);
+
+      REQUIRE(nostr_key1.size() == 32);
+      std::vector<uint8_t> key1_vec(nostr_key1.begin(), nostr_key1.end());
+      std::vector<uint8_t> key2_vec(nostr_key2.begin(), nostr_key2.end());
+      REQUIRE(key1_vec == key2_vec);
+    }
+
+    std::filesystem::remove(db_path);
+  }
+
+  SECTION("derive_peer_nostr_pubkey works after session establishment")
+  {
+    auto timestamp =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto alice_db = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                     / ("test_alice_nostr_" + std::to_string(timestamp) + ".db"))
+                      .string();
+    auto bob_db = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                   / ("test_bob_nostr_" + std::to_string(timestamp) + ".db"))
+                    .string();
+
+    {
+      auto alice = radix_relay::new_signal_bridge(alice_db.c_str());
+      auto bob = radix_relay::new_signal_bridge(bob_db.c_str());
+
+      auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
+      radix_relay::establish_session(*alice, "bob", rust::Slice<const uint8_t>{ bob_bundle });
+
+      auto bob_nostr_from_alice = radix_relay::derive_peer_nostr_pubkey(*alice, "bob");
+      auto bob_nostr_self = radix_relay::derive_my_nostr_keypair(*bob);
+
+      REQUIRE(bob_nostr_from_alice.size() == 32);
+      REQUIRE(bob_nostr_self.size() == 32);
+
+      std::vector<uint8_t> alice_vec(bob_nostr_from_alice.begin(), bob_nostr_from_alice.end());
+      std::vector<uint8_t> bob_vec(bob_nostr_self.begin(), bob_nostr_self.end());
+      REQUIRE(alice_vec == bob_vec);
+    }
+
+    std::filesystem::remove(alice_db);
+    std::filesystem::remove(bob_db);
+  }
+}
+
 TEST_CASE("SignalBridge CXX Integration", "[signal][cxx]")
 {
   SECTION("SignalBridge constructor creates valid instance")
