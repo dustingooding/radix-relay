@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <chrono>
 #include <filesystem>
 #include <memory>
@@ -80,7 +81,8 @@ TEST_CASE("SignalBridge Nostr Key Derivation", "[signal][nostr][cxx]")
       auto bob = radix_relay::new_signal_bridge(bob_db.c_str());
 
       auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
-      radix_relay::establish_session(*alice, "bob", rust::Slice<const uint8_t>{ bob_bundle });
+      REQUIRE_NOTHROW(
+        [&]() { radix_relay::establish_session(*alice, "bob", rust::Slice<const uint8_t>{ bob_bundle }); }());
 
       auto bob_nostr_from_alice = radix_relay::derive_peer_nostr_pubkey(*alice, "bob");
       auto bob_nostr_self = radix_relay::derive_my_nostr_keypair(*bob);
@@ -95,6 +97,30 @@ TEST_CASE("SignalBridge Nostr Key Derivation", "[signal][nostr][cxx]")
 
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
+  }
+}
+
+TEST_CASE("SignalBridge Error Message Propagation", "[signal][error][cxx]")
+{
+  SECTION("Empty peer name produces specific error message")
+  {
+    auto timestamp =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto db_path = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                    / ("test_empty_peer_name_" + std::to_string(timestamp) + ".db"))
+                     .string();
+
+    {
+      auto bridge = radix_relay::new_signal_bridge(db_path.c_str());
+
+      REQUIRE_THROWS_WITH(radix_relay::derive_peer_nostr_pubkey(*bridge, ""),
+        Catch::Matchers::ContainsSubstring("No identity found for peer"));
+
+      REQUIRE_THROWS_WITH(
+        radix_relay::clear_peer_session(*bridge, ""), Catch::Matchers::ContainsSubstring("Specify a peer name"));
+    }
+
+    std::filesystem::remove(db_path);
   }
 }
 
@@ -171,7 +197,8 @@ TEST_CASE("SignalBridge CXX Integration", "[signal][cxx]")
       auto bob = radix_relay::new_signal_bridge(bob_db.c_str());
 
       auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
-      radix_relay::establish_session(*alice, "bob", rust::Slice<const uint8_t>{ bob_bundle });
+      REQUIRE_NOTHROW(
+        [&]() { radix_relay::establish_session(*alice, "bob", rust::Slice<const uint8_t>{ bob_bundle }); }());
 
       REQUIRE_NOTHROW([&]() { radix_relay::clear_peer_session(*alice, "bob"); }());
 

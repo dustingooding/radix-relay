@@ -602,8 +602,6 @@ impl From<std::io::Error> for SignalBridgeError {
     }
 }
 
-// CXX Bridge for C++ interop
-// Note: CXX doesn't support async functions, so we use sync wrappers with internal Tokio runtime
 #[cxx::bridge(namespace = "radix_relay")]
 mod ffi {
     #[derive(Debug)]
@@ -618,86 +616,120 @@ mod ffi {
     extern "Rust" {
         type SignalBridge;
 
-        // RAII: Single constructor handles all complexity
-        fn new_signal_bridge(db_path: &str) -> Box<SignalBridge>;
+        fn new_signal_bridge(db_path: &str) -> Result<Box<SignalBridge>>;
 
-        // Core crypto operations - sync wrappers for async functions
-        fn encrypt_message(bridge: &mut SignalBridge, peer: &str, plaintext: &[u8]) -> Vec<u8>;
+        fn encrypt_message(
+            bridge: &mut SignalBridge,
+            peer: &str,
+            plaintext: &[u8],
+        ) -> Result<Vec<u8>>;
 
-        fn decrypt_message(bridge: &mut SignalBridge, peer: &str, ciphertext: &[u8]) -> Vec<u8>;
+        fn decrypt_message(
+            bridge: &mut SignalBridge,
+            peer: &str,
+            ciphertext: &[u8],
+        ) -> Result<Vec<u8>>;
 
-        fn establish_session(bridge: &mut SignalBridge, peer: &str, bundle: &[u8]);
+        fn establish_session(bridge: &mut SignalBridge, peer: &str, bundle: &[u8]) -> Result<()>;
 
-        fn generate_pre_key_bundle(bridge: &mut SignalBridge) -> Vec<u8>;
+        fn generate_pre_key_bundle(bridge: &mut SignalBridge) -> Result<Vec<u8>>;
 
-        // Session management
-        fn clear_peer_session(bridge: &mut SignalBridge, peer: &str);
+        fn clear_peer_session(bridge: &mut SignalBridge, peer: &str) -> Result<()>;
 
-        fn clear_all_sessions(bridge: &mut SignalBridge);
+        fn clear_all_sessions(bridge: &mut SignalBridge) -> Result<()>;
 
-        fn reset_identity(bridge: &mut SignalBridge);
+        fn reset_identity(bridge: &mut SignalBridge) -> Result<()>;
 
-        // Node fingerprint generation
-        fn generate_node_fingerprint(bridge: &mut SignalBridge, identity: NodeIdentity) -> String;
-        // Nostr key derivation
-        fn derive_my_nostr_keypair(bridge: &mut SignalBridge) -> Vec<u8>;
-        fn derive_peer_nostr_pubkey(bridge: &mut SignalBridge, peer: &str) -> Vec<u8>;
+        fn generate_node_fingerprint(
+            bridge: &mut SignalBridge,
+            identity: NodeIdentity,
+        ) -> Result<String>;
+
+        fn derive_my_nostr_keypair(bridge: &mut SignalBridge) -> Result<Vec<u8>>;
+
+        fn derive_peer_nostr_pubkey(bridge: &mut SignalBridge, peer: &str) -> Result<Vec<u8>>;
     }
 }
 
-// CXX Bridge implementation functions - sync wrappers for async methods
-// Note: Panics on error for simplicity. C++ can catch exceptions.
-pub fn new_signal_bridge(db_path: &str) -> Box<SignalBridge> {
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+pub fn new_signal_bridge(db_path: &str) -> Result<Box<SignalBridge>, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     let bridge = rt
         .block_on(SignalBridge::new(db_path))
-        .expect("Failed to create SignalBridge");
-    Box::new(bridge)
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+    Ok(Box::new(bridge))
 }
 
-pub fn encrypt_message(bridge: &mut SignalBridge, peer: &str, plaintext: &[u8]) -> Vec<u8> {
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+pub fn encrypt_message(
+    bridge: &mut SignalBridge,
+    peer: &str,
+    plaintext: &[u8],
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     rt.block_on(bridge.encrypt_message(peer, plaintext))
-        .expect("Failed to encrypt message")
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
-pub fn decrypt_message(bridge: &mut SignalBridge, peer: &str, ciphertext: &[u8]) -> Vec<u8> {
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+pub fn decrypt_message(
+    bridge: &mut SignalBridge,
+    peer: &str,
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     rt.block_on(bridge.decrypt_message(peer, ciphertext))
-        .expect("Failed to decrypt message")
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
-pub fn establish_session(bridge: &mut SignalBridge, peer: &str, bundle: &[u8]) {
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+pub fn establish_session(
+    bridge: &mut SignalBridge,
+    peer: &str,
+    bundle: &[u8],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     rt.block_on(bridge.establish_session(peer, bundle))
-        .expect("Failed to establish session");
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
-pub fn generate_pre_key_bundle(bridge: &mut SignalBridge) -> Vec<u8> {
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+pub fn generate_pre_key_bundle(
+    bridge: &mut SignalBridge,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     rt.block_on(bridge.generate_pre_key_bundle())
-        .expect("Failed to generate pre-key bundle")
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
-pub fn clear_peer_session(bridge: &mut SignalBridge, peer: &str) {
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+pub fn clear_peer_session(
+    bridge: &mut SignalBridge,
+    peer: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     rt.block_on(bridge.clear_peer_session(peer))
-        .expect("Failed to clear peer session");
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
-pub fn clear_all_sessions(bridge: &mut SignalBridge) {
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+pub fn clear_all_sessions(bridge: &mut SignalBridge) -> Result<(), Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     rt.block_on(bridge.clear_all_sessions())
-        .expect("Failed to clear all sessions");
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
-pub fn reset_identity(bridge: &mut SignalBridge) {
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+pub fn reset_identity(bridge: &mut SignalBridge) -> Result<(), Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     rt.block_on(bridge.reset_identity())
-        .expect("Failed to reset identity");
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
-pub fn generate_node_fingerprint(bridge: &mut SignalBridge, identity: ffi::NodeIdentity) -> String {
+pub fn generate_node_fingerprint(
+    bridge: &mut SignalBridge,
+    identity: ffi::NodeIdentity,
+) -> Result<String, Box<dyn std::error::Error>> {
     let node_identity = NodeIdentity {
         hostname: identity.hostname,
         username: identity.username,
@@ -706,23 +738,31 @@ pub fn generate_node_fingerprint(bridge: &mut SignalBridge, identity: ffi::NodeI
         install_id: identity.install_id,
     };
 
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     rt.block_on(bridge.generate_node_fingerprint(&node_identity))
-        .expect("Failed to generate node fingerprint")
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
-pub fn derive_my_nostr_keypair(bridge: &mut SignalBridge) -> Vec<u8> {
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+pub fn derive_my_nostr_keypair(
+    bridge: &mut SignalBridge,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     let keys = rt
         .block_on(bridge.derive_nostr_keypair())
-        .expect("Failed to derive nostr keypair");
-    keys.public_key().to_bytes().to_vec()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+    Ok(keys.public_key().to_bytes().to_vec())
 }
 
-pub fn derive_peer_nostr_pubkey(bridge: &mut SignalBridge, peer: &str) -> Vec<u8> {
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+pub fn derive_peer_nostr_pubkey(
+    bridge: &mut SignalBridge,
+    peer: &str,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     rt.block_on(bridge.derive_peer_nostr_key(peer))
-        .expect("Failed to derive peer nostr key")
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
 #[cfg(test)]

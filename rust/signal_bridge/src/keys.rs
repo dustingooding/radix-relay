@@ -247,7 +247,7 @@ mod tests {
             "Signature should fail verification when data is tampered"
         );
 
-        let different_data = vec![0x42; 33]; // Different data of same length
+        let different_data = vec![0x42; 33];
         assert!(
             !identity_public_key.verify_signature(&different_data, &original_signature),
             "Signature should not verify against completely different data"
