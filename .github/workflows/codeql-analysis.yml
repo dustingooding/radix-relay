@@ -89,6 +89,7 @@ jobs:
       with:
         toolchain: stable
         components: clippy, rustfmt
+        cache-workspaces: rust
 
     - name: Verify Rust installation
       run: |
