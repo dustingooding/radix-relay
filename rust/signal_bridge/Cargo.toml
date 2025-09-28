@@ -41,5 +41,11 @@ hkdf = "0.12"
 # Nostr protocol implementation
 nostr = "0.35"
 
+# JSON support
+serde_json = "1.0"
+
+# Hex encoding/decoding
+hex = "0.4"
+
 [build-dependencies]
 cxx-build = "1.0"

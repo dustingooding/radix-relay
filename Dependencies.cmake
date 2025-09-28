@@ -66,4 +66,29 @@ function(radix_relay_setup_dependencies)
     message(STATUS "  Protobuf include dirs: ${Protobuf_INCLUDE_DIRS}")
   endif()
 
+  find_package(OpenSSL REQUIRED)
+  if(OpenSSL_FOUND)
+    message(STATUS "Found OpenSSL: ${OPENSSL_VERSION}")
+    message(STATUS "  OpenSSL libraries: ${OPENSSL_LIBRARIES}")
+  endif()
+
+  if(NOT TARGET Boost::asio)
+    cpmaddpackage(
+      NAME Boost
+      GITHUB_REPOSITORY boostorg/boost
+      VERSION 1.89.0
+      GIT_TAG boost-1.89.0
+      GIT_SHALLOW TRUE
+      GIT_SUBMODULES ""
+      SYSTEM YES
+      OPTIONS
+        "BOOST_INCLUDE_LIBRARIES asio;system;date_time;regex"
+        "BOOST_ENABLE_CMAKE ON"
+    )
+  endif()
+
+  if(NOT TARGET nlohmann_json::nlohmann_json)
+    cpmaddpackage("gh:nlohmann/json@3.12.0")
+  endif()
+
 endfunction()

@@ -25,7 +25,7 @@ use ::hkdf::Hkdf;
 use libsignal_protocol::{
     CiphertextMessage, DeviceId, IdentityKeyPair, IdentityKeyStore, ProtocolAddress, SessionStore,
 };
-use nostr::{Keys, PublicKey, SecretKey};
+use nostr::{EventBuilder, Keys, Kind, PublicKey, SecretKey, Tag};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -499,6 +499,60 @@ impl SignalBridge {
         Ok(peer_nostr_public_key.to_bytes().to_vec())
     }
 
+    pub async fn create_subscription_for_self(
+        &mut self,
+        subscription_id: &str,
+    ) -> Result<String, SignalBridgeError> {
+        let keys = self.derive_nostr_keypair().await?;
+        let our_pubkey = keys.public_key().to_hex();
+
+        let subscription = serde_json::json!([
+            "REQ",
+            subscription_id,
+            {
+                "kinds": [40001],
+                "#p": [our_pubkey]
+            }
+        ]);
+
+        Ok(subscription.to_string())
+    }
+
+    pub async fn sign_nostr_event(
+        &mut self,
+        created_at: u64,
+        kind: u32,
+        tags: Vec<Vec<String>>,
+        content: &str,
+    ) -> Result<(String, String, String), SignalBridgeError> {
+        // Get our Nostr keys internally
+        let keys = self.derive_nostr_keypair().await?;
+
+        // Convert tags to nostr Tag format
+        let nostr_tags: Vec<Tag> = tags
+            .into_iter()
+            .map(|tag_vec| {
+                if tag_vec.is_empty() {
+                    Tag::parse(&[""]).unwrap_or_else(|_| Tag::parse(&["unknown"]).unwrap())
+                } else {
+                    Tag::parse(&tag_vec).unwrap_or_else(|_| Tag::parse(&["unknown"]).unwrap())
+                }
+            })
+            .collect();
+
+        // Create the event using EventBuilder
+        let event = EventBuilder::new(Kind::Custom(kind as u16), content, nostr_tags)
+            .custom_created_at(nostr::Timestamp::from(created_at))
+            .to_event(&keys)
+            .map_err(|e| SignalBridgeError::Protocol(format!("Failed to create event: {}", e)))?;
+
+        Ok((
+            keys.public_key().to_hex(), // pubkey
+            event.id.to_hex(),          // event_id
+            event.sig.to_string(),      // signature
+        ))
+    }
+
     pub async fn generate_node_fingerprint(
         &mut self,
         node_identity: &NodeIdentity,
@@ -645,9 +699,20 @@ mod ffi {
             identity: NodeIdentity,
         ) -> Result<String>;
 
-        fn derive_my_nostr_keypair(bridge: &mut SignalBridge) -> Result<Vec<u8>>;
+        fn sign_nostr_event(bridge: &mut SignalBridge, event_json: &str) -> Result<String>;
 
-        fn derive_peer_nostr_pubkey(bridge: &mut SignalBridge, peer: &str) -> Result<Vec<u8>>;
+        fn create_and_sign_encrypted_message(
+            bridge: &mut SignalBridge,
+            session_id: &str,
+            encrypted_content: &str,
+            timestamp: u64,
+            project_version: &str,
+        ) -> Result<String>;
+
+        fn create_subscription_for_self(
+            bridge: &mut SignalBridge,
+            subscription_id: &str,
+        ) -> Result<String>;
     }
 }
 
@@ -744,24 +809,95 @@ pub fn generate_node_fingerprint(
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
-pub fn derive_my_nostr_keypair(
+pub fn sign_nostr_event(
     bridge: &mut SignalBridge,
-) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    event_json: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-    let keys = rt
-        .block_on(bridge.derive_nostr_keypair())
+
+    // Parse event JSON
+    let mut event: serde_json::Value = serde_json::from_str(event_json)
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-    Ok(keys.public_key().to_bytes().to_vec())
+
+    // Extract fields for signing
+    let created_at = event["created_at"].as_u64().ok_or("Missing created_at")?;
+    let kind = event["kind"].as_u64().ok_or("Missing kind")? as u32;
+    let content = event["content"].as_str().ok_or("Missing content")?;
+
+    // Parse tags
+    let tags_array = event["tags"].as_array().ok_or("Missing tags")?;
+    let tags: Vec<Vec<String>> = tags_array
+        .iter()
+        .map(|tag| {
+            tag.as_array()
+                .unwrap_or(&vec![])
+                .iter()
+                .map(|v| v.as_str().unwrap_or("").to_string())
+                .collect()
+        })
+        .collect();
+
+    // Sign the event
+    let (pubkey, event_id, signature) = rt
+        .block_on(bridge.sign_nostr_event(created_at, kind, tags, content))
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+
+    // Update event with signature data
+    event["pubkey"] = serde_json::Value::String(pubkey);
+    event["id"] = serde_json::Value::String(event_id);
+    event["sig"] = serde_json::Value::String(signature);
+
+    // Return complete signed event JSON
+    serde_json::to_string(&event).map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
-pub fn derive_peer_nostr_pubkey(
+pub fn create_and_sign_encrypted_message(
     bridge: &mut SignalBridge,
-    peer: &str,
-) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    session_id: &str,
+    encrypted_content: &str,
+    timestamp: u64,
+    project_version: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-    rt.block_on(bridge.derive_peer_nostr_key(peer))
+
+    // Derive recipient's Nostr pubkey from session
+    let recipient_pubkey_bytes = rt
+        .block_on(bridge.derive_peer_nostr_key(session_id))
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+    let recipient_pubkey = hex::encode(&recipient_pubkey_bytes);
+
+    // Create the Nostr event JSON
+    let event_json = serde_json::json!({
+        "id": "",
+        "pubkey": "",
+        "created_at": timestamp,
+        "kind": 40001,
+        "tags": [
+            ["p", recipient_pubkey],
+            ["radix_peer", session_id],
+            ["radix_version", project_version]
+        ],
+        "content": encrypted_content,
+        "sig": ""
+    });
+
+    // Sign the event
+    let event_json_str = serde_json::to_string(&event_json)
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+
+    // Use the existing signing function
+    sign_nostr_event(bridge, &event_json_str)
+}
+
+pub fn create_subscription_for_self(
+    bridge: &mut SignalBridge,
+    subscription_id: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+    rt.block_on(bridge.create_subscription_for_self(subscription_id))
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
@@ -1399,6 +1535,63 @@ mod tests {
         } else {
             panic!("Expected Serialization error for malformed bundle");
         }
+    }
+
+    #[tokio::test]
+    async fn test_sign_nostr_event() -> Result<(), Box<dyn std::error::Error>> {
+        use std::env;
+
+        let temp_dir = env::temp_dir();
+        let process_id = std::process::id();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let db_path = temp_dir.join(format!("test_sign_nostr_{}_{}.db", process_id, timestamp));
+        let db_path_str = db_path.to_str().unwrap();
+        let mut bridge = SignalBridge::new(db_path_str).await?;
+
+        // Create test event JSON (unsigned)
+        let _event_json = r#"{
+            "id": "",
+            "pubkey": "",
+            "created_at": 1234567890,
+            "kind": 40001,
+            "tags": [
+                ["p", "recipient_pubkey"],
+                ["radix_peer", "session_id"]
+            ],
+            "content": "encrypted_content_here",
+            "sig": ""
+        }"#;
+
+        // Test the internal implementation directly
+        let result = bridge
+            .sign_nostr_event(
+                1234567890,
+                40001,
+                vec![
+                    vec!["p".to_string(), "recipient_pubkey".to_string()],
+                    vec!["radix_peer".to_string(), "session_id".to_string()],
+                ],
+                "encrypted_content_here",
+            )
+            .await;
+        assert!(result.is_ok());
+
+        let (pubkey, event_id, signature) = result.unwrap();
+        assert!(!pubkey.is_empty());
+        assert!(!event_id.is_empty());
+        assert!(!signature.is_empty());
+        assert_eq!(event_id.len(), 64); // SHA256 hex should be 64 chars
+        assert_eq!(pubkey.len(), 64); // Nostr pubkey hex should be 64 chars
+
+        // Verify the pubkey matches what we'd get from derive_nostr_keypair
+        let keys = bridge.derive_nostr_keypair().await?;
+        assert_eq!(pubkey, keys.public_key().to_hex());
+
+        Ok(())
     }
 
     #[tokio::test]

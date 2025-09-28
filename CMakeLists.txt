@@ -14,6 +14,11 @@ if(APPLE)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13")
 endif()
 
+# Set Windows target version to Windows 7 for Boost ASIO
+if(WIN32)
+  add_definitions(-D_WIN32_WINNT=0x0601)
+endif()
+
 # strongly encouraged to enable this globally to avoid conflicts between
 # -Wpedantic being enabled and -std=c++20 and -std=gnu++20 for example
 # when compiling with PCH enabled
