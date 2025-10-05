@@ -12,7 +12,7 @@
 
 namespace radix_relay::nostr {
 
-template<concepts::IncomingMessageHandler Handler> class Dispatcher
+template<concepts::NostrHandler Handler> class Dispatcher
 {
 private:
   Handler &handler_;
@@ -102,19 +102,43 @@ public:
   }
 };
 
-template<radix_relay::concepts::Transport Transport> class OutgoingHandler
+template<concepts::NostrHandler Handler, radix_relay::concepts::Transport Transport> class Session
 {
 private:
+  Handler &handler_;
   Transport &transport_;
+  Dispatcher<Handler> dispatcher_;
 
 public:
-  explicit OutgoingHandler(Transport &transport) : transport_(transport) {}
+  explicit Session(Handler &handler, Transport &transport)
+    : handler_(handler), transport_(transport), dispatcher_(handler)
+  {
+    transport_.register_message_callback(dispatcher_.create_transport_callback());
+  }
 
   auto handle(const events::outgoing::identity_announcement &event) -> void { send_event(event); }
 
   auto handle(const events::outgoing::encrypted_message &event) -> void { send_event(event); }
 
   auto handle(const events::outgoing::session_request &event) -> void { send_event(event); }
+
+  auto send(const events::outgoing::identity_announcement &event) -> void
+  {
+    handler_.handle(event);
+    send_event(event);
+  }
+
+  auto send(const events::outgoing::encrypted_message &event) -> void
+  {
+    handler_.handle(event);
+    send_event(event);
+  }
+
+  auto send(const events::outgoing::session_request &event) -> void
+  {
+    handler_.handle(event);
+    send_event(event);
+  }
 
 private:
   auto send_event(const protocol::event_data &event) -> void

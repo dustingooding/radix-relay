@@ -8,7 +8,7 @@
 namespace radix_relay::nostr::concepts {
 
 template<typename T>
-concept IncomingMessageHandler = requires(T handler,
+concept NostrHandler = requires(T handler,
   const events::incoming::identity_announcement &identity_event,
   const events::incoming::encrypted_message &encrypted_event,
   const events::incoming::session_request &session_event,
@@ -16,7 +16,10 @@ concept IncomingMessageHandler = requires(T handler,
   const events::incoming::unknown_message &unknown_event,
   const events::incoming::ok &ok_event,
   const events::incoming::eose &eose_event,
-  const events::incoming::unknown_protocol &unknown_protocol_event) {
+  const events::incoming::unknown_protocol &unknown_protocol_event,
+  const events::outgoing::identity_announcement &outgoing_identity_event,
+  const events::outgoing::encrypted_message &outgoing_encrypted_event,
+  const events::outgoing::session_request &outgoing_session_event) {
   handler.handle(identity_event);
   handler.handle(encrypted_event);
   handler.handle(session_event);
@@ -25,13 +28,6 @@ concept IncomingMessageHandler = requires(T handler,
   handler.handle(ok_event);
   handler.handle(eose_event);
   handler.handle(unknown_protocol_event);
-};
-
-template<typename T>
-concept OutgoingMessageHandler = requires(T handler,
-  const events::outgoing::identity_announcement &outgoing_identity_event,
-  const events::outgoing::encrypted_message &outgoing_encrypted_event,
-  const events::outgoing::session_request &outgoing_session_event) {
   handler.handle(outgoing_identity_event);
   handler.handle(outgoing_encrypted_event);
   handler.handle(outgoing_session_event);
