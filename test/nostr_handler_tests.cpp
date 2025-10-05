@@ -8,7 +8,7 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 {
   SECTION("dispatch identity announcement event")
   {
-    radix_relay_test::TestDoubleNostrIncomingHandler handler;
+    radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay::nostr::Dispatcher dispatcher(handler);
 
     const auto timestamp = 1234567890U;
@@ -36,7 +36,7 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 
   SECTION("dispatch encrypted message event")
   {
-    radix_relay_test::TestDoubleNostrIncomingHandler handler;
+    radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay::nostr::Dispatcher dispatcher(handler);
 
     const auto timestamp = 1234567890U;
@@ -44,7 +44,7 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
     const std::string recipient_pubkey = "recipient";
     auto e_data = radix_relay::nostr::protocol::event_data::create_encrypted_message(
       timestamp, recipient_pubkey, "encrypted_payload", "session_id");
-    e_data.pubkey = sender_pubkey;// Set for testing
+    e_data.pubkey = sender_pubkey;
 
     auto event = radix_relay::nostr::protocol::event::from_event_data(e_data);
     const auto event_str = event.serialize();
@@ -65,7 +65,7 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 
   SECTION("dispatch session request event")
   {
-    radix_relay_test::TestDoubleNostrIncomingHandler handler;
+    radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay::nostr::Dispatcher dispatcher(handler);
 
     const auto timestamp = 1234567890U;
@@ -93,7 +93,7 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 
   SECTION("dispatch unknown message types to unknown handler")
   {
-    radix_relay_test::TestDoubleNostrIncomingHandler handler;
+    radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay::nostr::Dispatcher dispatcher(handler);
 
     const auto timestamp = 1234567890U;
@@ -123,32 +123,9 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
     CHECK(handler.unknown_events[0].content == "hello world");
   }
 
-  SECTION("dispatch bytes with valid JSON")
-  {
-    radix_relay_test::TestDoubleNostrIncomingHandler handler;
-    radix_relay::nostr::Dispatcher dispatcher(handler);
-
-    const auto timestamp = 1234567890U;
-    const std::string pubkey = "test_pubkey";
-    auto e_data =
-      radix_relay::nostr::protocol::event_data::create_identity_announcement(pubkey, timestamp, "test_fingerprint");
-
-    auto event = radix_relay::nostr::protocol::event::from_event_data(e_data);
-    const auto event_str = event.serialize();
-    std::vector<std::byte> bytes;
-    bytes.resize(event_str.size());
-    std::ranges::transform(
-      event_str, bytes.begin(), [](char character) { return std::bit_cast<std::byte>(character); });
-
-    dispatcher.dispatch_bytes(bytes);
-
-    CHECK(handler.identity_events.size() == 1);
-    CHECK(handler.identity_events[0].pubkey == pubkey);
-  }
-
   SECTION("dispatch bytes with invalid JSON does nothing")
   {
-    radix_relay_test::TestDoubleNostrIncomingHandler handler;
+    radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay::nostr::Dispatcher dispatcher(handler);
 
     const std::string invalid_json = "not valid json";
@@ -164,7 +141,7 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 
   SECTION("create transport callback")
   {
-    radix_relay_test::TestDoubleNostrIncomingHandler handler;
+    radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay::nostr::Dispatcher dispatcher(handler);
 
     auto callback = dispatcher.create_transport_callback();
@@ -290,12 +267,13 @@ TEST_CASE("Outgoing protocol::event_data types work correctly", "[nostr][outgoin
 }
 
 
-TEST_CASE("NostrOutgoingHandler sends events via transport", "[nostr][outgoing_handler]")
+TEST_CASE("Session sends outgoing events via transport", "[nostr][session][outgoing]")
 {
-  SECTION("handle outgoing identity announcement")
+  SECTION("send outgoing identity announcement")
   {
+    radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay_test::TestDoubleNostrTransport transport;
-    radix_relay::nostr::OutgoingHandler handler(transport);
+    radix_relay::nostr::Session session(handler, transport);
 
     const auto timestamp = 1234567890U;
     const std::string sender_pubkey = "test_sender_pubkey";
@@ -305,17 +283,17 @@ TEST_CASE("NostrOutgoingHandler sends events via transport", "[nostr][outgoing_h
       sender_pubkey, timestamp, signal_fingerprint);
     const radix_relay::nostr::events::outgoing::identity_announcement outgoing_event(base_event);
 
-    handler.handle(outgoing_event);
+    session.send(outgoing_event);
 
     REQUIRE(transport.sent_messages.size() == 1);
+    REQUIRE(handler.outgoing_identity_events.size() == 1);
+    CHECK(handler.outgoing_identity_events[0].pubkey == sender_pubkey);
 
-    // Convert bytes to string to parse the protocol message
     std::string msg_str;
     msg_str.resize(transport.sent_messages[0].size());
     std::ranges::transform(
       transport.sent_messages[0], msg_str.begin(), [](std::byte byt) { return std::bit_cast<char>(byt); });
 
-    // Parse as protocol::event message
     auto protocol_msg = radix_relay::nostr::protocol::event::deserialize(msg_str);
     REQUIRE(protocol_msg.has_value());
     if (protocol_msg.has_value()) {
@@ -325,10 +303,11 @@ TEST_CASE("NostrOutgoingHandler sends events via transport", "[nostr][outgoing_h
     }
   }
 
-  SECTION("handle outgoing encrypted message")
+  SECTION("send outgoing encrypted message")
   {
+    radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay_test::TestDoubleNostrTransport transport;
-    radix_relay::nostr::OutgoingHandler handler(transport);
+    radix_relay::nostr::Session session(handler, transport);
 
     const auto timestamp = 1234567890U;
     const std::string sender_pubkey = "test_sender_pubkey";
@@ -338,20 +317,20 @@ TEST_CASE("NostrOutgoingHandler sends events via transport", "[nostr][outgoing_h
 
     auto base_event = radix_relay::nostr::protocol::event_data::create_encrypted_message(
       timestamp, recipient_pubkey, encrypted_payload, session_id);
-    base_event.pubkey = sender_pubkey;// Set for testing
+    base_event.pubkey = sender_pubkey;
     const radix_relay::nostr::events::outgoing::encrypted_message outgoing_event(base_event);
 
-    handler.handle(outgoing_event);
+    session.send(outgoing_event);
 
     REQUIRE(transport.sent_messages.size() == 1);
+    REQUIRE(handler.outgoing_encrypted_events.size() == 1);
+    CHECK(handler.outgoing_encrypted_events[0].pubkey == sender_pubkey);
 
-    // Convert bytes to string to parse the protocol message
     std::string msg_str;
     msg_str.resize(transport.sent_messages[0].size());
     std::ranges::transform(
       transport.sent_messages[0], msg_str.begin(), [](std::byte byt) { return std::bit_cast<char>(byt); });
 
-    // Parse as protocol::event message
     auto protocol_msg = radix_relay::nostr::protocol::event::deserialize(msg_str);
     REQUIRE(protocol_msg.has_value());
     if (protocol_msg.has_value()) {
@@ -362,10 +341,11 @@ TEST_CASE("NostrOutgoingHandler sends events via transport", "[nostr][outgoing_h
     }
   }
 
-  SECTION("handle outgoing session request")
+  SECTION("send outgoing session request")
   {
+    radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay_test::TestDoubleNostrTransport transport;
-    radix_relay::nostr::OutgoingHandler handler(transport);
+    radix_relay::nostr::Session session(handler, transport);
 
     const auto timestamp = 1234567890U;
     const std::string sender_pubkey = "test_sender_pubkey";
@@ -376,17 +356,17 @@ TEST_CASE("NostrOutgoingHandler sends events via transport", "[nostr][outgoing_h
       sender_pubkey, timestamp, recipient_pubkey, prekey_bundle);
     const radix_relay::nostr::events::outgoing::session_request outgoing_event(base_event);
 
-    handler.handle(outgoing_event);
+    session.send(outgoing_event);
 
     REQUIRE(transport.sent_messages.size() == 1);
+    REQUIRE(handler.outgoing_session_events.size() == 1);
+    CHECK(handler.outgoing_session_events[0].pubkey == sender_pubkey);
 
-    // Convert bytes to string to parse the protocol message
     std::string msg_str;
     msg_str.resize(transport.sent_messages[0].size());
     std::ranges::transform(
       transport.sent_messages[0], msg_str.begin(), [](std::byte byt) { return std::bit_cast<char>(byt); });
 
-    // Parse as protocol::event message
     auto protocol_msg = radix_relay::nostr::protocol::event::deserialize(msg_str);
     REQUIRE(protocol_msg.has_value());
     if (protocol_msg.has_value()) {
@@ -395,5 +375,86 @@ TEST_CASE("NostrOutgoingHandler sends events via transport", "[nostr][outgoing_h
       CHECK(event.data.kind == static_cast<std::uint32_t>(radix_relay::nostr::protocol::kind::session_request));
       CHECK(event.data.content == prekey_bundle);
     }
+  }
+}
+
+TEST_CASE("Session provides unified TX+RX interface", "[nostr][session][unified]")
+{
+  SECTION("session receives incoming messages via dispatcher")
+  {
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay_test::TestDoubleNostrTransport transport;
+    const radix_relay::nostr::Session session(handler, transport);
+
+    const auto timestamp = 1234567890U;
+    const std::string pubkey = "test_pubkey";
+    auto e_data =
+      radix_relay::nostr::protocol::event_data::create_identity_announcement(pubkey, timestamp, "test_fingerprint");
+
+    auto event = radix_relay::nostr::protocol::event::from_event_data(e_data);
+    const auto event_str = event.serialize();
+
+    std::vector<std::byte> bytes;
+    bytes.resize(event_str.size());
+    std::ranges::transform(
+      event_str, bytes.begin(), [](char character) { return std::bit_cast<std::byte>(character); });
+
+    if (transport.message_callback) { transport.message_callback(bytes); }
+
+    CHECK(handler.identity_events.size() == 1);
+    if (!handler.identity_events.empty()) { CHECK(handler.identity_events[0].pubkey == pubkey); }
+  }
+
+  SECTION("session handles bidirectional communication")
+  {
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay_test::TestDoubleNostrTransport transport;
+    radix_relay::nostr::Session session(handler, transport);
+
+    const auto timestamp = 1234567890U;
+    const std::string sender_pubkey = "test_sender_pubkey";
+    const std::string recipient_pubkey = "test_recipient_pubkey";
+
+    auto outgoing_base = radix_relay::nostr::protocol::event_data::create_identity_announcement(
+      sender_pubkey, timestamp, "sender_fingerprint");
+    const radix_relay::nostr::events::outgoing::identity_announcement outgoing_event(outgoing_base);
+    session.send(outgoing_event);
+
+    auto incoming_base = radix_relay::nostr::protocol::event_data::create_identity_announcement(
+      recipient_pubkey, timestamp, "recipient_fingerprint");
+    auto event = radix_relay::nostr::protocol::event::from_event_data(incoming_base);
+    const auto event_str = event.serialize();
+    std::vector<std::byte> bytes;
+    bytes.resize(event_str.size());
+    std::ranges::transform(
+      event_str, bytes.begin(), [](char character) { return std::bit_cast<std::byte>(character); });
+    if (transport.message_callback) { transport.message_callback(bytes); }
+
+    CHECK(handler.outgoing_identity_events.size() == 1);
+    CHECK(handler.identity_events.size() == 1);
+    CHECK(transport.sent_messages.size() == 1);
+  }
+
+  SECTION("session send method notifies handler before sending")
+  {
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay_test::TestDoubleNostrTransport transport;
+    radix_relay::nostr::Session session(handler, transport);
+
+    const auto timestamp = 1234567890U;
+    const std::string sender_pubkey = "test_sender_pubkey";
+    const std::string recipient_pubkey = "test_recipient_pubkey";
+    const std::string encrypted_payload = "encrypted_data";
+    const std::string session_id = "session_123";
+
+    auto base_event = radix_relay::nostr::protocol::event_data::create_encrypted_message(
+      timestamp, recipient_pubkey, encrypted_payload, session_id);
+    base_event.pubkey = sender_pubkey;
+    const radix_relay::nostr::events::outgoing::encrypted_message outgoing_event(base_event);
+
+    session.send(outgoing_event);
+
+    CHECK(handler.outgoing_encrypted_events.size() == 1);
+    CHECK(transport.sent_messages.size() == 1);
   }
 }
