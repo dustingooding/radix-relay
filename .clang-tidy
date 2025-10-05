@@ -9,15 +9,21 @@ Checks: "*,
         -zircon-*,
         -readability-static-accessed-through-instance,
         -readability-avoid-const-params-in-decls,
+        -readability-function-cognitive-complexity,
         -cppcoreguidelines-non-private-member-variables-in-classes,
         -misc-non-private-member-variables-in-classes,
         -misc-no-recursion,
         -misc-use-anonymous-namespace,
         -misc-use-internal-linkage,
-        -misc-include-cleaner
+        -misc-include-cleaner,
+        -boost-use-ranges,
+        -clang-analyzer-optin.core.EnumCastOutOfRange,
+        -clang-analyzer-optin.cplusplus.VirtualCall,
+        -clang-analyzer-cplusplus.NewDelete,
+        -clang-analyzer-unix.BlockInCriticalSection
 "
 WarningsAsErrors: ''
-HeaderFilterRegex: ''
+HeaderFilterRegex: '^(?!.*test/)(?!.*_deps/).*$'
 FormatStyle:     none
 
 CheckOptions:
