@@ -25,10 +25,14 @@ private:
   std::string name_;
   std::string peer_name_;
   mutable ::rust::Box<::radix_relay::SignalBridge> bridge_;
+  std::reference_wrapper<nostr::Transport> transport_;
 
 public:
-  DemoHandler(std::string name, std::string peer_name, ::rust::Box<::radix_relay::SignalBridge> bridge)
-    : name_(std::move(name)), peer_name_(std::move(peer_name)), bridge_(std::move(bridge))
+  DemoHandler(std::string name,
+    std::string peer_name,
+    ::rust::Box<::radix_relay::SignalBridge> bridge,
+    nostr::Transport &transport)
+    : name_(std::move(name)), peer_name_(std::move(peer_name)), bridge_(std::move(bridge)), transport_(transport)
   {}
 
   auto bridge() const -> ::radix_relay::SignalBridge & { return *bridge_; }
@@ -106,18 +110,78 @@ public:
   {
     std::cout << name_ << " sending identity announcement (event_id: " << event.id.substr(0, event_id_preview_length)
               << "...)\n";
+    send_event(event);
   }
 
   auto handle(const nostr::events::outgoing::encrypted_message &event) const -> void
   {
     std::cout << name_ << " sending encrypted message (event_id: " << event.id.substr(0, event_id_preview_length)
               << "...)\n";
+    send_event(event);
   }
 
   auto handle(const nostr::events::outgoing::session_request &event) const -> void
   {
     std::cout << name_ << " sending session request (event_id: " << event.id.substr(0, event_id_preview_length)
               << "...)\n";
+    send_event(event);
+  }
+
+  auto handle(const nostr::events::outgoing::plaintext_message &event) const -> void
+  {
+    std::cout << name_ << " encrypting and sending message to " << event.recipient << ": \"" << event.message << "\"\n";
+
+    std::vector<uint8_t> message_bytes(event.message.begin(), event.message.end());
+    auto signal_encrypted_bytes = radix_relay::encrypt_message(
+      *bridge_, event.recipient, rust::Slice<const uint8_t>{ message_bytes.data(), message_bytes.size() });
+
+    std::ostringstream oss;
+    for (const auto &byte : signal_encrypted_bytes) {
+      oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
+    }
+    const std::string encrypted_content_hex = oss.str();
+
+    const auto event_timestamp = static_cast<std::uint32_t>(
+      std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+
+    auto signed_event_json = radix_relay::create_and_sign_encrypted_message(*bridge_,
+      event.recipient,
+      encrypted_content_hex,
+      event_timestamp,
+      std::string(radix_relay::cmake::project_version));
+
+    auto signed_event = nostr::protocol::event_data::deserialize(std::string(signed_event_json));
+    if (!signed_event.has_value()) {
+      std::cout << name_ << " failed to create signed event\n";
+      return;
+    }
+
+    const nostr::events::outgoing::encrypted_message encrypted_event(*signed_event);
+    handle(encrypted_event);
+  }
+
+  auto handle(const nostr::events::outgoing::subscription_request &event) const -> void
+  {
+    std::cout << name_ << " subscribing with filter: " << event.subscription_json << "\n";
+
+    std::vector<std::byte> bytes;
+    bytes.reserve(event.subscription_json.size());
+    std::ranges::transform(event.subscription_json, std::back_inserter(bytes), [](char character) {
+      return static_cast<std::byte>(character);
+    });
+    transport_.get().send(bytes);
+  }
+
+private:
+  auto send_event(const nostr::protocol::event_data &event) const -> void
+  {
+    auto protocol_event = nostr::protocol::event::from_event_data(event);
+    auto json_str = protocol_event.serialize();
+
+    std::vector<std::byte> bytes;
+    bytes.resize(json_str.size());
+    std::ranges::transform(json_str, bytes.begin(), [](char character) { return std::bit_cast<std::byte>(character); });
+    transport_.get().send(bytes);
   }
 };
 // NOLINTEND(readability-convert-member-functions-to-static)
@@ -174,59 +238,28 @@ auto main() -> int
       radix_relay::establish_session(*bob_bridge, "alice", rust::Slice<const uint8_t>{ alice_prekey_bundle });
       std::cout << "   Bob established session with Alice\n";
 
-      radix_relay::DemoHandler alice_handler("Alice", "bob", std::move(alice_bridge));
-      radix_relay::nostr::Session alice_session(alice_handler, alice_transport);
+      auto bob_subscription_req = radix_relay::create_subscription_for_self(*bob_bridge, "bob_sub");
 
-      std::cout << "Alice creating and encrypting test message for Bob...\n";
-      const std::string test_message = "Hello Bob! This is Alice sending you an encrypted message via Radix Relay!";
-      std::cout << "   Original message: \"" << test_message << "\"\n";
+      radix_relay::DemoHandler alice_handler("Alice", "bob", std::move(alice_bridge), alice_transport);
+      radix_relay::DemoHandler bob_handler("Bob", "alice", std::move(bob_bridge), bob_transport);
 
-      std::vector<uint8_t> message_bytes(test_message.begin(), test_message.end());
-      auto signal_encrypted_bytes = radix_relay::encrypt_message(
-        alice_handler.bridge(), "bob", rust::Slice<const uint8_t>{ message_bytes.data(), message_bytes.size() });
+      radix_relay::nostr::Session<radix_relay::DemoHandler, radix_relay::nostr::Transport> alice_session(
+        alice_transport, alice_handler);
 
-      std::ostringstream oss;
-      for (const auto &byte : signal_encrypted_bytes) {
-        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
-      }
-      const std::string encrypted_content_hex = oss.str();
+      radix_relay::nostr::Session<radix_relay::DemoHandler, radix_relay::nostr::Transport> bob_session(
+        bob_transport, bob_handler);
 
-      const auto event_timestamp = static_cast<std::uint32_t>(
-        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
-
-      constexpr std::size_t preview_length = 50;
-      std::cout << "   Encrypted content (hex): " << encrypted_content_hex.substr(0, preview_length) << "...\n";
-      std::cout << "   Creating and signing Nostr event with all keys derived internally\n";
-
-      auto signed_event_json = radix_relay::create_and_sign_encrypted_message(alice_handler.bridge(),
-        "bob",
-        encrypted_content_hex,
-        event_timestamp,
-        std::string(radix_relay::cmake::project_version));
-
-      auto signed_event = radix_relay::nostr::protocol::event_data::deserialize(std::string(signed_event_json));
-      if (!signed_event.has_value()) { throw std::runtime_error("Failed to deserialize signed event"); }
-
-      std::cout << "Bob creating targeted subscription for messages addressed to him...\n";
-      radix_relay::DemoHandler bob_handler("Bob", "alice", std::move(bob_bridge));
-      auto subscription_req = radix_relay::create_subscription_for_self(bob_handler.bridge(), "bob_sub");
-      std::cout << "   Subscription filter: " << std::string(subscription_req) << "\n";
-
-      const radix_relay::nostr::Session bob_session(bob_handler, bob_transport);
-
-      std::vector<std::byte> sub_bytes;
-      sub_bytes.reserve(subscription_req.size());
-      std::ranges::transform(subscription_req, std::back_inserter(sub_bytes), [](char character) {
-        return static_cast<std::byte>(character);
-      });
-      bob_transport.send(std::span<const std::byte>(sub_bytes));
+      std::cout << "Bob subscribing for messages addressed to him...\n";
+      const radix_relay::nostr::events::outgoing::subscription_request sub_event{ std::string(bob_subscription_req) };
+      bob_session.handle(sub_event);
 
       constexpr auto subscription_wait_time = std::chrono::milliseconds(100);
       std::this_thread::sleep_for(subscription_wait_time);
 
-      std::cout << "Alice sending encrypted message...\n";
-      const radix_relay::nostr::events::outgoing::encrypted_message outgoing_event(*signed_event);
-      alice_session.send(outgoing_event);
+      std::cout << "Alice sending plaintext message to Bob...\n";
+      const std::string test_message = "Hello Bob! This is Alice sending you an encrypted message via Radix Relay!";
+      const radix_relay::nostr::events::outgoing::plaintext_message msg_event{ "bob", test_message };
+      alice_session.handle(msg_event);
 
       std::cout << "Message sent to Nostr relay!\n";
       std::cout << "Waiting for responses from relay...\n";

@@ -66,6 +66,23 @@ namespace outgoing {
     explicit session_request(const protocol::event_data &event) : protocol::event_data(event) {}
   };
 
+  struct plaintext_message
+  {
+    std::string recipient;
+    std::string message;
+
+    plaintext_message(std::string recipient_id, std::string msg)
+      : recipient(std::move(recipient_id)), message(std::move(msg))
+    {}
+  };
+
+  struct subscription_request
+  {
+    std::string subscription_json;
+
+    explicit subscription_request(std::string sub_json) : subscription_json(std::move(sub_json)) {}
+  };
+
 }// namespace outgoing
 
 }// namespace radix_relay::nostr::events

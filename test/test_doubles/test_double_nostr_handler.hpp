@@ -21,6 +21,8 @@ public:
   mutable std::vector<radix_relay::nostr::protocol::event_data> outgoing_identity_events;
   mutable std::vector<radix_relay::nostr::protocol::event_data> outgoing_encrypted_events;
   mutable std::vector<radix_relay::nostr::protocol::event_data> outgoing_session_events;
+  mutable std::vector<radix_relay::nostr::events::outgoing::plaintext_message> plaintext_messages;
+  mutable std::vector<radix_relay::nostr::events::outgoing::subscription_request> subscription_requests;
 
   auto handle(const radix_relay::nostr::events::incoming::identity_announcement &event) const -> void
   {
@@ -69,6 +71,16 @@ public:
   auto handle(const radix_relay::nostr::events::outgoing::session_request &event) const -> void
   {
     outgoing_session_events.push_back(event);
+  }
+
+  auto handle(const radix_relay::nostr::events::outgoing::plaintext_message &event) const -> void
+  {
+    plaintext_messages.push_back(event);
+  }
+
+  auto handle(const radix_relay::nostr::events::outgoing::subscription_request &event) const -> void
+  {
+    subscription_requests.push_back(event);
   }
 };
 

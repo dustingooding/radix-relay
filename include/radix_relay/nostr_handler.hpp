@@ -105,52 +105,16 @@ public:
 template<concepts::NostrHandler Handler, radix_relay::concepts::Transport Transport> class Session
 {
 private:
-  Handler &handler_;
-  Transport &transport_;
+  std::reference_wrapper<Handler> handler_;
   Dispatcher<Handler> dispatcher_;
 
 public:
-  explicit Session(Handler &handler, Transport &transport)
-    : handler_(handler), transport_(transport), dispatcher_(handler)
+  explicit Session(Transport &transport, Handler &handler) : handler_(handler), dispatcher_(handler)
   {
-    transport_.register_message_callback(dispatcher_.create_transport_callback());
+    transport.register_message_callback(dispatcher_.create_transport_callback());
   }
 
-  auto handle(const events::outgoing::identity_announcement &event) -> void { send_event(event); }
-
-  auto handle(const events::outgoing::encrypted_message &event) -> void { send_event(event); }
-
-  auto handle(const events::outgoing::session_request &event) -> void { send_event(event); }
-
-  auto send(const events::outgoing::identity_announcement &event) -> void
-  {
-    handler_.handle(event);
-    send_event(event);
-  }
-
-  auto send(const events::outgoing::encrypted_message &event) -> void
-  {
-    handler_.handle(event);
-    send_event(event);
-  }
-
-  auto send(const events::outgoing::session_request &event) -> void
-  {
-    handler_.handle(event);
-    send_event(event);
-  }
-
-private:
-  auto send_event(const protocol::event_data &event) -> void
-  {
-    auto protocol_event = protocol::event::from_event_data(event);
-    auto json_str = protocol_event.serialize();
-
-    std::vector<std::byte> bytes;
-    bytes.resize(json_str.size());
-    std::ranges::transform(json_str, bytes.begin(), [](char c) { return std::bit_cast<std::byte>(c); });
-    transport_.send(bytes);
-  }
+  auto handle(const auto &event) -> void { handler_.get().handle(event); }
 };
 
 }// namespace radix_relay::nostr

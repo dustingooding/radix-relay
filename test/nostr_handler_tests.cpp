@@ -91,6 +91,39 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
     CHECK(handler.session_events[0].pubkey == sender_pubkey);
   }
 
+  SECTION("dispatch OK message")
+  {
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay::nostr::Dispatcher dispatcher(handler);
+
+    const std::string event_id = "test_event_id_12345";
+    const std::string ok_json = R"(["OK",")" + event_id + R"(",true,""])";
+    const auto bytes = std::as_bytes(std::span(ok_json));
+
+    dispatcher.dispatch_bytes(bytes);
+
+    CHECK(handler.ok_msgs.size() == 1);
+    if (!handler.ok_msgs.empty()) {
+      CHECK(handler.ok_msgs[0].event_id == event_id);
+      CHECK(handler.ok_msgs[0].accepted == true);
+    }
+  }
+
+  SECTION("dispatch EOSE message")
+  {
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay::nostr::Dispatcher dispatcher(handler);
+
+    const std::string subscription_id = "test_sub_123";
+    const std::string eose_json = R"(["EOSE",")" + subscription_id + R"("])";
+    const auto bytes = std::as_bytes(std::span(eose_json));
+
+    dispatcher.dispatch_bytes(bytes);
+
+    CHECK(handler.eose_msgs.size() == 1);
+    if (!handler.eose_msgs.empty()) { CHECK(handler.eose_msgs[0].subscription_id == subscription_id); }
+  }
+
   SECTION("dispatch unknown message types to unknown handler")
   {
     radix_relay_test::TestDoubleNostrHandler handler;
@@ -123,6 +156,19 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
     CHECK(handler.unknown_events[0].content == "hello world");
   }
 
+  SECTION("dispatch unknown protocol message")
+  {
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay::nostr::Dispatcher dispatcher(handler);
+
+    const std::string unknown_protocol = R"(["NOTICE","This is a relay notice"])";
+    const auto bytes = std::as_bytes(std::span(unknown_protocol));
+    dispatcher.dispatch_bytes(bytes);
+
+    CHECK(handler.unknown_msgs.size() == 1);
+    if (!handler.unknown_msgs.empty()) { CHECK(handler.unknown_msgs[0] == unknown_protocol); }
+  }
+
   SECTION("dispatch bytes with invalid JSON does nothing")
   {
     radix_relay_test::TestDoubleNostrHandler handler;
@@ -137,6 +183,7 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
     CHECK(handler.session_events.empty());
     CHECK(handler.status_events.empty());
     CHECK(handler.unknown_events.empty());
+    CHECK(handler.unknown_msgs.size() == 1);
   }
 
   SECTION("create transport callback")
@@ -267,13 +314,13 @@ TEST_CASE("Outgoing protocol::event_data types work correctly", "[nostr][outgoin
 }
 
 
-TEST_CASE("Session sends outgoing events via transport", "[nostr][session][outgoing]")
+TEST_CASE("Session forwards outgoing events to handler", "[nostr][session][outgoing]")
 {
-  SECTION("send outgoing identity announcement")
+  SECTION("handle outgoing identity announcement")
   {
     radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay_test::TestDoubleNostrTransport transport;
-    radix_relay::nostr::Session session(handler, transport);
+    radix_relay::nostr::Session session(transport, handler);
 
     const auto timestamp = 1234567890U;
     const std::string sender_pubkey = "test_sender_pubkey";
@@ -283,31 +330,17 @@ TEST_CASE("Session sends outgoing events via transport", "[nostr][session][outgo
       sender_pubkey, timestamp, signal_fingerprint);
     const radix_relay::nostr::events::outgoing::identity_announcement outgoing_event(base_event);
 
-    session.send(outgoing_event);
+    session.handle(outgoing_event);
 
-    REQUIRE(transport.sent_messages.size() == 1);
     REQUIRE(handler.outgoing_identity_events.size() == 1);
     CHECK(handler.outgoing_identity_events[0].pubkey == sender_pubkey);
-
-    std::string msg_str;
-    msg_str.resize(transport.sent_messages[0].size());
-    std::ranges::transform(
-      transport.sent_messages[0], msg_str.begin(), [](std::byte byt) { return std::bit_cast<char>(byt); });
-
-    auto protocol_msg = radix_relay::nostr::protocol::event::deserialize(msg_str);
-    REQUIRE(protocol_msg.has_value());
-    if (protocol_msg.has_value()) {
-      const auto &event = protocol_msg.value();
-      CHECK(event.data.pubkey == sender_pubkey);
-      CHECK(event.data.kind == static_cast<std::uint32_t>(radix_relay::nostr::protocol::kind::identity_announcement));
-    }
   }
 
-  SECTION("send outgoing encrypted message")
+  SECTION("handle outgoing encrypted message")
   {
     radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay_test::TestDoubleNostrTransport transport;
-    radix_relay::nostr::Session session(handler, transport);
+    radix_relay::nostr::Session session(transport, handler);
 
     const auto timestamp = 1234567890U;
     const std::string sender_pubkey = "test_sender_pubkey";
@@ -320,32 +353,17 @@ TEST_CASE("Session sends outgoing events via transport", "[nostr][session][outgo
     base_event.pubkey = sender_pubkey;
     const radix_relay::nostr::events::outgoing::encrypted_message outgoing_event(base_event);
 
-    session.send(outgoing_event);
+    session.handle(outgoing_event);
 
-    REQUIRE(transport.sent_messages.size() == 1);
     REQUIRE(handler.outgoing_encrypted_events.size() == 1);
     CHECK(handler.outgoing_encrypted_events[0].pubkey == sender_pubkey);
-
-    std::string msg_str;
-    msg_str.resize(transport.sent_messages[0].size());
-    std::ranges::transform(
-      transport.sent_messages[0], msg_str.begin(), [](std::byte byt) { return std::bit_cast<char>(byt); });
-
-    auto protocol_msg = radix_relay::nostr::protocol::event::deserialize(msg_str);
-    REQUIRE(protocol_msg.has_value());
-    if (protocol_msg.has_value()) {
-      const auto &event = protocol_msg.value();
-      CHECK(event.data.pubkey == sender_pubkey);
-      CHECK(event.data.kind == static_cast<std::uint32_t>(radix_relay::nostr::protocol::kind::encrypted_message));
-      CHECK(event.data.content == encrypted_payload);
-    }
   }
 
-  SECTION("send outgoing session request")
+  SECTION("handle outgoing session request")
   {
     radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay_test::TestDoubleNostrTransport transport;
-    radix_relay::nostr::Session session(handler, transport);
+    radix_relay::nostr::Session session(transport, handler);
 
     const auto timestamp = 1234567890U;
     const std::string sender_pubkey = "test_sender_pubkey";
@@ -356,25 +374,40 @@ TEST_CASE("Session sends outgoing events via transport", "[nostr][session][outgo
       sender_pubkey, timestamp, recipient_pubkey, prekey_bundle);
     const radix_relay::nostr::events::outgoing::session_request outgoing_event(base_event);
 
-    session.send(outgoing_event);
+    session.handle(outgoing_event);
 
-    REQUIRE(transport.sent_messages.size() == 1);
     REQUIRE(handler.outgoing_session_events.size() == 1);
     CHECK(handler.outgoing_session_events[0].pubkey == sender_pubkey);
+  }
 
-    std::string msg_str;
-    msg_str.resize(transport.sent_messages[0].size());
-    std::ranges::transform(
-      transport.sent_messages[0], msg_str.begin(), [](std::byte byt) { return std::bit_cast<char>(byt); });
+  SECTION("handle outgoing plaintext message")
+  {
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay_test::TestDoubleNostrTransport transport;
+    radix_relay::nostr::Session session(transport, handler);
 
-    auto protocol_msg = radix_relay::nostr::protocol::event::deserialize(msg_str);
-    REQUIRE(protocol_msg.has_value());
-    if (protocol_msg.has_value()) {
-      const auto &event = protocol_msg.value();
-      CHECK(event.data.pubkey == sender_pubkey);
-      CHECK(event.data.kind == static_cast<std::uint32_t>(radix_relay::nostr::protocol::kind::session_request));
-      CHECK(event.data.content == prekey_bundle);
-    }
+    const radix_relay::nostr::events::outgoing::plaintext_message plaintext_event{ "recipient", "test message" };
+
+    session.handle(plaintext_event);
+
+    REQUIRE(handler.plaintext_messages.size() == 1);
+    CHECK(handler.plaintext_messages[0].recipient == "recipient");
+    CHECK(handler.plaintext_messages[0].message == "test message");
+  }
+
+  SECTION("handle outgoing subscription request")
+  {
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay_test::TestDoubleNostrTransport transport;
+    radix_relay::nostr::Session session(transport, handler);
+
+    const std::string subscription_json = R"(["REQ","sub_id",{"kinds":[40001]}])";
+    const radix_relay::nostr::events::outgoing::subscription_request sub_event{ subscription_json };
+
+    session.handle(sub_event);
+
+    REQUIRE(handler.subscription_requests.size() == 1);
+    CHECK(handler.subscription_requests[0].subscription_json == subscription_json);
   }
 }
 
@@ -384,7 +417,7 @@ TEST_CASE("Session provides unified TX+RX interface", "[nostr][session][unified]
   {
     radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay_test::TestDoubleNostrTransport transport;
-    const radix_relay::nostr::Session session(handler, transport);
+    const radix_relay::nostr::Session session(transport, handler);
 
     const auto timestamp = 1234567890U;
     const std::string pubkey = "test_pubkey";
@@ -409,7 +442,7 @@ TEST_CASE("Session provides unified TX+RX interface", "[nostr][session][unified]
   {
     radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay_test::TestDoubleNostrTransport transport;
-    radix_relay::nostr::Session session(handler, transport);
+    radix_relay::nostr::Session session(transport, handler);
 
     const auto timestamp = 1234567890U;
     const std::string sender_pubkey = "test_sender_pubkey";
@@ -418,7 +451,7 @@ TEST_CASE("Session provides unified TX+RX interface", "[nostr][session][unified]
     auto outgoing_base = radix_relay::nostr::protocol::event_data::create_identity_announcement(
       sender_pubkey, timestamp, "sender_fingerprint");
     const radix_relay::nostr::events::outgoing::identity_announcement outgoing_event(outgoing_base);
-    session.send(outgoing_event);
+    session.handle(outgoing_event);
 
     auto incoming_base = radix_relay::nostr::protocol::event_data::create_identity_announcement(
       recipient_pubkey, timestamp, "recipient_fingerprint");
@@ -432,14 +465,13 @@ TEST_CASE("Session provides unified TX+RX interface", "[nostr][session][unified]
 
     CHECK(handler.outgoing_identity_events.size() == 1);
     CHECK(handler.identity_events.size() == 1);
-    CHECK(transport.sent_messages.size() == 1);
   }
 
-  SECTION("session send method notifies handler before sending")
+  SECTION("session handle method forwards to handler")
   {
     radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay_test::TestDoubleNostrTransport transport;
-    radix_relay::nostr::Session session(handler, transport);
+    radix_relay::nostr::Session session(transport, handler);
 
     const auto timestamp = 1234567890U;
     const std::string sender_pubkey = "test_sender_pubkey";
@@ -452,9 +484,8 @@ TEST_CASE("Session provides unified TX+RX interface", "[nostr][session][unified]
     base_event.pubkey = sender_pubkey;
     const radix_relay::nostr::events::outgoing::encrypted_message outgoing_event(base_event);
 
-    session.send(outgoing_event);
+    session.handle(outgoing_event);
 
     CHECK(handler.outgoing_encrypted_events.size() == 1);
-    CHECK(transport.sent_messages.size() == 1);
   }
 }
