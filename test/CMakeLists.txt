@@ -70,6 +70,7 @@ add_catch_test(NAME event_system_tests SOURCES event_system_tests.cpp)
 add_catch_test(NAME node_identity_tests SOURCES node_identity_tests.cpp LIBS signal_bridge_cxx)
 add_catch_test(NAME nostr_protocol_tests SOURCES nostr_protocol_tests.cpp LIBS nlohmann_json::nlohmann_json)
 add_catch_test(NAME nostr_handler_tests SOURCES nostr_handler_tests.cpp LIBS nlohmann_json::nlohmann_json)
+add_catch_test(NAME nostr_request_tracker_tests SOURCES nostr_request_tracker_tests.cpp LIBS nlohmann_json::nlohmann_json)
 add_catch_test(NAME nostr_signing_tests SOURCES nostr_signing_tests.cpp LIBS nlohmann_json::nlohmann_json signal_bridge_cxx)
 
 if(WIN32 AND BUILD_SHARED_LIBS)
