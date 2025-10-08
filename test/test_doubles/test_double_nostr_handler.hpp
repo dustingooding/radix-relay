@@ -58,22 +58,29 @@ public:
     unknown_msgs.push_back(event.message);
   }
 
-  auto handle(const radix_relay::nostr::events::outgoing::identity_announcement &event) const -> void
+  auto handle(const radix_relay::nostr::events::outgoing::identity_announcement &event,
+    const std::function<void(const std::string &)> &track_fn = nullptr) const -> void
   {
     outgoing_identity_events.push_back(event);
+    if (track_fn) { track_fn(event.id); }
   }
 
-  auto handle(const radix_relay::nostr::events::outgoing::encrypted_message &event) const -> void
+  auto handle(const radix_relay::nostr::events::outgoing::encrypted_message &event,
+    const std::function<void(const std::string &)> &track_fn = nullptr) const -> void
   {
     outgoing_encrypted_events.push_back(event);
+    if (track_fn) { track_fn(event.id); }
   }
 
-  auto handle(const radix_relay::nostr::events::outgoing::session_request &event) const -> void
+  auto handle(const radix_relay::nostr::events::outgoing::session_request &event,
+    const std::function<void(const std::string &)> &track_fn = nullptr) const -> void
   {
     outgoing_session_events.push_back(event);
+    if (track_fn) { track_fn(event.id); }
   }
 
-  auto handle(const radix_relay::nostr::events::outgoing::plaintext_message &event) const -> void
+  auto handle(const radix_relay::nostr::events::outgoing::plaintext_message &event,
+    const std::function<void(const std::string &)> & /*track_fn*/ = nullptr) const -> void
   {
     plaintext_messages.push_back(event);
   }

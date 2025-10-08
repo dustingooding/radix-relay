@@ -1,15 +1,20 @@
 #include "test_doubles/test_double_nostr_handler.hpp"
 #include "test_doubles/test_double_nostr_transport.hpp"
+#include "test_doubles/test_double_request_tracker.hpp"
 #include <catch2/catch_test_macros.hpp>
 #include <radix_relay/nostr.hpp>
+#include <radix_relay/nostr_request_tracker.hpp>
 #include <ranges>
 
 TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 {
   SECTION("dispatch identity announcement event")
   {
+    radix_relay_test::TestDoubleRequestTracker tracker;
+
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay::nostr::Dispatcher dispatcher(handler);
+    radix_relay::nostr::Dispatcher<radix_relay_test::TestDoubleNostrHandler, radix_relay_test::TestDoubleRequestTracker>
+      dispatcher(handler, tracker);
 
     const auto timestamp = 1234567890U;
     const std::string pubkey = "test_pubkey";
@@ -36,8 +41,11 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 
   SECTION("dispatch encrypted message event")
   {
+    radix_relay_test::TestDoubleRequestTracker tracker;
+
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay::nostr::Dispatcher dispatcher(handler);
+    radix_relay::nostr::Dispatcher<radix_relay_test::TestDoubleNostrHandler, radix_relay_test::TestDoubleRequestTracker>
+      dispatcher(handler, tracker);
 
     const auto timestamp = 1234567890U;
     const std::string sender_pubkey = "test_sender_pubkey";
@@ -65,8 +73,11 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 
   SECTION("dispatch session request event")
   {
+    radix_relay_test::TestDoubleRequestTracker tracker;
+
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay::nostr::Dispatcher dispatcher(handler);
+    radix_relay::nostr::Dispatcher<radix_relay_test::TestDoubleNostrHandler, radix_relay_test::TestDoubleRequestTracker>
+      dispatcher(handler, tracker);
 
     const auto timestamp = 1234567890U;
     const std::string sender_pubkey = "test_sender_pubkey";
@@ -93,8 +104,11 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 
   SECTION("dispatch OK message")
   {
+    radix_relay_test::TestDoubleRequestTracker tracker;
+
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay::nostr::Dispatcher dispatcher(handler);
+    radix_relay::nostr::Dispatcher<radix_relay_test::TestDoubleNostrHandler, radix_relay_test::TestDoubleRequestTracker>
+      dispatcher(handler, tracker);
 
     const std::string event_id = "test_event_id_12345";
     const std::string ok_json = R"(["OK",")" + event_id + R"(",true,""])";
@@ -111,8 +125,11 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 
   SECTION("dispatch EOSE message")
   {
+    radix_relay_test::TestDoubleRequestTracker tracker;
+
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay::nostr::Dispatcher dispatcher(handler);
+    radix_relay::nostr::Dispatcher<radix_relay_test::TestDoubleNostrHandler, radix_relay_test::TestDoubleRequestTracker>
+      dispatcher(handler, tracker);
 
     const std::string subscription_id = "test_sub_123";
     const std::string eose_json = R"(["EOSE",")" + subscription_id + R"("])";
@@ -126,8 +143,11 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 
   SECTION("dispatch unknown message types to unknown handler")
   {
+    radix_relay_test::TestDoubleRequestTracker tracker;
+
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay::nostr::Dispatcher dispatcher(handler);
+    radix_relay::nostr::Dispatcher<radix_relay_test::TestDoubleNostrHandler, radix_relay_test::TestDoubleRequestTracker>
+      dispatcher(handler, tracker);
 
     const auto timestamp = 1234567890U;
     const std::string pubkey = "test_pubkey";
@@ -158,8 +178,11 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 
   SECTION("dispatch unknown protocol message")
   {
+    radix_relay_test::TestDoubleRequestTracker tracker;
+
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay::nostr::Dispatcher dispatcher(handler);
+    radix_relay::nostr::Dispatcher<radix_relay_test::TestDoubleNostrHandler, radix_relay_test::TestDoubleRequestTracker>
+      dispatcher(handler, tracker);
 
     const std::string unknown_protocol = R"(["NOTICE","This is a relay notice"])";
     const auto bytes = std::as_bytes(std::span(unknown_protocol));
@@ -171,8 +194,11 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 
   SECTION("dispatch bytes with invalid JSON does nothing")
   {
+    radix_relay_test::TestDoubleRequestTracker tracker;
+
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay::nostr::Dispatcher dispatcher(handler);
+    radix_relay::nostr::Dispatcher<radix_relay_test::TestDoubleNostrHandler, radix_relay_test::TestDoubleRequestTracker>
+      dispatcher(handler, tracker);
 
     const std::string invalid_json = "not valid json";
     const auto bytes = std::as_bytes(std::span(invalid_json));
@@ -188,8 +214,11 @@ TEST_CASE("NostrDispatcher routes messages correctly", "[nostr][dispatcher]")
 
   SECTION("create transport callback")
   {
+    radix_relay_test::TestDoubleRequestTracker tracker;
+
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay::nostr::Dispatcher dispatcher(handler);
+    radix_relay::nostr::Dispatcher<radix_relay_test::TestDoubleNostrHandler, radix_relay_test::TestDoubleRequestTracker>
+      dispatcher(handler, tracker);
 
     auto callback = dispatcher.create_transport_callback();
 
@@ -318,8 +347,9 @@ TEST_CASE("Session forwards outgoing events to handler", "[nostr][session][outgo
 {
   SECTION("handle outgoing identity announcement")
   {
+    boost::asio::io_context io_context;
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay_test::TestDoubleNostrTransport transport;
+    radix_relay_test::TestDoubleNostrTransport transport(io_context);
     radix_relay::nostr::Session session(transport, handler);
 
     const auto timestamp = 1234567890U;
@@ -338,8 +368,9 @@ TEST_CASE("Session forwards outgoing events to handler", "[nostr][session][outgo
 
   SECTION("handle outgoing encrypted message")
   {
+    boost::asio::io_context io_context;
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay_test::TestDoubleNostrTransport transport;
+    radix_relay_test::TestDoubleNostrTransport transport(io_context);
     radix_relay::nostr::Session session(transport, handler);
 
     const auto timestamp = 1234567890U;
@@ -361,8 +392,9 @@ TEST_CASE("Session forwards outgoing events to handler", "[nostr][session][outgo
 
   SECTION("handle outgoing session request")
   {
+    boost::asio::io_context io_context;
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay_test::TestDoubleNostrTransport transport;
+    radix_relay_test::TestDoubleNostrTransport transport(io_context);
     radix_relay::nostr::Session session(transport, handler);
 
     const auto timestamp = 1234567890U;
@@ -382,8 +414,9 @@ TEST_CASE("Session forwards outgoing events to handler", "[nostr][session][outgo
 
   SECTION("handle outgoing plaintext message")
   {
+    boost::asio::io_context io_context;
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay_test::TestDoubleNostrTransport transport;
+    radix_relay_test::TestDoubleNostrTransport transport(io_context);
     radix_relay::nostr::Session session(transport, handler);
 
     const radix_relay::nostr::events::outgoing::plaintext_message plaintext_event{ "recipient", "test message" };
@@ -397,8 +430,9 @@ TEST_CASE("Session forwards outgoing events to handler", "[nostr][session][outgo
 
   SECTION("handle outgoing subscription request")
   {
+    boost::asio::io_context io_context;
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay_test::TestDoubleNostrTransport transport;
+    radix_relay_test::TestDoubleNostrTransport transport(io_context);
     radix_relay::nostr::Session session(transport, handler);
 
     const std::string subscription_json = R"(["REQ","sub_id",{"kinds":[40001]}])";
@@ -415,8 +449,9 @@ TEST_CASE("Session provides unified TX+RX interface", "[nostr][session][unified]
 {
   SECTION("session receives incoming messages via dispatcher")
   {
+    boost::asio::io_context io_context;
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay_test::TestDoubleNostrTransport transport;
+    radix_relay_test::TestDoubleNostrTransport transport(io_context);
     const radix_relay::nostr::Session session(transport, handler);
 
     const auto timestamp = 1234567890U;
@@ -440,8 +475,9 @@ TEST_CASE("Session provides unified TX+RX interface", "[nostr][session][unified]
 
   SECTION("session handles bidirectional communication")
   {
+    boost::asio::io_context io_context;
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay_test::TestDoubleNostrTransport transport;
+    radix_relay_test::TestDoubleNostrTransport transport(io_context);
     radix_relay::nostr::Session session(transport, handler);
 
     const auto timestamp = 1234567890U;
@@ -469,8 +505,9 @@ TEST_CASE("Session provides unified TX+RX interface", "[nostr][session][unified]
 
   SECTION("session handle method forwards to handler")
   {
+    boost::asio::io_context io_context;
     radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay_test::TestDoubleNostrTransport transport;
+    radix_relay_test::TestDoubleNostrTransport transport(io_context);
     radix_relay::nostr::Session session(transport, handler);
 
     const auto timestamp = 1234567890U;
@@ -487,5 +524,201 @@ TEST_CASE("Session provides unified TX+RX interface", "[nostr][session][unified]
     session.handle(outgoing_event);
 
     CHECK(handler.outgoing_encrypted_events.size() == 1);
+  }
+}
+
+TEST_CASE("Dispatcher integrates with RequestTracker", "[nostr][dispatcher][request_tracker]")
+{
+  SECTION("dispatcher accepts RequestTracker reference in constructor")
+  {
+    boost::asio::io_context io_context;
+    radix_relay::nostr::RequestTracker tracker(io_context);
+    radix_relay_test::TestDoubleNostrHandler handler;
+    const radix_relay::nostr::Dispatcher dispatcher(handler, tracker);
+
+    CHECK(true);
+  }
+
+  SECTION("dispatcher resolves tracker when OK message arrives")
+  {
+    boost::asio::io_context io_context;
+    radix_relay::nostr::RequestTracker tracker(io_context);
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay::nostr::Dispatcher dispatcher(handler, tracker);
+
+    bool callback_invoked = false;
+    radix_relay::nostr::protocol::ok received_response;
+
+    auto callback = [&callback_invoked, &received_response](const radix_relay::nostr::protocol::ok &response) {
+      callback_invoked = true;
+      received_response = response;
+    };
+
+    constexpr auto timeout = std::chrono::seconds(5);
+    const std::string event_id = "test_event_id_67890";
+    tracker.track(event_id, callback, timeout);
+
+    const std::string ok_json = R"(["OK",")" + event_id + R"(",true,""])";
+    const auto bytes = std::as_bytes(std::span(ok_json));
+
+    dispatcher.dispatch_bytes(bytes);
+
+    CHECK(callback_invoked);
+    CHECK(received_response.event_id == event_id);
+    CHECK(received_response.accepted == true);
+  }
+
+  SECTION("dispatcher still calls handler after resolving tracker")
+  {
+    boost::asio::io_context io_context;
+    radix_relay::nostr::RequestTracker tracker(io_context);
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay::nostr::Dispatcher dispatcher(handler, tracker);
+
+    bool callback_invoked = false;
+    auto callback = [&callback_invoked](const radix_relay::nostr::protocol::ok &) { callback_invoked = true; };
+
+    constexpr auto timeout = std::chrono::seconds(5);
+    const std::string event_id = "test_event_id_99999";
+    tracker.track(event_id, callback, timeout);
+
+    const std::string ok_json = R"(["OK",")" + event_id + R"(",true,""])";
+    const auto bytes = std::as_bytes(std::span(ok_json));
+
+    dispatcher.dispatch_bytes(bytes);
+
+    CHECK(callback_invoked);
+    CHECK(handler.ok_msgs.size() == 1);
+    CHECK(handler.ok_msgs[0].event_id == event_id);
+  }
+
+  SECTION("dispatcher handles OK without tracked request")
+  {
+    boost::asio::io_context io_context;
+    radix_relay::nostr::RequestTracker tracker(io_context);
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay::nostr::Dispatcher dispatcher(handler, tracker);
+
+    const std::string event_id = "untracked_event";
+    const std::string ok_json = R"(["OK",")" + event_id + R"(",false,"duplicate"])";
+    const auto bytes = std::as_bytes(std::span(ok_json));
+
+    dispatcher.dispatch_bytes(bytes);
+
+    CHECK(handler.ok_msgs.size() == 1);
+    CHECK(handler.ok_msgs[0].event_id == event_id);
+    CHECK(handler.ok_msgs[0].accepted == false);
+  }
+}
+
+TEST_CASE("Session integrates with RequestTracker", "[nostr][session][request_tracker]")
+{
+  SECTION("session owns RequestTracker instance")
+  {
+    boost::asio::io_context io_context;
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay_test::TestDoubleNostrTransport transport(io_context);
+    const radix_relay::nostr::Session session(transport, handler);
+
+    CHECK(true);
+  }
+
+  SECTION("session.handle with callback tracks request and invokes callback on OK")
+  {
+    boost::asio::io_context io_context;
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay_test::TestDoubleNostrTransport transport(io_context);
+    radix_relay::nostr::Session session(transport, handler);
+
+    bool callback_invoked = false;
+    radix_relay::nostr::protocol::ok received_response;
+
+    auto callback = [&callback_invoked, &received_response](const radix_relay::nostr::protocol::ok &response) {
+      callback_invoked = true;
+      received_response = response;
+    };
+
+    const auto timestamp = 1234567890U;
+    const std::string sender_pubkey = "test_sender";
+    const std::string recipient_pubkey = "test_recipient";
+    auto base_event = radix_relay::nostr::protocol::event_data::create_encrypted_message(
+      timestamp, recipient_pubkey, "encrypted_payload", "session_id");
+    base_event.pubkey = sender_pubkey;
+    const radix_relay::nostr::events::outgoing::encrypted_message outgoing_event(base_event);
+
+    constexpr auto timeout = std::chrono::seconds(5);
+    session.handle(outgoing_event, callback, timeout);
+
+    CHECK(handler.outgoing_encrypted_events.size() == 1);
+    CHECK(!callback_invoked);
+
+    const std::string ok_json = R"(["OK",")" + base_event.id + R"(",true,""])";
+    const auto bytes = std::as_bytes(std::span(ok_json));
+    if (transport.message_callback) { transport.message_callback(bytes); }
+
+    CHECK(callback_invoked);
+    CHECK(received_response.event_id == base_event.id);
+    CHECK(received_response.accepted == true);
+  }
+
+  SECTION("fire-and-forget still works without callback")
+  {
+    boost::asio::io_context io_context;
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay_test::TestDoubleNostrTransport transport(io_context);
+    radix_relay::nostr::Session session(transport, handler);
+
+    const auto timestamp = 1234567890U;
+    const std::string sender_pubkey = "test_sender";
+    auto base_event =
+      radix_relay::nostr::protocol::event_data::create_identity_announcement(sender_pubkey, timestamp, "fingerprint");
+    const radix_relay::nostr::events::outgoing::identity_announcement outgoing_event(base_event);
+
+    session.handle(outgoing_event);
+
+    CHECK(handler.outgoing_identity_events.size() == 1);
+  }
+
+  SECTION("multiple concurrent requests tracked independently")
+  {
+    boost::asio::io_context io_context;
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay_test::TestDoubleNostrTransport transport(io_context);
+    radix_relay::nostr::Session session(transport, handler);
+
+    int callback1_count = 0;
+    int callback2_count = 0;
+
+    auto callback1 = [&callback1_count](const radix_relay::nostr::protocol::ok &) { ++callback1_count; };
+    auto callback2 = [&callback2_count](const radix_relay::nostr::protocol::ok &) { ++callback2_count; };
+
+    const auto timestamp = 1234567890U;
+    auto event1 = radix_relay::nostr::protocol::event_data::create_encrypted_message(
+      timestamp, "recipient1", "payload1", "session1");
+    event1.id = "event_id_1";
+    auto event2 = radix_relay::nostr::protocol::event_data::create_encrypted_message(
+      timestamp + 1, "recipient2", "payload2", "session2");
+    event2.id = "event_id_2";
+
+    const radix_relay::nostr::events::outgoing::encrypted_message outgoing1(event1);
+    const radix_relay::nostr::events::outgoing::encrypted_message outgoing2(event2);
+
+    constexpr auto timeout = std::chrono::seconds(5);
+    session.handle(outgoing1, callback1, timeout);
+    session.handle(outgoing2, callback2, timeout);
+
+    const std::string ok_json1 = R"(["OK",")" + event1.id + R"(",true,""])";
+    const std::string ok_json2 = R"(["OK",")" + event2.id + R"(",true,""])";
+
+    const auto bytes1 = std::as_bytes(std::span(ok_json1));
+    const auto bytes2 = std::as_bytes(std::span(ok_json2));
+
+    if (transport.message_callback) { transport.message_callback(bytes2); }
+    CHECK(callback1_count == 0);
+    CHECK(callback2_count == 1);
+
+    if (transport.message_callback) { transport.message_callback(bytes1); }
+    CHECK(callback1_count == 1);
+    CHECK(callback2_count == 1);
   }
 }

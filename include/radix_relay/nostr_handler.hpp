@@ -1,21 +1,26 @@
 #pragma once
 
+#include <chrono>
 #include <functional>
 #include <nlohmann/json.hpp>
 #include <radix_relay/concepts/nostr_message_handler.hpp>
+#include <radix_relay/concepts/request_tracker.hpp>
+#include <radix_relay/concepts/trackable_event.hpp>
 #include <radix_relay/concepts/transport.hpp>
 #include <radix_relay/events/nostr_events.hpp>
 #include <radix_relay/nostr_protocol.hpp>
+#include <radix_relay/nostr_request_tracker.hpp>
 #include <ranges>
 #include <span>
 #include <string>
 
 namespace radix_relay::nostr {
 
-template<concepts::NostrHandler Handler> class Dispatcher
+template<concepts::NostrHandler Handler, radix_relay::concepts::RequestTracker Tracker> class Dispatcher
 {
 private:
   Handler &handler_;
+  Tracker &tracker_;
 
   auto dispatch_event(const protocol::event_data &event) -> void
   {
@@ -50,7 +55,7 @@ private:
   }
 
 public:
-  explicit Dispatcher(Handler &handler) : handler_(handler) {}
+  Dispatcher(Handler &handler, Tracker &tracker) : handler_(handler), tracker_(tracker) {}
 
   auto dispatch_bytes(std::span<const std::byte> raw_bytes) -> void
   {
@@ -70,6 +75,7 @@ public:
       if (msg_type == "OK") {
         auto ok_msg = protocol::ok::deserialize(json_str);
         if (ok_msg) {
+          tracker_.resolve(ok_msg->event_id, *ok_msg);
           handler_.handle(events::incoming::ok{ *ok_msg });
         } else {
           handler_.handle(events::incoming::unknown_protocol{ json_str });
@@ -106,15 +112,27 @@ template<concepts::NostrHandler Handler, radix_relay::concepts::Transport Transp
 {
 private:
   std::reference_wrapper<Handler> handler_;
-  Dispatcher<Handler> dispatcher_;
+  RequestTracker tracker_;
+  Dispatcher<Handler, RequestTracker> dispatcher_;
 
 public:
-  explicit Session(Transport &transport, Handler &handler) : handler_(handler), dispatcher_(handler)
+  explicit Session(Transport &transport, Handler &handler)
+    : handler_(handler), tracker_(transport.io_context()), dispatcher_(handler, tracker_)
   {
     transport.register_message_callback(dispatcher_.create_transport_callback());
   }
 
   auto handle(const auto &event) -> void { handler_.get().handle(event); }
+
+  auto handle(const radix_relay::concepts::TrackableEvent auto &event,
+    std::function<void(const protocol::ok &)> callback,
+    std::chrono::milliseconds timeout = std::chrono::seconds(5)) -> void
+  {
+    auto track_fn = [this, callback = std::move(callback), timeout](
+                      const std::string &event_id) mutable { tracker_.track(event_id, std::move(callback), timeout); };
+
+    handler_.get().handle(event, track_fn);
+  }
 };
 
 }// namespace radix_relay::nostr

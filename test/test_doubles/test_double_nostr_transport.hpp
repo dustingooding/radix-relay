@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/asio.hpp>
 #include <concepts>
 #include <functional>
 #include <span>
@@ -13,9 +14,14 @@ namespace radix_relay_test {
 class TestDoubleNostrTransport
 {
 public:
+  boost::asio::io_context &io_context_;
   mutable std::vector<std::vector<std::byte>> sent_messages;
   mutable bool is_connected = false;
   mutable std::function<void(std::span<const std::byte>)> message_callback;
+
+  explicit TestDoubleNostrTransport(boost::asio::io_context &io_context) : io_context_(io_context) {}
+
+  [[nodiscard]] auto io_context() -> boost::asio::io_context & { return io_context_; }
 
   auto connect(const std::string_view /*address*/) const -> void { is_connected = true; }
 
