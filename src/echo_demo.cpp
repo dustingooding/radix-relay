@@ -106,28 +106,41 @@ public:
     std::cout << name_ << " received unknown event (kind " << event.kind << ") from: " << event.pubkey << "\n";
   }
 
-  auto handle(const nostr::events::outgoing::identity_announcement &event) const -> void
+  auto handle(const nostr::events::outgoing::identity_announcement &event,
+    const std::function<void(const std::string &)> &track_fn = nullptr) const -> void
   {
     std::cout << name_ << " sending identity announcement (event_id: " << event.id.substr(0, event_id_preview_length)
               << "...)\n";
+    if (track_fn) { track_fn(event.id); }
     send_event(event);
   }
 
-  auto handle(const nostr::events::outgoing::encrypted_message &event) const -> void
+  auto handle(const nostr::events::outgoing::encrypted_message &event) const -> void { handle(event, nullptr); }
+
+  auto handle(const nostr::events::outgoing::encrypted_message &event,
+    const std::function<void(const std::string &)> &track_fn) const -> void
   {
     std::cout << name_ << " sending encrypted message (event_id: " << event.id.substr(0, event_id_preview_length)
               << "...)\n";
+
+    if (track_fn) { track_fn(event.id); }
+
     send_event(event);
   }
 
-  auto handle(const nostr::events::outgoing::session_request &event) const -> void
+  auto handle(const nostr::events::outgoing::session_request &event,
+    const std::function<void(const std::string &)> &track_fn = nullptr) const -> void
   {
     std::cout << name_ << " sending session request (event_id: " << event.id.substr(0, event_id_preview_length)
               << "...)\n";
+    if (track_fn) { track_fn(event.id); }
     send_event(event);
   }
 
-  auto handle(const nostr::events::outgoing::plaintext_message &event) const -> void
+  auto handle(const nostr::events::outgoing::plaintext_message &event) const -> void { handle(event, nullptr); }
+
+  auto handle(const nostr::events::outgoing::plaintext_message &event,
+    const std::function<void(const std::string &)> &track_fn) const -> void
   {
     std::cout << name_ << " encrypting and sending message to " << event.recipient << ": \"" << event.message << "\"\n";
 
@@ -157,6 +170,9 @@ public:
     }
 
     const nostr::events::outgoing::encrypted_message encrypted_event(*signed_event);
+
+    if (track_fn) { track_fn(encrypted_event.id); }
+
     handle(encrypted_event);
   }
 
@@ -256,12 +272,69 @@ auto main() -> int
       constexpr auto subscription_wait_time = std::chrono::milliseconds(100);
       std::this_thread::sleep_for(subscription_wait_time);
 
-      std::cout << "Alice sending plaintext message to Bob...\n";
+      std::cout << "Alice sending plaintext message to Bob with delivery tracking...\n";
       const std::string test_message = "Hello Bob! This is Alice sending you an encrypted message via Radix Relay!";
       const radix_relay::nostr::events::outgoing::plaintext_message msg_event{ "bob", test_message };
-      alice_session.handle(msg_event);
 
-      std::cout << "Message sent to Nostr relay!\n";
+      constexpr auto delivery_timeout = std::chrono::seconds(5);
+      constexpr std::size_t event_id_display_length = 8;
+
+      alice_session.handle(
+        msg_event,
+        [](const radix_relay::nostr::protocol::ok &response) {
+          if (response.accepted) {
+            std::cout << "Alice's first message confirmed! Event ID: "
+                      << response.event_id.substr(0, event_id_display_length) << "...\n";
+          } else {
+            std::cout << "Alice's first message rejected: " << response.message << "\n";
+          }
+        },
+        delivery_timeout);
+
+      std::cout << "First message sent to Nostr relay!\n";
+
+      constexpr auto message_spacing = std::chrono::seconds(1);
+      std::this_thread::sleep_for(message_spacing);
+
+      std::cout << "\nAlice sending second message (also with delivery confirmation)...\n";
+      const std::string test_message2 = "Bob, this is another message!";
+
+      std::vector<uint8_t> message_bytes(test_message2.begin(), test_message2.end());
+      auto signal_encrypted_bytes = radix_relay::encrypt_message(
+        alice_handler.bridge(), "bob", rust::Slice<const uint8_t>{ message_bytes.data(), message_bytes.size() });
+
+      std::ostringstream oss;
+      for (const auto &byte : signal_encrypted_bytes) {
+        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
+      }
+      const std::string encrypted_content_hex = oss.str();
+
+      const auto event_timestamp = static_cast<std::uint32_t>(
+        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+
+      auto signed_event_json = radix_relay::create_and_sign_encrypted_message(alice_handler.bridge(),
+        "bob",
+        encrypted_content_hex,
+        event_timestamp,
+        std::string(radix_relay::cmake::project_version));
+
+      auto signed_event = radix_relay::nostr::protocol::event_data::deserialize(std::string(signed_event_json));
+      if (signed_event.has_value()) {
+        const radix_relay::nostr::events::outgoing::encrypted_message encrypted_event(*signed_event);
+
+        alice_session.handle(
+          encrypted_event,
+          [](const radix_relay::nostr::protocol::ok &response) {
+            if (response.accepted) {
+              std::cout << "Alice's second message confirmed! Event ID: "
+                        << response.event_id.substr(0, event_id_display_length) << "...\n";
+            } else {
+              std::cout << "Alice's message was rejected: " << response.message << "\n";
+            }
+          },
+          delivery_timeout);
+      }
+
       std::cout << "Waiting for responses from relay...\n";
 
       constexpr auto message_wait_time = std::chrono::seconds(5);

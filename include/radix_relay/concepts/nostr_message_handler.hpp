@@ -1,6 +1,7 @@
 #pragma once
 
 #include <concepts>
+#include <functional>
 #include <radix_relay/events/nostr_events.hpp>
 #include <radix_relay/nostr_protocol.hpp>
 #include <string>
@@ -21,7 +22,8 @@ concept NostrHandler = requires(T handler,
   const events::outgoing::encrypted_message &outgoing_encrypted_event,
   const events::outgoing::session_request &outgoing_session_event,
   const events::outgoing::plaintext_message &plaintext_event,
-  const events::outgoing::subscription_request &subscription_event) {
+  const events::outgoing::subscription_request &subscription_event,
+  const std::function<void(const std::string &)> &track_fn) {
   handler.handle(identity_event);
   handler.handle(encrypted_event);
   handler.handle(session_event);
@@ -30,10 +32,10 @@ concept NostrHandler = requires(T handler,
   handler.handle(ok_event);
   handler.handle(eose_event);
   handler.handle(unknown_protocol_event);
-  handler.handle(outgoing_identity_event);
-  handler.handle(outgoing_encrypted_event);
-  handler.handle(outgoing_session_event);
-  handler.handle(plaintext_event);
+  handler.handle(outgoing_identity_event, track_fn);
+  handler.handle(outgoing_encrypted_event, track_fn);
+  handler.handle(outgoing_session_event, track_fn);
+  handler.handle(plaintext_event, track_fn);
   handler.handle(subscription_event);
 };
 

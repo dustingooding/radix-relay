@@ -244,6 +244,8 @@ public:
 
   ~Transport() { disconnect(); }
 
+  [[nodiscard]] auto io_context() -> boost::asio::io_context & { return io_context_; }
+
   auto connect(const std::string_view address) -> void
   {
     try {
