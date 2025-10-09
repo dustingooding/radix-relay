@@ -124,18 +124,8 @@ public:
 
   auto handle(const auto &event) -> void { handler_.get().handle(event); }
 
-  auto handle(const radix_relay::concepts::TrackableEvent auto &event,
-    std::function<void(const protocol::ok &)> callback,
-    std::chrono::milliseconds timeout = std::chrono::seconds(5)) -> void
-  {
-    auto track_fn = [this, callback = std::move(callback), timeout](
-                      const std::string &event_id) mutable { tracker_.track(event_id, std::move(callback), timeout); };
-
-    handler_.get().handle(event, track_fn);
-  }
-
-  auto async_handle(const radix_relay::concepts::TrackableEvent auto &event,
-    std::chrono::milliseconds timeout = std::chrono::seconds(5)) -> boost::asio::awaitable<protocol::ok>
+  auto handle(const radix_relay::concepts::TrackableEvent auto &event, std::chrono::milliseconds timeout)
+    -> boost::asio::awaitable<protocol::ok>
   {
     auto awaitable_tracker = std::make_shared<std::optional<std::string>>();
 
