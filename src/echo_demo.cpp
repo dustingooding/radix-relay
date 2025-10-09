@@ -296,44 +296,30 @@ auto main() -> int
       constexpr auto message_spacing = std::chrono::seconds(1);
       std::this_thread::sleep_for(message_spacing);
 
-      std::cout << "\nAlice sending second message (also with delivery confirmation)...\n";
+      std::cout << "\nAlice sending second message using coroutine (async_handle)...\n";
       const std::string test_message2 = "Bob, this is another message!";
+      const radix_relay::nostr::events::outgoing::plaintext_message msg_event2{ "bob", test_message2 };
 
-      std::vector<uint8_t> message_bytes(test_message2.begin(), test_message2.end());
-      auto signal_encrypted_bytes = radix_relay::encrypt_message(
-        alice_handler.bridge(), "bob", rust::Slice<const uint8_t>{ message_bytes.data(), message_bytes.size() });
-
-      std::ostringstream oss;
-      for (const auto &byte : signal_encrypted_bytes) {
-        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
-      }
-      const std::string encrypted_content_hex = oss.str();
-
-      const auto event_timestamp = static_cast<std::uint32_t>(
-        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
-
-      auto signed_event_json = radix_relay::create_and_sign_encrypted_message(alice_handler.bridge(),
-        "bob",
-        encrypted_content_hex,
-        event_timestamp,
-        std::string(radix_relay::cmake::project_version));
-
-      auto signed_event = radix_relay::nostr::protocol::event_data::deserialize(std::string(signed_event_json));
-      if (signed_event.has_value()) {
-        const radix_relay::nostr::events::outgoing::encrypted_message encrypted_event(*signed_event);
-
-        alice_session.handle(
-          encrypted_event,
-          [](const radix_relay::nostr::protocol::ok &response) {
+      boost::asio::co_spawn(
+        alice_transport.io_context(),
+        [](std::reference_wrapper<radix_relay::nostr::Session<radix_relay::DemoHandler, radix_relay::nostr::Transport>>
+             session_ref,
+          radix_relay::nostr::events::outgoing::plaintext_message event,
+          std::chrono::milliseconds timeout) -> boost::asio::awaitable<void> {
+          try {
+            auto response = co_await session_ref.get().async_handle(event, timeout);
             if (response.accepted) {
-              std::cout << "Alice's second message confirmed! Event ID: "
-                        << response.event_id.substr(0, event_id_display_length) << "...\n";
+              constexpr std::size_t preview_len = 8;
+              std::cout << "Alice's second message confirmed (via coroutine)! Event ID: "
+                        << response.event_id.substr(0, preview_len) << "...\n";
             } else {
-              std::cout << "Alice's message was rejected: " << response.message << "\n";
+              std::cout << "Alice's second message rejected: " << response.message << "\n";
             }
-          },
-          delivery_timeout);
-      }
+          } catch (const std::exception &e) {
+            std::cout << "Alice's second message timed out or failed: " << e.what() << "\n";
+          }
+        }(std::ref(alice_session), msg_event2, delivery_timeout),
+        boost::asio::detached);
 
       std::cout << "Waiting for responses from relay...\n";
 

@@ -133,6 +133,20 @@ public:
 
     handler_.get().handle(event, track_fn);
   }
+
+  auto async_handle(const radix_relay::concepts::TrackableEvent auto &event,
+    std::chrono::milliseconds timeout = std::chrono::seconds(5)) -> boost::asio::awaitable<protocol::ok>
+  {
+    auto awaitable_tracker = std::make_shared<std::optional<std::string>>();
+
+    auto track_fn = [awaitable_tracker](const std::string &event_id) { *awaitable_tracker = event_id; };
+
+    handler_.get().handle(event, track_fn);
+
+    if (!awaitable_tracker->has_value()) { throw std::runtime_error("Handler did not call track_fn"); }
+
+    co_return co_await tracker_.async_track(awaitable_tracker->value(), timeout);
+  }
 };
 
 }// namespace radix_relay::nostr

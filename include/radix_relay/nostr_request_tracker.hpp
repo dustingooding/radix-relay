@@ -47,6 +47,34 @@ public:
     }
   }
 
+  auto async_track(std::string event_id, std::chrono::milliseconds timeout) -> boost::asio::awaitable<protocol::ok>
+  {
+    auto executor = co_await boost::asio::this_coro::executor;
+    boost::asio::cancellation_signal cancel_signal;
+    auto result = std::make_shared<protocol::ok>();
+    auto event_done = std::make_shared<bool>(false);
+
+    auto dummy_timer = std::make_shared<boost::asio::steady_timer>(io_context_, std::chrono::hours(24));
+    pending_[event_id] = PendingRequest{ [&cancel_signal, result, event_done](const protocol::ok &response) {
+                                          *result = response;
+                                          *event_done = true;
+                                          cancel_signal.emit(boost::asio::cancellation_type::all);
+                                        },
+      dummy_timer };
+
+    boost::asio::steady_timer timeout_timer(executor, timeout);
+
+    boost::system::error_code ec;
+    co_await timeout_timer.async_wait(boost::asio::bind_cancellation_slot(
+      cancel_signal.slot(), boost::asio::redirect_error(boost::asio::use_awaitable, ec)));
+
+    pending_.erase(event_id);
+
+    if (ec == boost::asio::error::operation_aborted and *event_done) { co_return *result; }
+
+    throw std::runtime_error("Request timeout");
+  }
+
 private:
   auto handle_timeout(const std::string &event_id) -> void
   {

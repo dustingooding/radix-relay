@@ -722,3 +722,46 @@ TEST_CASE("Session integrates with RequestTracker", "[nostr][session][request_tr
     CHECK(callback2_count == 1);
   }
 }
+
+TEST_CASE("Session async_handle() works in user coroutines", "[nostr][session][awaitable]")
+{
+  boost::asio::io_context io_context;
+  radix_relay_test::TestDoubleNostrHandler handler;
+  radix_relay_test::TestDoubleNostrTransport transport(io_context);
+  radix_relay::nostr::Session session(transport, handler);
+
+  auto result = std::make_shared<radix_relay::nostr::protocol::ok>();
+  auto completed = std::make_shared<bool>(false);
+
+  const auto timestamp = 1234567890U;
+  auto base_event =
+    radix_relay::nostr::protocol::event_data::create_encrypted_message(timestamp, "recipient", "payload", "session_id");
+  base_event.id = "async_event_id";
+  const radix_relay::nostr::events::outgoing::encrypted_message outgoing_event(base_event);
+
+  auto user_coroutine = [](std::reference_wrapper<radix_relay::nostr::Session<radix_relay_test::TestDoubleNostrHandler,
+                             radix_relay_test::TestDoubleNostrTransport>> session_ref,
+                          radix_relay::nostr::events::outgoing::encrypted_message event,
+                          std::shared_ptr<radix_relay::nostr::protocol::ok> result_ptr,
+                          std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
+    constexpr auto timeout = std::chrono::seconds(5);
+    *result_ptr = co_await session_ref.get().async_handle(event, timeout);
+    *completed_ptr = true;
+  };
+
+  boost::asio::co_spawn(
+    io_context, user_coroutine(std::ref(session), outgoing_event, result, completed), boost::asio::detached);
+
+  boost::asio::post(io_context, [&transport, &base_event]() {
+    const std::string ok_json = R"(["OK",")" + base_event.id + R"(",true,"accepted"])";
+    const auto bytes = std::as_bytes(std::span(ok_json));
+    if (transport.message_callback) { transport.message_callback(bytes); }
+  });
+
+  io_context.run();
+
+  CHECK(*completed);
+  CHECK(result->event_id == "async_event_id");
+  CHECK(result->accepted);
+  CHECK(result->message == "accepted");
+}
