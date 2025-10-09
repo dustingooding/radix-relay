@@ -7,7 +7,7 @@
 namespace radix_relay::concepts {
 
 template<typename T>
-concept TrackableEvent =
+concept HandlerTrackedEvent =
   std::is_base_of_v<nostr::protocol::event_data, T> || std::is_same_v<T, nostr::events::outgoing::plaintext_message>;
 
 }// namespace radix_relay::concepts

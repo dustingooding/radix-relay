@@ -1,5 +1,6 @@
 #pragma once
 
+#include <any>
 #include <boost/asio.hpp>
 #include <chrono>
 #include <functional>
@@ -15,7 +16,7 @@ class RequestTracker
 private:
   struct PendingRequest
   {
-    std::function<void(const protocol::ok &)> callback;
+    std::function<void(const std::any &)> callback;
     std::shared_ptr<boost::asio::steady_timer> timer;
   };
 
@@ -32,12 +33,15 @@ public:
       if (!error) { handle_timeout(event_id); }
     });
 
-    pending_[event_id] = PendingRequest{ std::move(callback), timer };
+    pending_[event_id] = PendingRequest{ [callback = std::move(callback)](const std::any &response_any) {
+                                          callback(std::any_cast<const protocol::ok &>(response_any));
+                                        },
+      timer };
   }
 
   [[nodiscard]] auto has_pending(const std::string &event_id) const -> bool { return pending_.contains(event_id); }
 
-  auto resolve(const std::string &event_id, const protocol::ok &response) -> void
+  template<typename ResponseType> auto resolve(const std::string &event_id, const ResponseType &response) -> void
   {
     auto it = pending_.find(event_id);
     if (it != pending_.end()) {
@@ -47,16 +51,17 @@ public:
     }
   }
 
-  auto async_track(std::string event_id, std::chrono::milliseconds timeout) -> boost::asio::awaitable<protocol::ok>
+  template<typename ResponseType = protocol::ok>
+  auto async_track(std::string event_id, std::chrono::milliseconds timeout) -> boost::asio::awaitable<ResponseType>
   {
     auto executor = co_await boost::asio::this_coro::executor;
     boost::asio::cancellation_signal cancel_signal;
-    auto result = std::make_shared<protocol::ok>();
+    auto result = std::make_shared<ResponseType>();
     auto event_done = std::make_shared<bool>(false);
 
     auto dummy_timer = std::make_shared<boost::asio::steady_timer>(io_context_, std::chrono::hours(24));
-    pending_[event_id] = PendingRequest{ [&cancel_signal, result, event_done](const protocol::ok &response) {
-                                          *result = response;
+    pending_[event_id] = PendingRequest{ [&cancel_signal, result, event_done](const std::any &response_any) {
+                                          *result = std::any_cast<ResponseType>(response_any);
                                           *event_done = true;
                                           cancel_signal.emit(boost::asio::cancellation_type::all);
                                         },

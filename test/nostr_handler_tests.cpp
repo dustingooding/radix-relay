@@ -684,4 +684,43 @@ TEST_CASE("Session integrates with RequestTracker", "[nostr][session][request_tr
     CHECK(result->accepted);
     CHECK(result->message == "accepted");
   }
+
+  SECTION("Session handle() awaitable for subscription requests returns EOSE")
+  {
+    boost::asio::io_context io_context;
+    radix_relay_test::TestDoubleNostrHandler handler;
+    radix_relay_test::TestDoubleNostrTransport transport(io_context);
+    radix_relay::nostr::Session session(transport, handler);
+
+    auto result = std::make_shared<radix_relay::nostr::protocol::eose>();
+    auto completed = std::make_shared<bool>(false);
+
+    const std::string subscription_json = R"(["REQ","test_sub",{"kinds":[1059]}])";
+    const radix_relay::nostr::events::outgoing::subscription_request sub_event{ subscription_json };
+
+    auto user_coroutine = [](
+                            std::reference_wrapper<radix_relay::nostr::Session<radix_relay_test::TestDoubleNostrHandler,
+                              radix_relay_test::TestDoubleNostrTransport>> session_ref,
+                            radix_relay::nostr::events::outgoing::subscription_request event,
+                            std::shared_ptr<radix_relay::nostr::protocol::eose> result_ptr,
+                            std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
+      constexpr auto timeout = std::chrono::seconds(5);
+      *result_ptr = co_await session_ref.get().handle(event, timeout);
+      *completed_ptr = true;
+    };
+
+    boost::asio::co_spawn(
+      io_context, user_coroutine(std::ref(session), sub_event, result, completed), boost::asio::detached);
+
+    boost::asio::post(io_context, [&transport]() {
+      const std::string eose_json = R"(["EOSE","test_sub"])";
+      const auto bytes = std::as_bytes(std::span(eose_json));
+      if (transport.message_callback) { transport.message_callback(bytes); }
+    });
+
+    io_context.run();
+
+    CHECK(*completed);
+    CHECK(result->subscription_id == "test_sub");
+  }
 }

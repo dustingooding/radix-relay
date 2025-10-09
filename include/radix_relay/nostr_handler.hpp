@@ -83,6 +83,7 @@ public:
       } else if (msg_type == "EOSE") {
         auto eose_msg = protocol::eose::deserialize(json_str);
         if (eose_msg) {
+          tracker_.resolve(eose_msg->subscription_id, *eose_msg);
           handler_.handle(events::incoming::eose{ *eose_msg });
         } else {
           handler_.handle(events::incoming::unknown_protocol{ json_str });
@@ -124,8 +125,9 @@ public:
 
   auto handle(const auto &event) -> void { handler_.get().handle(event); }
 
-  auto handle(const radix_relay::concepts::TrackableEvent auto &event, std::chrono::milliseconds timeout)
-    -> boost::asio::awaitable<protocol::ok>
+  template<typename ResponseType = protocol::ok>
+  auto handle(const radix_relay::concepts::HandlerTrackedEvent auto &event, std::chrono::milliseconds timeout)
+    -> boost::asio::awaitable<ResponseType>
   {
     auto awaitable_tracker = std::make_shared<std::optional<std::string>>();
 
@@ -135,7 +137,17 @@ public:
 
     if (!awaitable_tracker->has_value()) { throw std::runtime_error("Handler did not call track_fn"); }
 
-    co_return co_await tracker_.async_track(awaitable_tracker->value(), timeout);
+    co_return co_await tracker_.async_track<ResponseType>(awaitable_tracker->value(), timeout);
+  }
+
+  auto handle(const events::outgoing::subscription_request &event, std::chrono::milliseconds timeout)
+    -> boost::asio::awaitable<protocol::eose>
+  {
+    const std::string subscription_id = event.get_subscription_id();
+
+    handler_.get().handle(event);
+
+    co_return co_await tracker_.async_track<protocol::eose>(subscription_id, timeout);
   }
 };
 

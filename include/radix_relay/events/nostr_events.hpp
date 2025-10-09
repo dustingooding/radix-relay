@@ -81,6 +81,15 @@ namespace outgoing {
     std::string subscription_json;
 
     explicit subscription_request(std::string sub_json) : subscription_json(std::move(sub_json)) {}
+
+    [[nodiscard]] auto get_subscription_id() const -> std::string
+    {
+      auto j = nlohmann::json::parse(subscription_json);
+      if (!j.is_array() || j.size() < 2 || !j[1].is_string()) {
+        throw std::runtime_error("Invalid subscription JSON format");
+      }
+      return j[1].get<std::string>();
+    }
   };
 
 }// namespace outgoing

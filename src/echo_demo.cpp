@@ -265,16 +265,9 @@ auto main() -> int
       radix_relay::nostr::Session<radix_relay::DemoHandler, radix_relay::nostr::Transport> bob_session(
         bob_transport, bob_handler);
 
-      std::cout << "Bob subscribing for messages addressed to him...\n";
-      const radix_relay::nostr::events::outgoing::subscription_request sub_event{ std::string(bob_subscription_req) };
-      bob_session.handle(sub_event);
-
-      constexpr auto subscription_wait_time = std::chrono::milliseconds(100);
-      std::this_thread::sleep_for(subscription_wait_time);
-
       constexpr auto delivery_timeout = std::chrono::seconds(5);
 
-      std::cout << "Alice sending first message using coroutine...\n";
+      std::cout << "=== Phase 1: Alice sends first message (while Bob is offline) ===\n";
       const std::string test_message = "Hello Bob! This is Alice sending you an encrypted message via Radix Relay!";
       const radix_relay::nostr::events::outgoing::plaintext_message msg_event{ "bob", test_message };
 
@@ -288,21 +281,43 @@ auto main() -> int
             auto response = co_await session_ref.get().handle(event, timeout);
             if (response.accepted) {
               constexpr std::size_t preview_len = 8;
-              std::cout << "Alice's first message confirmed! Event ID: " << response.event_id.substr(0, preview_len)
-                        << "...\n";
+              std::cout << "   ✓ Alice's first message stored on relay! Event ID: "
+                        << response.event_id.substr(0, preview_len) << "...\n";
             } else {
-              std::cout << "Alice's first message rejected: " << response.message << "\n";
+              std::cout << "   ✗ Alice's first message rejected: " << response.message << "\n";
             }
           } catch (const std::exception &e) {
-            std::cout << "Alice's first message timed out or failed: " << e.what() << "\n";
+            std::cout << "   ✗ Alice's first message failed: " << e.what() << "\n";
           }
         }(std::ref(alice_session), msg_event, delivery_timeout),
         boost::asio::detached);
 
-      constexpr auto message_spacing = std::chrono::seconds(1);
-      std::this_thread::sleep_for(message_spacing);
+      constexpr auto storage_wait_time = std::chrono::seconds(2);
+      std::this_thread::sleep_for(storage_wait_time);
 
-      std::cout << "\nAlice sending second message using coroutine...\n";
+      std::cout << "\n=== Phase 2: Bob comes online and subscribes ===\n";
+      const radix_relay::nostr::events::outgoing::subscription_request sub_event{ std::string(bob_subscription_req) };
+
+      boost::asio::co_spawn(
+        bob_transport.io_context(),
+        [](std::reference_wrapper<radix_relay::nostr::Session<radix_relay::DemoHandler, radix_relay::nostr::Transport>>
+             session_ref,
+          radix_relay::nostr::events::outgoing::subscription_request event,
+          std::chrono::milliseconds timeout) -> boost::asio::awaitable<void> {
+          try {
+            auto eose = co_await session_ref.get().handle(event, timeout);
+            std::cout << "   ✓ Bob received EOSE for subscription: " << eose.subscription_id << "\n";
+            std::cout << "   → All stored messages received! Now listening for real-time messages...\n";
+          } catch (const std::exception &e) {
+            std::cout << "   ✗ Bob's subscription failed: " << e.what() << "\n";
+          }
+        }(std::ref(bob_session), sub_event, delivery_timeout),
+        boost::asio::detached);
+
+      constexpr auto subscription_wait_time = std::chrono::seconds(2);
+      std::this_thread::sleep_for(subscription_wait_time);
+
+      std::cout << "\n=== Phase 3: Alice sends second message (Bob receives in real-time) ===\n";
       const std::string test_message2 = "Bob, this is another message!";
       const radix_relay::nostr::events::outgoing::plaintext_message msg_event2{ "bob", test_message2 };
 
@@ -316,20 +331,20 @@ auto main() -> int
             auto response = co_await session_ref.get().handle(event, timeout);
             if (response.accepted) {
               constexpr std::size_t preview_len = 8;
-              std::cout << "Alice's second message confirmed! Event ID: " << response.event_id.substr(0, preview_len)
-                        << "...\n";
+              std::cout << "   ✓ Alice's second message delivered! Event ID: "
+                        << response.event_id.substr(0, preview_len) << "...\n";
             } else {
-              std::cout << "Alice's second message rejected: " << response.message << "\n";
+              std::cout << "   ✗ Alice's second message rejected: " << response.message << "\n";
             }
           } catch (const std::exception &e) {
-            std::cout << "Alice's second message timed out or failed: " << e.what() << "\n";
+            std::cout << "   ✗ Alice's second message failed: " << e.what() << "\n";
           }
         }(std::ref(alice_session), msg_event2, delivery_timeout),
         boost::asio::detached);
 
-      std::cout << "Waiting for responses from relay...\n";
+      std::cout << "\nWaiting for all operations to complete...\n";
 
-      constexpr auto message_wait_time = std::chrono::seconds(5);
+      constexpr auto message_wait_time = std::chrono::seconds(3);
       std::this_thread::sleep_for(message_wait_time);
 
       std::cout << "Demo completed - check console output above for any received messages.\n";
