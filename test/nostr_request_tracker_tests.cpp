@@ -198,3 +198,36 @@ TEST_CASE("RequestTracker async_track() throws on timeout", "[nostr][request_tra
   CHECK(*exception_thrown);
   CHECK(exception_message->find("timeout") != std::string::npos);
 }
+
+TEST_CASE("RequestTracker async_track() works with EOSE responses", "[nostr][request_tracker][awaitable][eose]")
+{
+  boost::asio::io_context io_context;
+  radix_relay::nostr::RequestTracker tracker(io_context);
+
+  auto result = std::make_shared<radix_relay::nostr::protocol::eose>();
+  auto completed = std::make_shared<bool>(false);
+
+  constexpr auto timeout = std::chrono::seconds(5);
+
+  boost::asio::co_spawn(
+    io_context,
+    [](std::reference_wrapper<radix_relay::nostr::RequestTracker> tracker_ref,
+      std::shared_ptr<radix_relay::nostr::protocol::eose> result_ptr,
+      std::shared_ptr<bool> completed_ptr,
+      std::chrono::milliseconds timeout_val) -> boost::asio::awaitable<void> {
+      *result_ptr = co_await tracker_ref.get().async_track<radix_relay::nostr::protocol::eose>("sub_123", timeout_val);
+      *completed_ptr = true;
+    }(std::ref(tracker), result, completed, timeout),
+    boost::asio::detached);
+
+  boost::asio::post(io_context, [&tracker]() {
+    radix_relay::nostr::protocol::eose response;
+    response.subscription_id = "sub_123";
+    tracker.resolve("sub_123", response);
+  });
+
+  io_context.run();
+
+  CHECK(*completed);
+  CHECK(result->subscription_id == "sub_123");
+}

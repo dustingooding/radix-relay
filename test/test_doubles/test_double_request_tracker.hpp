@@ -19,7 +19,7 @@ public:
     tracked_ids.push_back(std::move(event_id));
   }
 
-  auto resolve(const std::string &event_id, const radix_relay::nostr::protocol::ok & /*response*/) -> void
+  template<typename ResponseType> auto resolve(const std::string &event_id, const ResponseType & /*response*/) -> void
   {
     resolved_ids.push_back(event_id);
   }
