@@ -623,45 +623,7 @@ TEST_CASE("Session integrates with RequestTracker", "[nostr][session][request_tr
     CHECK(true);
   }
 
-  SECTION("session.handle with callback tracks request and invokes callback on OK")
-  {
-    boost::asio::io_context io_context;
-    radix_relay_test::TestDoubleNostrHandler handler;
-    radix_relay_test::TestDoubleNostrTransport transport(io_context);
-    radix_relay::nostr::Session session(transport, handler);
-
-    bool callback_invoked = false;
-    radix_relay::nostr::protocol::ok received_response;
-
-    auto callback = [&callback_invoked, &received_response](const radix_relay::nostr::protocol::ok &response) {
-      callback_invoked = true;
-      received_response = response;
-    };
-
-    const auto timestamp = 1234567890U;
-    const std::string sender_pubkey = "test_sender";
-    const std::string recipient_pubkey = "test_recipient";
-    auto base_event = radix_relay::nostr::protocol::event_data::create_encrypted_message(
-      timestamp, recipient_pubkey, "encrypted_payload", "session_id");
-    base_event.pubkey = sender_pubkey;
-    const radix_relay::nostr::events::outgoing::encrypted_message outgoing_event(base_event);
-
-    constexpr auto timeout = std::chrono::seconds(5);
-    session.handle(outgoing_event, callback, timeout);
-
-    CHECK(handler.outgoing_encrypted_events.size() == 1);
-    CHECK(!callback_invoked);
-
-    const std::string ok_json = R"(["OK",")" + base_event.id + R"(",true,""])";
-    const auto bytes = std::as_bytes(std::span(ok_json));
-    if (transport.message_callback) { transport.message_callback(bytes); }
-
-    CHECK(callback_invoked);
-    CHECK(received_response.event_id == base_event.id);
-    CHECK(received_response.accepted == true);
-  }
-
-  SECTION("fire-and-forget still works without callback")
+  SECTION("Session handle() forwards events to the handler")
   {
     boost::asio::io_context io_context;
     radix_relay_test::TestDoubleNostrHandler handler;
@@ -679,89 +641,47 @@ TEST_CASE("Session integrates with RequestTracker", "[nostr][session][request_tr
     CHECK(handler.outgoing_identity_events.size() == 1);
   }
 
-  SECTION("multiple concurrent requests tracked independently")
+  SECTION("Session handle() awaitable overload tracks and returns OK")
   {
     boost::asio::io_context io_context;
     radix_relay_test::TestDoubleNostrHandler handler;
     radix_relay_test::TestDoubleNostrTransport transport(io_context);
     radix_relay::nostr::Session session(transport, handler);
 
-    int callback1_count = 0;
-    int callback2_count = 0;
-
-    auto callback1 = [&callback1_count](const radix_relay::nostr::protocol::ok &) { ++callback1_count; };
-    auto callback2 = [&callback2_count](const radix_relay::nostr::protocol::ok &) { ++callback2_count; };
+    auto result = std::make_shared<radix_relay::nostr::protocol::ok>();
+    auto completed = std::make_shared<bool>(false);
 
     const auto timestamp = 1234567890U;
-    auto event1 = radix_relay::nostr::protocol::event_data::create_encrypted_message(
-      timestamp, "recipient1", "payload1", "session1");
-    event1.id = "event_id_1";
-    auto event2 = radix_relay::nostr::protocol::event_data::create_encrypted_message(
-      timestamp + 1, "recipient2", "payload2", "session2");
-    event2.id = "event_id_2";
+    auto base_event = radix_relay::nostr::protocol::event_data::create_encrypted_message(
+      timestamp, "recipient", "payload", "session_id");
+    base_event.id = "async_event_id";
+    const radix_relay::nostr::events::outgoing::encrypted_message outgoing_event(base_event);
 
-    const radix_relay::nostr::events::outgoing::encrypted_message outgoing1(event1);
-    const radix_relay::nostr::events::outgoing::encrypted_message outgoing2(event2);
+    auto user_coroutine = [](
+                            std::reference_wrapper<radix_relay::nostr::Session<radix_relay_test::TestDoubleNostrHandler,
+                              radix_relay_test::TestDoubleNostrTransport>> session_ref,
+                            radix_relay::nostr::events::outgoing::encrypted_message event,
+                            std::shared_ptr<radix_relay::nostr::protocol::ok> result_ptr,
+                            std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
+      constexpr auto timeout = std::chrono::seconds(5);
+      *result_ptr = co_await session_ref.get().handle(event, timeout);
+      *completed_ptr = true;
+    };
 
-    constexpr auto timeout = std::chrono::seconds(5);
-    session.handle(outgoing1, callback1, timeout);
-    session.handle(outgoing2, callback2, timeout);
+    boost::asio::co_spawn(
+      io_context, user_coroutine(std::ref(session), outgoing_event, result, completed), boost::asio::detached);
 
-    const std::string ok_json1 = R"(["OK",")" + event1.id + R"(",true,""])";
-    const std::string ok_json2 = R"(["OK",")" + event2.id + R"(",true,""])";
+    boost::asio::post(io_context, [&transport, &base_event]() {
+      const std::string ok_json = R"(["OK",")" + base_event.id + R"(",true,"accepted"])";
+      const auto bytes = std::as_bytes(std::span(ok_json));
+      if (transport.message_callback) { transport.message_callback(bytes); }
+    });
 
-    const auto bytes1 = std::as_bytes(std::span(ok_json1));
-    const auto bytes2 = std::as_bytes(std::span(ok_json2));
+    io_context.run();
 
-    if (transport.message_callback) { transport.message_callback(bytes2); }
-    CHECK(callback1_count == 0);
-    CHECK(callback2_count == 1);
-
-    if (transport.message_callback) { transport.message_callback(bytes1); }
-    CHECK(callback1_count == 1);
-    CHECK(callback2_count == 1);
+    CHECK(*completed);
+    CHECK(result->event_id == "async_event_id");
+    CHECK(result->accepted);
+    CHECK(result->message == "accepted");
   }
-}
-
-TEST_CASE("Session async_handle() works in user coroutines", "[nostr][session][awaitable]")
-{
-  boost::asio::io_context io_context;
-  radix_relay_test::TestDoubleNostrHandler handler;
-  radix_relay_test::TestDoubleNostrTransport transport(io_context);
-  radix_relay::nostr::Session session(transport, handler);
-
-  auto result = std::make_shared<radix_relay::nostr::protocol::ok>();
-  auto completed = std::make_shared<bool>(false);
-
-  const auto timestamp = 1234567890U;
-  auto base_event =
-    radix_relay::nostr::protocol::event_data::create_encrypted_message(timestamp, "recipient", "payload", "session_id");
-  base_event.id = "async_event_id";
-  const radix_relay::nostr::events::outgoing::encrypted_message outgoing_event(base_event);
-
-  auto user_coroutine = [](std::reference_wrapper<radix_relay::nostr::Session<radix_relay_test::TestDoubleNostrHandler,
-                             radix_relay_test::TestDoubleNostrTransport>> session_ref,
-                          radix_relay::nostr::events::outgoing::encrypted_message event,
-                          std::shared_ptr<radix_relay::nostr::protocol::ok> result_ptr,
-                          std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
-    constexpr auto timeout = std::chrono::seconds(5);
-    *result_ptr = co_await session_ref.get().async_handle(event, timeout);
-    *completed_ptr = true;
-  };
-
-  boost::asio::co_spawn(
-    io_context, user_coroutine(std::ref(session), outgoing_event, result, completed), boost::asio::detached);
-
-  boost::asio::post(io_context, [&transport, &base_event]() {
-    const std::string ok_json = R"(["OK",")" + base_event.id + R"(",true,"accepted"])";
-    const auto bytes = std::as_bytes(std::span(ok_json));
-    if (transport.message_callback) { transport.message_callback(bytes); }
-  });
-
-  io_context.run();
-
-  CHECK(*completed);
-  CHECK(result->event_id == "async_event_id");
-  CHECK(result->accepted);
-  CHECK(result->message == "accepted");
 }
