@@ -129,3 +129,72 @@ TEST_CASE("RequestTracker resolve() cancels timer", "[nostr][request_tracker]")
 
   CHECK(callback_count == 1);
 }
+
+TEST_CASE("RequestTracker async_track() returns OK when response arrives", "[nostr][request_tracker][awaitable]")
+{
+  boost::asio::io_context io_context;
+  radix_relay::nostr::RequestTracker tracker(io_context);
+
+  auto result = std::make_shared<radix_relay::nostr::protocol::ok>();
+  auto completed = std::make_shared<bool>(false);
+
+  constexpr auto timeout = std::chrono::seconds(5);
+
+  boost::asio::co_spawn(
+    io_context,
+    [](std::reference_wrapper<radix_relay::nostr::RequestTracker> tracker_ref,
+      std::shared_ptr<radix_relay::nostr::protocol::ok> result_ptr,
+      std::shared_ptr<bool> completed_ptr,
+      std::chrono::milliseconds timeout_val) -> boost::asio::awaitable<void> {
+      *result_ptr = co_await tracker_ref.get().async_track("event_async", timeout_val);
+      *completed_ptr = true;
+    }(std::ref(tracker), result, completed, timeout),
+    boost::asio::detached);
+
+  boost::asio::post(io_context, [&tracker]() {
+    radix_relay::nostr::protocol::ok response;
+    response.event_id = "event_async";
+    response.accepted = true;
+    response.message = "OK";
+
+    tracker.resolve("event_async", response);
+  });
+
+  io_context.run();
+
+  CHECK(*completed);
+  CHECK(result->event_id == "event_async");
+  CHECK(result->accepted);
+  CHECK(result->message == "OK");
+}
+
+TEST_CASE("RequestTracker async_track() throws on timeout", "[nostr][request_tracker][awaitable]")
+{
+  boost::asio::io_context io_context;
+  radix_relay::nostr::RequestTracker tracker(io_context);
+
+  auto exception_thrown = std::make_shared<bool>(false);
+  auto exception_message = std::make_shared<std::string>();
+
+  constexpr auto timeout = std::chrono::milliseconds(50);
+
+  boost::asio::co_spawn(
+    io_context,
+    [](std::reference_wrapper<radix_relay::nostr::RequestTracker> tracker_ref,
+      std::shared_ptr<bool> thrown_ptr,
+      std::shared_ptr<std::string> message_ptr,
+      std::chrono::milliseconds timeout_val) -> boost::asio::awaitable<void> {
+      try {
+        co_await tracker_ref.get().async_track("event_timeout", timeout_val);
+      } catch (const std::exception &e) {
+        *thrown_ptr = true;
+        *message_ptr = e.what();
+      }
+    }(std::ref(tracker), exception_thrown, exception_message, timeout),
+    boost::asio::detached);
+
+  io_context.run();
+
+  CHECK(*exception_thrown);
+  CHECK(exception_message->find("timeout") != std::string::npos);
+}
