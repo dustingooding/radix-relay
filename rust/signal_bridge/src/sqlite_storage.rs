@@ -63,6 +63,30 @@ impl SqliteStorage {
             SqlitePreKeyStore::create_tables(&conn)?;
             SqliteSignedPreKeyStore::create_tables(&conn)?;
             SqliteKyberPreKeyStore::create_tables(&conn)?;
+
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS contacts (
+                    rdx_fingerprint TEXT PRIMARY KEY,
+                    nostr_pubkey TEXT UNIQUE NOT NULL,
+                    user_alias TEXT,
+                    signal_identity_key BLOB NOT NULL,
+                    first_seen INTEGER NOT NULL,
+                    last_updated INTEGER NOT NULL
+                )",
+                [],
+            )?;
+
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_contacts_alias
+                 ON contacts(user_alias) WHERE user_alias IS NOT NULL",
+                [],
+            )?;
+
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_contacts_nostr_pubkey
+                 ON contacts(nostr_pubkey)",
+                [],
+            )?;
         }
 
         self.session_store = Some(SqliteSessionStore::new(self.connection.clone()));
@@ -79,6 +103,10 @@ impl SqliteStorage {
         let mut stmt = conn.prepare("SELECT version FROM schema_info")?;
         let version: i32 = stmt.query_row([], |row| row.get(0))?;
         Ok(version)
+    }
+
+    pub fn connection(&self) -> Arc<Mutex<Connection>> {
+        self.connection.clone()
     }
 }
 
