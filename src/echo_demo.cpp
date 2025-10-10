@@ -248,16 +248,29 @@ auto main() -> int
       auto alice_prekey_bundle = radix_relay::generate_pre_key_bundle(*alice_bridge);
       auto bob_prekey_bundle = radix_relay::generate_pre_key_bundle(*bob_bridge);
 
-      radix_relay::establish_session(*alice_bridge, "bob", rust::Slice<const uint8_t>{ bob_prekey_bundle });
-      std::cout << "   Alice established session with Bob\n";
+      std::cout << "Setting up contact management...\n";
+      auto bob_rdx =
+        radix_relay::add_contact_from_bundle(*alice_bridge, rust::Slice<const uint8_t>{ bob_prekey_bundle }, "bob");
+      auto bob_rdx_str = std::string(bob_rdx);
+      std::cout << "   Alice added Bob as contact with RDX: " << bob_rdx_str << "\n";
 
-      radix_relay::establish_session(*bob_bridge, "alice", rust::Slice<const uint8_t>{ alice_prekey_bundle });
-      std::cout << "   Bob established session with Alice\n";
+      auto alice_rdx =
+        radix_relay::add_contact_from_bundle(*bob_bridge, rust::Slice<const uint8_t>{ alice_prekey_bundle }, "alice");
+      auto alice_rdx_str = std::string(alice_rdx);
+      std::cout << "   Bob added Alice as contact with RDX: " << alice_rdx_str << "\n";
+
+      radix_relay::establish_session(
+        *alice_bridge, bob_rdx_str.c_str(), rust::Slice<const uint8_t>{ bob_prekey_bundle });
+      std::cout << "   Alice established session with Bob (using RDX)\n";
+
+      radix_relay::establish_session(
+        *bob_bridge, alice_rdx_str.c_str(), rust::Slice<const uint8_t>{ alice_prekey_bundle });
+      std::cout << "   Bob established session with Alice (using RDX)\n";
 
       auto bob_subscription_req = radix_relay::create_subscription_for_self(*bob_bridge, "bob_sub");
 
-      radix_relay::DemoHandler alice_handler("Alice", "bob", std::move(alice_bridge), alice_transport);
-      radix_relay::DemoHandler bob_handler("Bob", "alice", std::move(bob_bridge), bob_transport);
+      radix_relay::DemoHandler alice_handler("Alice", bob_rdx_str, std::move(alice_bridge), alice_transport);
+      radix_relay::DemoHandler bob_handler("Bob", alice_rdx_str, std::move(bob_bridge), bob_transport);
 
       radix_relay::nostr::Session<radix_relay::DemoHandler, radix_relay::nostr::Transport> alice_session(
         alice_transport, alice_handler);

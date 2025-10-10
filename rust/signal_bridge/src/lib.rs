@@ -3,9 +3,11 @@
 //! This crate provides a bridge between Radix Relay's C++ transport layer
 //! and the official Signal Protocol Rust implementation for end-to-end encryption.
 
+mod contact_manager;
 mod encryption_trait;
 mod keys;
 mod memory_storage;
+mod nostr_identity;
 mod session_trait;
 mod sqlite_storage;
 mod storage_trait;
@@ -16,16 +18,18 @@ mod session;
 #[cfg(test)]
 mod encryption;
 
+pub use contact_manager::{ContactInfo, ContactManager};
+pub use nostr_identity::NostrIdentity;
+
 use crate::sqlite_storage::SqliteStorage;
 use crate::storage_trait::{
     ExtendedIdentityStore, ExtendedKyberPreKeyStore, ExtendedPreKeyStore, ExtendedSessionStore,
     ExtendedSignedPreKeyStore, ExtendedStorageOps, SignalStorageContainer,
 };
-use ::hkdf::Hkdf;
 use libsignal_protocol::{
     CiphertextMessage, DeviceId, IdentityKeyPair, IdentityKeyStore, ProtocolAddress, SessionStore,
 };
-use nostr::{EventBuilder, Keys, Kind, PublicKey, SecretKey, Tag};
+use nostr::{EventBuilder, Keys, Kind, Tag};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -36,41 +40,6 @@ pub struct NodeIdentity {
     pub platform: String,
     pub mac_address: String,
     pub install_id: String,
-}
-
-pub struct NostrIdentity;
-
-impl NostrIdentity {
-    pub fn derive_from_signal_identity(
-        identity_key_pair: &IdentityKeyPair,
-    ) -> Result<Keys, SignalBridgeError> {
-        let identity_public_key = identity_key_pair.identity_key();
-
-        let hk = Hkdf::<sha2::Sha256>::new(None, &identity_public_key.serialize());
-        let mut derived_key = [0u8; 32];
-        hk.expand(b"radix_relay_nostr_derivation", &mut derived_key)
-            .map_err(|_| SignalBridgeError::KeyDerivation("HKDF expansion failed".to_string()))?;
-
-        let secret_key = SecretKey::from_slice(&derived_key)
-            .map_err(|e| SignalBridgeError::KeyDerivation(format!("Invalid secret key: {}", e)))?;
-
-        Ok(Keys::new(secret_key))
-    }
-
-    pub fn derive_public_key_from_peer_identity(
-        peer_identity: &libsignal_protocol::IdentityKey,
-    ) -> Result<PublicKey, SignalBridgeError> {
-        let hk = Hkdf::<sha2::Sha256>::new(None, &peer_identity.serialize());
-        let mut derived_key = [0u8; 32];
-        hk.expand(b"radix_relay_nostr_derivation", &mut derived_key)
-            .map_err(|_| SignalBridgeError::KeyDerivation("HKDF expansion failed".to_string()))?;
-
-        let secret_key = SecretKey::from_slice(&derived_key)
-            .map_err(|e| SignalBridgeError::KeyDerivation(format!("Invalid secret key: {}", e)))?;
-
-        let full_keys = Keys::new(secret_key);
-        Ok(full_keys.public_key())
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -90,6 +59,7 @@ struct SerializablePreKeyBundle {
 
 pub struct SignalBridge {
     storage: SqliteStorage,
+    contact_manager: ContactManager,
 }
 
 impl SignalBridge {
@@ -194,7 +164,12 @@ impl SignalBridge {
                  storage.signed_pre_key_store().signed_pre_key_count().await,
                  storage.kyber_pre_key_store().kyber_pre_key_count().await);
 
-        Ok(Self { storage })
+        let contact_manager = ContactManager::new(storage.connection());
+
+        Ok(Self {
+            storage,
+            contact_manager,
+        })
     }
 
     pub async fn encrypt_message(
@@ -208,8 +183,17 @@ impl SignalBridge {
             ));
         }
 
+        let session_address = match self
+            .contact_manager
+            .lookup_contact(peer, self.storage.session_store())
+            .await
+        {
+            Ok(contact) => contact.rdx_fingerprint,
+            Err(_) => peer.to_string(),
+        };
+
         let address = ProtocolAddress::new(
-            peer.to_string(),
+            session_address.clone(),
             DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
         );
 
@@ -244,8 +228,17 @@ impl SignalBridge {
             ));
         }
 
+        let session_address = match self
+            .contact_manager
+            .lookup_contact(peer, self.storage.session_store())
+            .await
+        {
+            Ok(contact) => contact.rdx_fingerprint,
+            Err(_) => peer.to_string(),
+        };
+
         let address = ProtocolAddress::new(
-            peer.to_string(),
+            session_address,
             DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
         );
 
@@ -482,11 +475,20 @@ impl SignalBridge {
         &mut self,
         peer: &str,
     ) -> Result<Vec<u8>, SignalBridgeError> {
+        let session_address = match self
+            .contact_manager
+            .lookup_contact(peer, self.storage.session_store())
+            .await
+        {
+            Ok(contact) => contact.rdx_fingerprint,
+            Err(_) => peer.to_string(),
+        };
+
         let peer_identity = self
             .storage
             .identity_store()
             .get_identity(&ProtocolAddress::new(
-                peer.to_string(),
+                session_address,
                 DeviceId::new(1).unwrap(),
             ))
             .await?
@@ -584,6 +586,42 @@ impl SignalBridge {
         let result = hasher.finalize();
         Ok(format!("RDX:{:x}", result))
     }
+
+    // Contact management methods - delegated to ContactManager
+    pub async fn add_contact_from_bundle(
+        &mut self,
+        bundle_bytes: &[u8],
+        user_alias: Option<&str>,
+    ) -> Result<String, SignalBridgeError> {
+        self.contact_manager
+            .add_contact_from_bundle(bundle_bytes, user_alias, self.storage.session_store())
+            .await
+    }
+
+    pub async fn lookup_contact(
+        &mut self,
+        identifier: &str,
+    ) -> Result<ContactInfo, SignalBridgeError> {
+        self.contact_manager
+            .lookup_contact(identifier, self.storage.session_store())
+            .await
+    }
+
+    pub async fn assign_contact_alias(
+        &mut self,
+        identifier: &str,
+        new_alias: &str,
+    ) -> Result<(), SignalBridgeError> {
+        self.contact_manager
+            .assign_contact_alias(identifier, new_alias, self.storage.session_store())
+            .await
+    }
+
+    pub async fn list_contacts(&mut self) -> Result<Vec<ContactInfo>, SignalBridgeError> {
+        self.contact_manager
+            .list_contacts(self.storage.session_store())
+            .await
+    }
 }
 
 impl Drop for SignalBridge {
@@ -667,6 +705,14 @@ mod ffi {
         pub install_id: String,
     }
 
+    #[derive(Clone, Debug)]
+    pub struct ContactInfo {
+        pub rdx_fingerprint: String,
+        pub nostr_pubkey: String,
+        pub user_alias: String,
+        pub has_active_session: bool,
+    }
+
     extern "Rust" {
         type SignalBridge;
 
@@ -713,6 +759,22 @@ mod ffi {
             bridge: &mut SignalBridge,
             subscription_id: &str,
         ) -> Result<String>;
+
+        fn add_contact_from_bundle(
+            bridge: &mut SignalBridge,
+            bundle_bytes: &[u8],
+            user_alias: &str,
+        ) -> Result<String>;
+
+        fn lookup_contact(bridge: &mut SignalBridge, identifier: &str) -> Result<ContactInfo>;
+
+        fn assign_contact_alias(
+            bridge: &mut SignalBridge,
+            identifier: &str,
+            new_alias: &str,
+        ) -> Result<()>;
+
+        fn list_contacts(bridge: &mut SignalBridge) -> Result<Vec<ContactInfo>>;
     }
 }
 
@@ -901,9 +963,65 @@ pub fn create_subscription_for_self(
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+pub fn add_contact_from_bundle(
+    bridge: &mut SignalBridge,
+    bundle_bytes: &[u8],
+    user_alias: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()?;
+    let alias = if user_alias.is_empty() {
+        None
+    } else {
+        Some(user_alias)
+    };
+    rt.block_on(bridge.add_contact_from_bundle(bundle_bytes, alias))
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
+}
+
+pub fn lookup_contact(
+    bridge: &mut SignalBridge,
+    identifier: &str,
+) -> Result<ffi::ContactInfo, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()?;
+    let contact = rt.block_on(bridge.lookup_contact(identifier))?;
+    Ok(ffi::ContactInfo {
+        rdx_fingerprint: contact.rdx_fingerprint,
+        nostr_pubkey: contact.nostr_pubkey,
+        user_alias: contact.user_alias.unwrap_or_default(),
+        has_active_session: contact.has_active_session,
+    })
+}
+
+pub fn assign_contact_alias(
+    bridge: &mut SignalBridge,
+    identifier: &str,
+    new_alias: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(bridge.assign_contact_alias(identifier, new_alias))
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
+}
+
+pub fn list_contacts(
+    bridge: &mut SignalBridge,
+) -> Result<Vec<ffi::ContactInfo>, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()?;
+    let contacts = rt.block_on(bridge.list_contacts())?;
+    Ok(contacts
+        .into_iter()
+        .map(|c| ffi::ContactInfo {
+            rdx_fingerprint: c.rdx_fingerprint,
+            nostr_pubkey: c.nostr_pubkey,
+            user_alias: c.user_alias.unwrap_or_default(),
+            has_active_session: c.has_active_session,
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn test_libsignal_basic_types() {
@@ -938,9 +1056,17 @@ mod tests {
         let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
 
         let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
-        alice.establish_session("bob", &bob_bundle).await.unwrap();
+        let bob_rdx = alice
+            .add_contact_from_bundle(&bob_bundle, Some("bob"))
+            .await
+            .unwrap();
 
-        let bob_nostr_key = alice.derive_peer_nostr_key("bob").await.unwrap();
+        alice
+            .establish_session(&bob_rdx, &bob_bundle)
+            .await
+            .unwrap();
+
+        let bob_nostr_key = alice.derive_peer_nostr_key(&bob_rdx).await.unwrap();
 
         let bob_actual_nostr = bob.derive_nostr_keypair().await.unwrap();
         assert_eq!(
@@ -1052,11 +1178,21 @@ mod tests {
         let mut bob = SignalBridge::new(bob_db_str).await?;
 
         let bob_bundle = bob.generate_pre_key_bundle().await?;
-        alice.establish_session("bob", &bob_bundle).await?;
+        let alice_bundle = alice.generate_pre_key_bundle().await?;
+
+        let bob_rdx = alice
+            .add_contact_from_bundle(&bob_bundle, Some("bob"))
+            .await?;
+        let alice_rdx = bob
+            .add_contact_from_bundle(&alice_bundle, Some("alice"))
+            .await?;
+
+        alice.establish_session(&bob_rdx, &bob_bundle).await?;
+        bob.establish_session(&alice_rdx, &alice_bundle).await?;
 
         let plaintext = b"Hello Bob! This is Alice using SignalBridge.";
-        let ciphertext = alice.encrypt_message("bob", plaintext).await?;
-        let decrypted = bob.decrypt_message("alice", &ciphertext).await?;
+        let ciphertext = alice.encrypt_message(&bob_rdx, plaintext).await?;
+        let decrypted = bob.decrypt_message(&alice_rdx, &ciphertext).await?;
 
         assert_eq!(plaintext.as_slice(), decrypted.as_slice());
 
@@ -1088,14 +1224,25 @@ mod tests {
         let bob_db_str = bob_db_path.to_str().unwrap();
 
         let original_plaintext = b"Hello Bob! This is Alice testing persistence.";
-        let ciphertext = {
+        let (ciphertext, bob_rdx, alice_rdx) = {
             let mut alice = SignalBridge::new(alice_db_str).await?;
             let mut bob = SignalBridge::new(bob_db_str).await?;
 
             let bob_bundle = bob.generate_pre_key_bundle().await?;
-            alice.establish_session("bob", &bob_bundle).await?;
+            let alice_bundle = alice.generate_pre_key_bundle().await?;
 
-            alice.encrypt_message("bob", original_plaintext).await?
+            let bob_rdx = alice
+                .add_contact_from_bundle(&bob_bundle, Some("bob"))
+                .await?;
+            let alice_rdx = bob
+                .add_contact_from_bundle(&alice_bundle, Some("alice"))
+                .await?;
+
+            alice.establish_session(&bob_rdx, &bob_bundle).await?;
+            bob.establish_session(&alice_rdx, &alice_bundle).await?;
+
+            let ciphertext = alice.encrypt_message(&bob_rdx, original_plaintext).await?;
+            (ciphertext, bob_rdx, alice_rdx)
         };
 
         {
@@ -1103,7 +1250,7 @@ mod tests {
 
             let second_message = b"Second message after restart";
             let second_ciphertext = alice_reopened
-                .encrypt_message("bob", second_message)
+                .encrypt_message(&bob_rdx, second_message)
                 .await?;
 
             assert!(!second_ciphertext.is_empty());
@@ -1113,7 +1260,9 @@ mod tests {
         {
             let mut bob_reopened = SignalBridge::new(bob_db_str).await?;
 
-            let decrypted1 = bob_reopened.decrypt_message("alice", &ciphertext).await?;
+            let decrypted1 = bob_reopened
+                .decrypt_message(&alice_rdx, &ciphertext)
+                .await?;
             assert_eq!(decrypted1, original_plaintext);
         }
 
@@ -1147,14 +1296,17 @@ mod tests {
         let mut bob = SignalBridge::new(bob_db_str).await?;
 
         let bob_bundle = bob.generate_pre_key_bundle().await?;
-        alice.establish_session("bob", &bob_bundle).await?;
+        let bob_rdx = alice
+            .add_contact_from_bundle(&bob_bundle, Some("bob"))
+            .await?;
+        alice.establish_session(&bob_rdx, &bob_bundle).await?;
 
         let message = b"Test message";
-        let _ciphertext = alice.encrypt_message("bob", message).await?;
+        let _ciphertext = alice.encrypt_message(&bob_rdx, message).await?;
 
-        alice.clear_peer_session("bob").await?;
+        alice.clear_peer_session(&bob_rdx).await?;
 
-        let result = alice.encrypt_message("bob", message).await;
+        let result = alice.encrypt_message(&bob_rdx, message).await;
         assert!(
             result.is_err(),
             "Encryption should fail after clearing peer session"
@@ -1198,17 +1350,26 @@ mod tests {
         let bob_bundle = bob.generate_pre_key_bundle().await?;
         let charlie_bundle = charlie.generate_pre_key_bundle().await?;
 
-        alice.establish_session("bob", &bob_bundle).await?;
-        alice.establish_session("charlie", &charlie_bundle).await?;
+        let bob_rdx = alice
+            .add_contact_from_bundle(&bob_bundle, Some("bob"))
+            .await?;
+        let charlie_rdx = alice
+            .add_contact_from_bundle(&charlie_bundle, Some("charlie"))
+            .await?;
+
+        alice.establish_session(&bob_rdx, &bob_bundle).await?;
+        alice
+            .establish_session(&charlie_rdx, &charlie_bundle)
+            .await?;
 
         let message = b"Test message";
-        let _ciphertext1 = alice.encrypt_message("bob", message).await?;
-        let _ciphertext2 = alice.encrypt_message("charlie", message).await?;
+        let _ciphertext1 = alice.encrypt_message(&bob_rdx, message).await?;
+        let _ciphertext2 = alice.encrypt_message(&charlie_rdx, message).await?;
 
         alice.clear_all_sessions().await?;
 
-        let result1 = alice.encrypt_message("bob", message).await;
-        let result2 = alice.encrypt_message("charlie", message).await;
+        let result1 = alice.encrypt_message(&bob_rdx, message).await;
+        let result2 = alice.encrypt_message(&charlie_rdx, message).await;
         assert!(
             result1.is_err(),
             "Encryption to Bob should fail after clearing all sessions"
@@ -1244,14 +1405,18 @@ mod tests {
         ));
         let bob_db_str = bob_db_path.to_str().unwrap();
 
-        let original_alice_bundle = {
+        let (original_alice_bundle, bob_rdx) = {
             let mut alice = SignalBridge::new(alice_db_str).await?;
             let mut bob = SignalBridge::new(bob_db_str).await?;
 
             let bob_bundle = bob.generate_pre_key_bundle().await?;
-            alice.establish_session("bob", &bob_bundle).await?;
+            let bob_rdx = alice
+                .add_contact_from_bundle(&bob_bundle, Some("bob"))
+                .await?;
+            alice.establish_session(&bob_rdx, &bob_bundle).await?;
 
-            alice.generate_pre_key_bundle().await?
+            let alice_bundle = alice.generate_pre_key_bundle().await?;
+            (alice_bundle, bob_rdx)
         };
 
         {
@@ -1265,7 +1430,7 @@ mod tests {
             );
 
             let message = b"Test message";
-            let result = alice.encrypt_message("bob", message).await;
+            let result = alice.encrypt_message(&bob_rdx, message).await;
             assert!(
                 result.is_err(),
                 "Encryption should fail after identity reset"
@@ -1630,5 +1795,143 @@ mod tests {
             schema_error.to_string(),
             "Update your database to a newer schema version"
         );
+    }
+
+    #[tokio::test]
+    async fn test_add_contact_from_bundle() {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db = temp_dir.join(format!("test_contact_alice_{}.db", timestamp));
+        let bob_db = temp_dir.join(format!("test_contact_bob_{}.db", timestamp));
+
+        let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
+        let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
+
+        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+
+        let bob_rdx = alice
+            .add_contact_from_bundle(&bob_bundle, None)
+            .await
+            .unwrap();
+        assert!(bob_rdx.starts_with("RDX:"));
+
+        let _ = std::fs::remove_file(&alice_db);
+        let _ = std::fs::remove_file(&bob_db);
+    }
+
+    #[tokio::test]
+    async fn test_lookup_contact_by_rdx() {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db = temp_dir.join(format!("test_lookup_alice_{}.db", timestamp));
+        let bob_db = temp_dir.join(format!("test_lookup_bob_{}.db", timestamp));
+
+        let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
+        let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
+
+        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+        let bob_rdx = alice
+            .add_contact_from_bundle(&bob_bundle, None)
+            .await
+            .unwrap();
+
+        let contact = alice.lookup_contact(&bob_rdx).await.unwrap();
+        assert_eq!(contact.rdx_fingerprint, bob_rdx);
+        assert!(contact.user_alias.is_none());
+        assert!(!contact.has_active_session);
+
+        let _ = std::fs::remove_file(&alice_db);
+        let _ = std::fs::remove_file(&bob_db);
+    }
+
+    #[tokio::test]
+    async fn test_assign_and_lookup_contact_by_alias() {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db = temp_dir.join(format!("test_alias_alice_{}.db", timestamp));
+        let bob_db = temp_dir.join(format!("test_alias_bob_{}.db", timestamp));
+
+        let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
+        let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
+
+        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+        let bob_rdx = alice
+            .add_contact_from_bundle(&bob_bundle, None)
+            .await
+            .unwrap();
+
+        let contact_before = alice.lookup_contact(&bob_rdx).await.unwrap();
+        assert!(contact_before.user_alias.is_none());
+
+        alice.assign_contact_alias(&bob_rdx, "bob").await.unwrap();
+
+        let contact_by_alias = alice.lookup_contact("bob").await.unwrap();
+        assert_eq!(contact_by_alias.rdx_fingerprint, bob_rdx);
+        assert_eq!(contact_by_alias.user_alias, Some("bob".to_string()));
+
+        let _ = std::fs::remove_file(&alice_db);
+        let _ = std::fs::remove_file(&bob_db);
+    }
+
+    #[tokio::test]
+    async fn test_list_contacts() {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db = temp_dir.join(format!("test_list_alice_{}.db", timestamp));
+        let bob_db = temp_dir.join(format!("test_list_bob_{}.db", timestamp));
+        let charlie_db = temp_dir.join(format!("test_list_charlie_{}.db", timestamp));
+
+        let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
+        let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
+        let mut charlie = SignalBridge::new(charlie_db.to_str().unwrap())
+            .await
+            .unwrap();
+
+        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+        let charlie_bundle = charlie.generate_pre_key_bundle().await.unwrap();
+
+        let bob_rdx = alice
+            .add_contact_from_bundle(&bob_bundle, Some("bob"))
+            .await
+            .unwrap();
+        let charlie_rdx = alice
+            .add_contact_from_bundle(&charlie_bundle, None)
+            .await
+            .unwrap();
+
+        let contacts = alice.list_contacts().await.unwrap();
+        assert_eq!(contacts.len(), 2);
+
+        let bob_contact = contacts
+            .iter()
+            .find(|c| c.rdx_fingerprint == bob_rdx)
+            .unwrap();
+        assert_eq!(bob_contact.user_alias, Some("bob".to_string()));
+
+        let charlie_contact = contacts
+            .iter()
+            .find(|c| c.rdx_fingerprint == charlie_rdx)
+            .unwrap();
+        assert!(charlie_contact.user_alias.is_none());
+
+        let _ = std::fs::remove_file(&alice_db);
+        let _ = std::fs::remove_file(&bob_db);
+        let _ = std::fs::remove_file(&charlie_db);
     }
 }
