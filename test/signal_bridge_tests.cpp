@@ -99,16 +99,12 @@ TEST_CASE("SignalBridge CXX Integration", "[signal][cxx]")
       REQUIRE(!bob_bundle.empty());
       REQUIRE(!alice_bundle.empty());
 
-      auto bob_rdx = radix_relay::add_contact_from_bundle(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "bob");
-      auto alice_rdx = radix_relay::add_contact_from_bundle(*bob, rust::Slice<const uint8_t>{ alice_bundle }, "alice");
+      auto bob_rdx =
+        radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "bob");
+      auto alice_rdx =
+        radix_relay::add_contact_and_establish_session(*bob, rust::Slice<const uint8_t>{ alice_bundle }, "alice");
       REQUIRE(std::string(bob_rdx).starts_with("RDX:"));
       REQUIRE(std::string(alice_rdx).starts_with("RDX:"));
-
-      REQUIRE_NOTHROW(
-        [&]() { radix_relay::establish_session(*alice, bob_rdx.c_str(), rust::Slice<const uint8_t>{ bob_bundle }); }());
-      REQUIRE_NOTHROW([&]() {
-        radix_relay::establish_session(*bob, alice_rdx.c_str(), rust::Slice<const uint8_t>{ alice_bundle });
-      }());
 
       std::string plaintext = "Hello Bob! This is Alice using SignalBridge from C++.";
       std::vector<uint8_t> plaintext_bytes(plaintext.begin(), plaintext.end());
@@ -146,11 +142,9 @@ TEST_CASE("SignalBridge CXX Integration", "[signal][cxx]")
       auto bob = radix_relay::new_signal_bridge(bob_db.c_str());
 
       auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
-      auto bob_rdx = radix_relay::add_contact_from_bundle(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "bob");
+      auto bob_rdx =
+        radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "bob");
       REQUIRE(std::string(bob_rdx).starts_with("RDX:"));
-
-      REQUIRE_NOTHROW(
-        [&]() { radix_relay::establish_session(*alice, bob_rdx.c_str(), rust::Slice<const uint8_t>{ bob_bundle }); }());
 
       REQUIRE_NOTHROW([&]() { radix_relay::clear_peer_session(*alice, bob_rdx.c_str()); }());
 
@@ -184,14 +178,15 @@ TEST_CASE("SignalBridge Contact Management", "[signal][contacts][cxx]")
       auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
       REQUIRE(!bob_bundle.empty());
 
-      auto bob_rdx = radix_relay::add_contact_from_bundle(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "");
+      auto bob_rdx =
+        radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "");
       REQUIRE(!bob_rdx.empty());
       REQUIRE(std::string(bob_rdx).starts_with("RDX:"));
 
       auto contact = radix_relay::lookup_contact(*alice, bob_rdx.c_str());
       REQUIRE(std::string(contact.rdx_fingerprint) == std::string(bob_rdx));
       REQUIRE(contact.user_alias.empty());
-      REQUIRE(!contact.has_active_session);
+      REQUIRE(contact.has_active_session);
     }
 
     std::filesystem::remove(alice_db);
@@ -214,7 +209,8 @@ TEST_CASE("SignalBridge Contact Management", "[signal][contacts][cxx]")
       auto bob = radix_relay::new_signal_bridge(bob_db.c_str());
 
       auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
-      auto bob_rdx = radix_relay::add_contact_from_bundle(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "");
+      auto bob_rdx =
+        radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "");
 
       REQUIRE_NOTHROW([&]() { radix_relay::assign_contact_alias(*alice, bob_rdx.c_str(), "bob"); }());
 
@@ -249,8 +245,10 @@ TEST_CASE("SignalBridge Contact Management", "[signal][contacts][cxx]")
       auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
       auto charlie_bundle = radix_relay::generate_pre_key_bundle(*charlie);
 
-      auto bob_rdx = radix_relay::add_contact_from_bundle(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "bob");
-      auto charlie_rdx = radix_relay::add_contact_from_bundle(*alice, rust::Slice<const uint8_t>{ charlie_bundle }, "");
+      auto bob_rdx =
+        radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "bob");
+      auto charlie_rdx =
+        radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ charlie_bundle }, "");
 
       auto contacts = radix_relay::list_contacts(*alice);
       REQUIRE(contacts.size() == 2);
@@ -276,5 +274,75 @@ TEST_CASE("SignalBridge Contact Management", "[signal][contacts][cxx]")
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
     std::filesystem::remove(charlie_db);
+  }
+}
+
+TEST_CASE("SignalBridge Bundle Announcement", "[signal][bundle][nostr][cxx]")
+{
+  SECTION("Can generate prekey bundle announcement with RDX tag")
+  {
+    auto timestamp =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto alice_db = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                     / ("test_bundle_announcement_" + std::to_string(timestamp) + ".db"))
+                      .string();
+
+    {
+      auto alice = radix_relay::new_signal_bridge(alice_db.c_str());
+
+      auto event_json = radix_relay::generate_prekey_bundle_announcement(*alice, "1.0.0-test");
+      REQUIRE(!event_json.empty());
+
+      // Parse JSON to verify structure
+      auto event_str = std::string(event_json);
+      REQUIRE(event_str.find("\"kind\":30078") != std::string::npos);
+      REQUIRE(event_str.find("\"rdx\"") != std::string::npos);
+      REQUIRE(event_str.find("RDX:") != std::string::npos);
+      REQUIRE(event_str.find("radix_version") != std::string::npos);
+      REQUIRE(event_str.find("1.0.0-test") != std::string::npos);
+      REQUIRE(event_str.find("radix_prekey_bundle_v1") != std::string::npos);
+      REQUIRE(event_str.find("\"content\":") != std::string::npos);
+    }
+
+    std::filesystem::remove(alice_db);
+  }
+
+  SECTION("Can add contact and establish session in one call")
+  {
+    auto timestamp =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto alice_db = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                     / ("test_contact_session_alice_" + std::to_string(timestamp) + ".db"))
+                      .string();
+    auto bob_db = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                   / ("test_contact_session_bob_" + std::to_string(timestamp) + ".db"))
+                    .string();
+
+    {
+      auto alice = radix_relay::new_signal_bridge(alice_db.c_str());
+      auto bob = radix_relay::new_signal_bridge(bob_db.c_str());
+
+      auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
+
+      // Alice adds Bob as contact AND establishes session in one call
+      auto bob_rdx =
+        radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "bob");
+      REQUIRE(std::string(bob_rdx).starts_with("RDX:"));
+
+      // Verify contact and session exist
+      auto contact = radix_relay::lookup_contact(*alice, bob_rdx.c_str());
+      REQUIRE(std::string(contact.user_alias) == "bob");
+      REQUIRE(contact.has_active_session);
+
+      // Verify Alice can encrypt to Bob
+      std::string plaintext = "Hello Bob!";
+      std::vector<uint8_t> plaintext_bytes(plaintext.begin(), plaintext.end());
+      auto ciphertext =
+        radix_relay::encrypt_message(*alice, bob_rdx.c_str(), rust::Slice<const uint8_t>{ plaintext_bytes });
+      REQUIRE(!ciphertext.empty());
+    }
+
+    std::filesystem::remove(alice_db);
+    std::filesystem::remove(bob_db);
   }
 }

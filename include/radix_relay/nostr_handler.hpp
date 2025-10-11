@@ -31,6 +31,9 @@ private:
     }
 
     switch (kind.value()) {
+    case protocol::kind::bundle_announcement:
+      handler_.handle(events::incoming::bundle_announcement{ event });
+      break;
     case protocol::kind::identity_announcement:
       handler_.handle(events::incoming::identity_announcement{ event });
       break;
@@ -43,6 +46,7 @@ private:
     case protocol::kind::node_status:
       handler_.handle(events::incoming::node_status{ event });
       break;
+    case protocol::kind::parameterized_replaceable_start:
     case protocol::kind::profile_metadata:
     case protocol::kind::text_note:
     case protocol::kind::recommend_relay:

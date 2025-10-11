@@ -6,6 +6,11 @@ namespace radix_relay::nostr::events {
 
 namespace incoming {
 
+  struct bundle_announcement : protocol::event_data
+  {
+    explicit bundle_announcement(const protocol::event_data &event) : protocol::event_data(event) {}
+  };
+
   struct identity_announcement : protocol::event_data
   {
     explicit identity_announcement(const protocol::event_data &event) : protocol::event_data(event) {}
@@ -50,6 +55,11 @@ namespace incoming {
 }// namespace incoming
 
 namespace outgoing {
+
+  struct bundle_announcement : protocol::event_data
+  {
+    explicit bundle_announcement(const protocol::event_data &event) : protocol::event_data(event) {}
+  };
 
   struct identity_announcement : protocol::event_data
   {

@@ -23,6 +23,10 @@ enum class kind : std::uint32_t {
   encrypted_dm = 4,
   reaction = 7,
 
+  // Standard Nostr parameterized replaceable events
+  parameterized_replaceable_start = 30000,
+  bundle_announcement = 30078,
+
   // Radix Relay custom kinds (40001-40099 reserved)
   encrypted_message = 40001,
   identity_announcement = 40002,
@@ -137,6 +141,21 @@ struct event_data
     };
   }
 
+  static auto create_bundle_announcement(const std::string &sender_pubkey,
+    std::uint64_t timestamp,
+    const std::string &bundle_hex) -> event_data
+  {
+    return {
+      .id = "",// Will be computed when signing
+      .pubkey = sender_pubkey,
+      .created_at = timestamp,
+      .kind = static_cast<std::uint32_t>(kind::bundle_announcement),
+      .tags = { { "radix_version", std::string{ radix_relay::cmake::project_version } } },
+      .content = bundle_hex,
+      .sig = ""// Will be computed when signing
+    };
+  }
+
   static auto create_encrypted_message(std::uint64_t timestamp,
     const std::string &recipient_pubkey,
     const std::string &encrypted_payload,
@@ -178,6 +197,7 @@ struct event_data
     case static_cast<std::uint32_t>(kind::identity_announcement):
     case static_cast<std::uint32_t>(kind::session_request):
     case static_cast<std::uint32_t>(kind::node_status):
+    case static_cast<std::uint32_t>(kind::bundle_announcement):
       return true;
     case static_cast<std::uint32_t>(kind::profile_metadata):
     case static_cast<std::uint32_t>(kind::text_note):
@@ -205,6 +225,8 @@ struct event_data
       return kind::encrypted_dm;
     case 7:
       return kind::reaction;
+    case 30078:
+      return kind::bundle_announcement;
     case 40001:
       return kind::encrypted_message;
     case 40002:
