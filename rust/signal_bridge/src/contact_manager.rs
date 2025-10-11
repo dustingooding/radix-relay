@@ -7,6 +7,7 @@
 use crate::nostr_identity::NostrIdentity;
 use crate::SignalBridgeError;
 use libsignal_protocol::{DeviceId, IdentityKey, ProtocolAddress, SessionStore};
+use rusqlite::OptionalExtension;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -114,6 +115,27 @@ impl ContactManager {
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
         let conn_lock = self.storage.lock().unwrap();
 
+        // Check if this alias is already assigned to a different contact
+        let existing: Option<String> = conn_lock
+            .query_row(
+                "SELECT rdx_fingerprint FROM contacts WHERE user_alias = ?1",
+                rusqlite::params![new_alias],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| SignalBridgeError::Storage(e.to_string()))?;
+
+        if let Some(existing_rdx) = existing {
+            if existing_rdx != contact.rdx_fingerprint {
+                return Err(SignalBridgeError::InvalidInput(format!(
+                    "Alias '{}' is already assigned to contact {}. Remove it first before reassigning.",
+                    new_alias, existing_rdx
+                )));
+            }
+            // If the alias is already assigned to this same contact, that's fine - just update the timestamp
+        }
+
+        // Assign the alias to the target contact
         let updated = conn_lock
             .execute(
                 "UPDATE contacts SET user_alias = ?1, last_updated = ?2

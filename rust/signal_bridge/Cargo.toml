@@ -47,5 +47,8 @@ serde_json = "1.0"
 # Hex encoding/decoding
 hex = "0.4"
 
+# Base64 encoding/decoding
+base64 = "0.22"
+
 [build-dependencies]
 cxx-build = "1.0"
