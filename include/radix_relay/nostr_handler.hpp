@@ -1,5 +1,8 @@
 #pragma once
 
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/strand.hpp>
 #include <chrono>
 #include <functional>
 #include <nlohmann/json.hpp>
@@ -13,6 +16,7 @@
 #include <ranges>
 #include <span>
 #include <string>
+#include <vector>
 
 namespace radix_relay::nostr {
 

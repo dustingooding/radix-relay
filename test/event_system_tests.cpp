@@ -57,7 +57,7 @@ SCENARIO("Event structures can be constructed and hold data correctly", "[events
 
     WHEN("constructing trust event")
     {
-      auto trust_event = radix_relay::events::trust{ "alice" };
+      auto trust_event = radix_relay::events::trust{ .peer = "alice", .alias = "" };
 
       THEN("it should hold the peer data") { REQUIRE(trust_event.peer == "alice"); }
     }

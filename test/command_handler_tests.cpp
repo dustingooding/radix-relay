@@ -200,7 +200,7 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
 
     WHEN("handling trust command")
     {
-      auto trust_command = radix_relay::events::trust{ .peer = "alice" };
+      auto trust_command = radix_relay::events::trust{ .peer = "alice", .alias = "" };
 
       THEN("handler should process without throwing")
       {

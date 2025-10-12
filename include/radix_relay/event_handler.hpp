@@ -75,7 +75,7 @@ template<concepts::CommandHandler CmdHandler> struct EventHandler
 
     constexpr auto trust_cmd = "trust ";
     if (input.starts_with(trust_cmd)) {
-      command_handler_.handle(events::trust{ .peer = input.substr(std::string_view(trust_cmd).length()) });
+      command_handler_.handle(events::trust{ .peer = input.substr(std::string_view(trust_cmd).length()), .alias = "" });
       return;
     }
 
