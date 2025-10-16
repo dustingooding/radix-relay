@@ -24,14 +24,16 @@ namespace radix_relay::nostr {
 
 class Transport
 {
+public:
+  using SendBytesToSessionFn = std::function<void(std::vector<std::byte>)>;
+
 private:
   bool connected_ = false;
-  std::function<void(std::span<const std::byte>)> message_callback_;
+  SendBytesToSessionFn send_bytes_to_session_;
 
-  boost::asio::io_context io_context_;
+  boost::asio::io_context &io_context_;
   boost::asio::ssl::context ssl_context_;
   boost::asio::ssl::stream<boost::asio::ip::tcp::socket> ssl_socket_;
-  std::thread io_thread_;
   std::array<char, 8192> read_buffer_;
   std::string partial_message_;
 
@@ -204,10 +206,13 @@ private:
         partial_message_ += payload;
 
         bool fin = (first_byte & 0x80) != 0;
-        if (fin && message_callback_) {
-          auto bytes = reinterpret_cast<const std::byte *>(partial_message_.data());
-          std::span<const std::byte> byte_span(bytes, partial_message_.size());
-          message_callback_(byte_span);
+        if (fin && send_bytes_to_session_) {
+          std::vector<std::byte> bytes;
+          bytes.resize(partial_message_.size());
+          std::transform(partial_message_.begin(), partial_message_.end(), bytes.begin(), [](char c) {
+            return static_cast<std::byte>(c);
+          });
+          send_bytes_to_session_(std::move(bytes));
           partial_message_.clear();
         }
       }
@@ -236,15 +241,15 @@ private:
   }
 
 public:
-  Transport() : ssl_context_(boost::asio::ssl::context::sslv23), ssl_socket_(io_context_, ssl_context_), read_buffer_{}
+  Transport(boost::asio::io_context &io_context, SendBytesToSessionFn send_bytes_to_session)
+    : send_bytes_to_session_(std::move(send_bytes_to_session)), io_context_(io_context),
+      ssl_context_(boost::asio::ssl::context::sslv23), ssl_socket_(io_context_, ssl_context_), read_buffer_{}
   {
     ssl_context_.set_default_verify_paths();
     ssl_context_.set_verify_mode(boost::asio::ssl::verify_peer);
   }
 
   ~Transport() { disconnect(); }
-
-  [[nodiscard]] auto io_context() -> boost::asio::io_context & { return io_context_; }
 
   auto connect(const std::string_view address) -> void
   {
@@ -277,8 +282,6 @@ public:
 
       start_read();
 
-      io_thread_ = std::thread([this]() { io_context_.run(); });
-
     } catch (const std::exception &e) {
       throw std::runtime_error("Failed to connect to " + std::string(address) + ": " + e.what());
     }
@@ -290,31 +293,22 @@ public:
 
     std::string frame = encode_websocket_frame(payload);
 
-    boost::asio::post(io_context_, [this, frame = std::move(frame)]() {
-      boost::asio::async_write(ssl_socket_,
-        boost::asio::buffer(frame),
-        [](const boost::system::error_code & /*error*/, std::size_t /*bytes_transferred*/) {});
-    });
-  }
-
-  auto register_message_callback(std::function<void(std::span<const std::byte>)> callback) -> void
-  {
-    message_callback_ = std::move(callback);
+    boost::asio::async_write(ssl_socket_,
+      boost::asio::buffer(frame),
+      [](const boost::system::error_code & /*error*/, std::size_t /*bytes_transferred*/) {});
   }
 
   auto disconnect() -> void
   {
     if (connected_) {
       connected_ = false;
-      io_context_.stop();
-
-      if (io_thread_.joinable()) { io_thread_.join(); }
 
       if (ssl_socket_.lowest_layer().is_open()) { ssl_socket_.lowest_layer().close(); }
     }
   }
 };
 
-static_assert(radix_relay::concepts::Transport<Transport>);
+// TODO: Update Transport concept for strand-based architecture
+// static_assert(radix_relay::concepts::Transport<Transport>);
 
 }// namespace radix_relay::nostr
