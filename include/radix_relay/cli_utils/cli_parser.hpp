@@ -7,7 +7,7 @@
 
 namespace radix_relay {
 
-struct CliArgs
+struct cli_args
 {
   std::string identity_path = "~/.radix/identity.db";
   std::string mode = "hybrid";
@@ -22,11 +22,11 @@ struct CliArgs
   bool status_parsed = false;
 };
 
-inline auto setup_cli_app(CLI::App &app, CliArgs &args) -> void;
+inline auto setup_cli_app(CLI::App &app, cli_args &args) -> void;
 
-inline auto parse_cli_args(int argc, char **argv) -> CliArgs
+inline auto parse_cli_args(int argc, char **argv) -> cli_args
 {
-  CliArgs args;
+  cli_args args;
   CLI::App app{ "Radix Relay - Hybrid Mesh Communications", "radix-relay" };
 
   setup_cli_app(app, args);
@@ -35,7 +35,7 @@ inline auto parse_cli_args(int argc, char **argv) -> CliArgs
     app.parse(argc, argv);
   } catch (const CLI::ParseError &e) {
     app.exit(e);
-    std::exit(e.get_exit_code());
+    std::exit(e.get_exit_code());// NOLINT(concurrency-mt-unsafe)
   }
 
   args.identity_path = platform::expand_tilde_path(args.identity_path);
@@ -43,10 +43,10 @@ inline auto parse_cli_args(int argc, char **argv) -> CliArgs
   return args;
 }
 
-inline auto setup_cli_app(CLI::App &app, CliArgs &args) -> void
+inline auto setup_cli_app(CLI::App &app, cli_args &args) -> void
 {
   app.add_option("-i,--identity", args.identity_path, "Path to identity key file");
-  app.add_option("-m,--mode", args.mode, "Transport mode: internet, mesh, hybrid")
+  app.add_option("-m,--mode", args.mode, "transport mode: internet, mesh, hybrid")
     ->check(CLI::IsMember({ "internet", "mesh", "hybrid" }));
   app.add_flag("-v,--verbose", args.verbose, "Enable verbose logging");
   app.add_flag("--version", args.show_version, "Show version information");
@@ -63,7 +63,7 @@ inline auto setup_cli_app(CLI::App &app, CliArgs &args) -> void
   status_cmd->callback([&args]() { args.status_parsed = true; });
 }
 
-inline auto validate_cli_args(const CliArgs &args) -> bool
+inline auto validate_cli_args(const cli_args &args) -> bool
 {
   if (args.mode != "internet" and args.mode != "mesh" and args.mode != "hybrid") {
     spdlog::error("Invalid mode: {}", args.mode);

@@ -2,6 +2,7 @@
 
 #include <fmt/core.h>
 #include <iostream>
+#include <memory>
 #include <radix_relay/concepts/event_handler.hpp>
 #include <radix_relay/events/events.hpp>
 #include <string>
@@ -9,10 +10,10 @@
 
 namespace radix_relay {
 
-template<concepts::EventHandler EvtHandler> struct InteractiveCli
+template<concepts::event_handler EvtHandler> struct interactive_cli
 {
-  InteractiveCli(std::string node_id, std::string mode, const EvtHandler &event_handler)
-    : node_id_(std::move(node_id)), mode_(std::move(mode)), event_handler_(event_handler)
+  interactive_cli(std::string node_id, std::string mode, std::shared_ptr<EvtHandler> event_handler)
+    : node_id_(std::move(node_id)), mode_(std::move(mode)), event_handler_(std::move(event_handler))
   {}
 
   auto run() -> void
@@ -58,16 +59,16 @@ template<concepts::EventHandler EvtHandler> struct InteractiveCli
       return true;
     }
 
-    event_handler_.handle(events::raw_command{ .input = input });
+    event_handler_->handle(events::raw_command{ .input = input });
     return true;
   }
 
-  auto get_mode() const -> const std::string & { return mode_; }
+  [[nodiscard]] auto get_mode() const -> const std::string & { return mode_; }
 
 private:
   std::string node_id_;
   std::string mode_;
-  const EvtHandler &event_handler_;
+  std::shared_ptr<EvtHandler> event_handler_;
 };
 
 }// namespace radix_relay

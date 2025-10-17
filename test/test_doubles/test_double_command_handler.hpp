@@ -79,6 +79,6 @@ public:
   auto clear_calls() const -> void { called_commands.clear(); }
 };
 
-static_assert(radix_relay::concepts::CommandHandler<TestDoubleCommandHandler>);
+static_assert(radix_relay::concepts::command_handler<TestDoubleCommandHandler>);
 
 }// namespace radix_relay_test

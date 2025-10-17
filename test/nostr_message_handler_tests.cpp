@@ -5,7 +5,7 @@
 #include <radix_relay/nostr_message_handler.hpp>
 #include <signal_bridge_cxx/lib.h>
 
-TEST_CASE("NostrMessageHandler handles incoming encrypted_message", "[nostr_message_handler]")
+TEST_CASE("nostr_message_handler handles incoming encrypted_message", "[nostr_message_handler]")
 {
   const std::string alice_path = "/tmp/nostr_handler_pure_alice.db";
   const std::string bob_path = "/tmp/nostr_handler_pure_bob.db";
@@ -43,14 +43,14 @@ TEST_CASE("NostrMessageHandler handles incoming encrypted_message", "[nostr_mess
     event_data.id = "test_event_id";
     event_data.pubkey = "alice_pubkey";
     event_data.created_at = test_timestamp;
-    event_data.kind = static_cast<std::uint32_t>(radix_relay::nostr::protocol::kind::encrypted_message);
+    event_data.kind = radix_relay::nostr::protocol::kind::encrypted_message;
     event_data.content = hex_content;
     event_data.sig = "signature";
     event_data.tags.push_back({ "p", std::string(alice_rdx) });
 
     const radix_relay::nostr::events::incoming::encrypted_message event{ event_data };
 
-    radix_relay::NostrMessageHandler handler(bob_bridge);
+    radix_relay::nostr_message_handler handler(&(*bob_bridge));
     auto result = handler.handle(event);
 
     REQUIRE(result.has_value());
@@ -65,7 +65,7 @@ TEST_CASE("NostrMessageHandler handles incoming encrypted_message", "[nostr_mess
   std::filesystem::remove(bob_path);
 }
 
-TEST_CASE("NostrMessageHandler handles incoming bundle_announcement", "[nostr_message_handler]")
+TEST_CASE("nostr_message_handler handles incoming bundle_announcement", "[nostr_message_handler]")
 {
   const std::string alice_path = "/tmp/nostr_handler_bundle_alice.db";
   const std::string bob_path = "/tmp/nostr_handler_bundle_bob.db";
@@ -84,7 +84,7 @@ TEST_CASE("NostrMessageHandler handles incoming bundle_announcement", "[nostr_me
     constexpr std::uint64_t test_timestamp = 1234567890;
     radix_relay::nostr::protocol::event_data event_data;
     event_data.pubkey = "alice_nostr_pubkey";
-    event_data.kind = static_cast<std::uint32_t>(radix_relay::nostr::protocol::kind::bundle_announcement);
+    event_data.kind = radix_relay::nostr::protocol::kind::bundle_announcement;
     event_data.content = alice_bundle_base64;
     event_data.created_at = test_timestamp;
     event_data.id = "bundle_event_id";
@@ -92,7 +92,7 @@ TEST_CASE("NostrMessageHandler handles incoming bundle_announcement", "[nostr_me
 
     const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
 
-    radix_relay::NostrMessageHandler handler(bob_bridge);
+    radix_relay::nostr_message_handler handler(&(*bob_bridge));
     auto result = handler.handle(event);
 
     REQUIRE(result.has_value());
@@ -106,7 +106,7 @@ TEST_CASE("NostrMessageHandler handles incoming bundle_announcement", "[nostr_me
   std::filesystem::remove(bob_path);
 }
 
-TEST_CASE("NostrMessageHandler handles send command", "[nostr_message_handler]")
+TEST_CASE("nostr_message_handler handles send command", "[nostr_message_handler]")
 {
   const std::string alice_path = "/tmp/nostr_handler_send_alice.db";
   const std::string bob_path = "/tmp/nostr_handler_send_bob.db";
@@ -127,7 +127,7 @@ TEST_CASE("NostrMessageHandler handles send command", "[nostr_message_handler]")
 
     const std::string plaintext = "Hello Bob!";
 
-    radix_relay::NostrMessageHandler handler(alice_bridge);
+    radix_relay::nostr_message_handler handler(&(*alice_bridge));
     auto [event_id, bytes] =
       handler.handle(radix_relay::events::send{ .peer = std::string(bob_rdx), .message = plaintext });
 
@@ -163,7 +163,7 @@ TEST_CASE("NostrMessageHandler handles send command", "[nostr_message_handler]")
   std::filesystem::remove(bob_path);
 }
 
-TEST_CASE("NostrMessageHandler handles publish_identity command", "[nostr_message_handler]")
+TEST_CASE("nostr_message_handler handles publish_identity command", "[nostr_message_handler]")
 {
   const std::string alice_path = "/tmp/nostr_handler_publish_alice.db";
   std::filesystem::remove(alice_path);
@@ -171,7 +171,7 @@ TEST_CASE("NostrMessageHandler handles publish_identity command", "[nostr_messag
   {
     auto alice_bridge = radix_relay::new_signal_bridge(alice_path.c_str());
 
-    radix_relay::NostrMessageHandler handler(alice_bridge);
+    radix_relay::nostr_message_handler handler(&(*alice_bridge));
     auto [event_id, bytes] = handler.handle(radix_relay::events::publish_identity{});
 
     CHECK_FALSE(event_id.empty());
@@ -193,7 +193,7 @@ TEST_CASE("NostrMessageHandler handles publish_identity command", "[nostr_messag
   std::filesystem::remove(alice_path);
 }
 
-TEST_CASE("NostrMessageHandler handles trust command", "[nostr_message_handler]")
+TEST_CASE("nostr_message_handler handles trust command", "[nostr_message_handler]")
 {
   const std::string alice_path = "/tmp/nostr_handler_trust_alice.db";
   const std::string bob_path = "/tmp/nostr_handler_trust_bob.db";
@@ -214,7 +214,7 @@ TEST_CASE("NostrMessageHandler handles trust command", "[nostr_message_handler]"
 
     const std::string alias = "bob_alias";
 
-    radix_relay::NostrMessageHandler handler(alice_bridge);
+    radix_relay::nostr_message_handler handler(&(*alice_bridge));
     handler.handle(radix_relay::events::trust{ .peer = std::string(bob_rdx), .alias = alias });
 
     auto contact = radix_relay::lookup_contact(*alice_bridge, alias.c_str());

@@ -29,6 +29,6 @@ public:
   }
 };
 
-static_assert(radix_relay::concepts::Transport<TestDoubleNostrTransport>);
+static_assert(radix_relay::concepts::transport<TestDoubleNostrTransport>);
 
 }// namespace radix_relay_test

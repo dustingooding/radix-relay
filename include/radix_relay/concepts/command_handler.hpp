@@ -1,12 +1,11 @@
 #pragma once
 
-#include <concepts>
 #include <radix_relay/events/events.hpp>
 
 namespace radix_relay::concepts {
 
 template<typename T>
-concept CommandHandler = requires(T handler,
+concept command_handler = requires(T handler,
   const events::help &help_cmd,
   const events::peers &peers_cmd,
   const events::status &status_cmd,

@@ -21,7 +21,7 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
         auto bridge = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_help.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge) };
+        const radix_relay::command_handler handler{ std::move(bridge) };
         REQUIRE_NOTHROW(handler.handle(help_command));
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_help.db")
@@ -39,7 +39,7 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
         auto bridge = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_version.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge) };
+        const radix_relay::command_handler handler{ std::move(bridge) };
         REQUIRE_NOTHROW(handler.handle(version_command));
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_version.db")
@@ -57,7 +57,7 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
         auto bridge_local = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge_local) };
+        const radix_relay::command_handler handler{ std::move(bridge_local) };
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string()
@@ -75,7 +75,7 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
         auto bridge_local = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge_local) };
+        const radix_relay::command_handler handler{ std::move(bridge_local) };
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string()
@@ -93,7 +93,7 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
         auto bridge_local = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge_local) };
+        const radix_relay::command_handler handler{ std::move(bridge_local) };
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string()
@@ -111,7 +111,7 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
         auto bridge_local = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge_local) };
+        const radix_relay::command_handler handler{ std::move(bridge_local) };
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string()
@@ -135,7 +135,7 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
         auto bridge_local = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge_local) };
+        const radix_relay::command_handler handler{ std::move(bridge_local) };
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string()
@@ -153,7 +153,7 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
         auto bridge_local = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge_local) };
+        const radix_relay::command_handler handler{ std::move(bridge_local) };
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string()
@@ -171,7 +171,7 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
         auto bridge_local = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge_local) };
+        const radix_relay::command_handler handler{ std::move(bridge_local) };
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string()
@@ -189,7 +189,7 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
         auto bridge_local = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge_local) };
+        const radix_relay::command_handler handler{ std::move(bridge_local) };
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string()
@@ -207,7 +207,7 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
         auto bridge_local = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge_local) };
+        const radix_relay::command_handler handler{ std::move(bridge_local) };
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string()
@@ -225,7 +225,7 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
         auto bridge_local = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge_local) };
+        const radix_relay::command_handler handler{ std::move(bridge_local) };
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string()
@@ -249,7 +249,7 @@ SCENARIO("Command handler validates command parameters", "[commands][handler][va
         auto bridge_local = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge_local) };
+        const radix_relay::command_handler handler{ std::move(bridge_local) };
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string()
@@ -267,7 +267,7 @@ SCENARIO("Command handler validates command parameters", "[commands][handler][va
         auto bridge_local = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge_local) };
+        const radix_relay::command_handler handler{ std::move(bridge_local) };
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string()
@@ -285,7 +285,7 @@ SCENARIO("Command handler validates command parameters", "[commands][handler][va
         auto bridge_local = radix_relay::new_signal_bridge(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string());
-        const radix_relay::CommandHandler handler{ std::move(bridge_local) };
+        const radix_relay::command_handler handler{ std::move(bridge_local) };
         std::ignore = std::remove(
           (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_local.db")
             .string()

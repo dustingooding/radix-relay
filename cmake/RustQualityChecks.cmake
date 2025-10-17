@@ -22,10 +22,10 @@ macro(radix_relay_enable_rustfmt RUST_SOURCE_DIR WARNINGS_AS_ERRORS)
         )
 
         # Add to quality checks group
-        if(NOT TARGET quality-checks)
-            add_custom_target(quality-checks)
+        if(NOT TARGET quality-rust)
+            add_custom_target(quality-rust)
         endif()
-        add_dependencies(quality-checks rust-fmt-check)
+        add_dependencies(quality-rust rust-fmt-check)
 
     else()
         message(WARNING "rustfmt requested but executable not found")
@@ -65,10 +65,10 @@ macro(radix_relay_enable_clippy RUST_SOURCE_DIR WARNINGS_AS_ERRORS)
             )
 
             # Add to quality checks group
-            if(NOT TARGET quality-checks)
-                add_custom_target(quality-checks)
+            if(NOT TARGET quality-rust)
+                add_custom_target(quality-rust)
             endif()
-            add_dependencies(quality-checks rust-clippy)
+            add_dependencies(quality-rust rust-clippy)
 
         else()
             message(WARNING "clippy requested but not available. Install with: rustup component add clippy")

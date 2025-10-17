@@ -49,7 +49,7 @@ namespace incoming {
   struct unknown_protocol
   {
     std::string message;
-    explicit unknown_protocol(const std::string &msg) : message(msg) {}
+    explicit unknown_protocol(std::string msg) : message(std::move(msg)) {}
   };
 
 }// namespace incoming
@@ -94,11 +94,11 @@ namespace outgoing {
 
     [[nodiscard]] auto get_subscription_id() const -> std::string
     {
-      auto j = nlohmann::json::parse(subscription_json);
-      if (!j.is_array() || j.size() < 2 || !j[1].is_string()) {
+      auto json_obj = nlohmann::json::parse(subscription_json);
+      if (!json_obj.is_array() || json_obj.size() < 2 || !json_obj[1].is_string()) {
         throw std::runtime_error("Invalid subscription JSON format");
       }
-      return j[1].get<std::string>();
+      return json_obj[1].get<std::string>();
     }
   };
 

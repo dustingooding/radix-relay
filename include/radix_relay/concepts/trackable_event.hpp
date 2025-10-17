@@ -1,6 +1,5 @@
 #pragma once
 
-#include <concepts>
 #include <radix_relay/events/nostr_events.hpp>
 #include <type_traits>
 

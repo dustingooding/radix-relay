@@ -16,17 +16,16 @@
 
 namespace radix_relay {
 
-class NostrMessageHandler
+class nostr_message_handler
 {
 public:
-  explicit NostrMessageHandler(rust::Box<SignalBridge> &bridge) : bridge_(bridge) {}
+  explicit nostr_message_handler(SignalBridge *bridge) : bridge_(bridge) {}
 
   // Incoming Nostr events (called by Session on session_strand)
   // Returns optional event to post to main_strand
   auto handle(const nostr::events::incoming::encrypted_message &event) -> std::optional<events::message_received>
   {
-    auto p_tag = std::find_if(
-      event.tags.begin(), event.tags.end(), [](const auto &tag) { return tag.size() >= 2 && tag[0] == "p"; });
+    auto p_tag = std::ranges::find_if(event.tags, [](const auto &tag) { return tag.size() >= 2 && tag[0] == "p"; });
 
     if (p_tag == event.tags.end()) { return std::nullopt; }
 
@@ -45,7 +44,9 @@ public:
 
     const std::string decrypted_content(decrypted_bytes.begin(), decrypted_bytes.end());
 
-    return events::message_received{ sender_rdx, decrypted_content, event.created_at };
+    return events::message_received{
+      .sender_rdx = sender_rdx, .content = decrypted_content, .timestamp = event.created_at
+    };
   }
 
   auto handle(const nostr::events::incoming::bundle_announcement &event) -> std::optional<events::session_established>
@@ -75,15 +76,14 @@ public:
     event_data.id = event_id;
     event_data.pubkey = event_json["pubkey"].get<std::string>();
     event_data.created_at = event_json["created_at"].get<std::uint64_t>();
-    event_data.kind = event_json["kind"].get<std::uint32_t>();
+    event_data.kind = event_json["kind"].get<nostr::protocol::kind>();
     event_data.content = event_json["content"].get<std::string>();
     event_data.sig = event_json["sig"].get<std::string>();
 
     for (const auto &tag : event_json["tags"]) {
       std::vector<std::string> tag_vec;
-      std::transform(tag.begin(), tag.end(), std::back_inserter(tag_vec), [](const auto &item) {
-        return item.template get<std::string>();
-      });
+      std::ranges::transform(
+        tag, std::back_inserter(tag_vec), [](const auto &item) { return item.template get<std::string>(); });
       event_data.tags.push_back(tag_vec);
     }
 
@@ -97,7 +97,7 @@ public:
     return { event_id, bytes };
   }
 
-  auto handle(const events::publish_identity &) -> std::pair<std::string, std::vector<std::byte>>
+  auto handle(const events::publish_identity & /*command*/) -> std::pair<std::string, std::vector<std::byte>>
   {
     const std::string version_str = "0.1.0";
     auto bundle_json = radix_relay::generate_prekey_bundle_announcement(*bridge_, version_str.c_str());
@@ -109,15 +109,14 @@ public:
     event_data.id = event_id;
     event_data.pubkey = event_json["pubkey"].get<std::string>();
     event_data.created_at = event_json["created_at"].get<std::uint64_t>();
-    event_data.kind = event_json["kind"].get<std::uint32_t>();
+    event_data.kind = event_json["kind"].get<nostr::protocol::kind>();
     event_data.content = event_json["content"].get<std::string>();
     event_data.sig = event_json["sig"].get<std::string>();
 
     for (const auto &tag : event_json["tags"]) {
       std::vector<std::string> tag_vec;
-      std::transform(tag.begin(), tag.end(), std::back_inserter(tag_vec), [](const auto &item) {
-        return item.template get<std::string>();
-      });
+      std::ranges::transform(
+        tag, std::back_inserter(tag_vec), [](const auto &item) { return item.template get<std::string>(); });
       event_data.tags.push_back(tag_vec);
     }
 
@@ -138,7 +137,7 @@ public:
   }
 
   // Subscription request returns subscription_id + bytes
-  auto handle(const events::subscribe &cmd) -> std::pair<std::string, std::vector<std::byte>>
+  static auto handle(const events::subscribe &cmd) -> std::pair<std::string, std::vector<std::byte>>
   {
     std::vector<std::byte> bytes;
     bytes.resize(cmd.subscription_json.size());
@@ -152,16 +151,16 @@ public:
   }
 
   // Stubs for events we don't handle yet (required by NostrHandler concept)
-  static auto handle(const nostr::events::incoming::ok &) -> void {}
-  static auto handle(const nostr::events::incoming::eose &) -> void {}
-  static auto handle(const nostr::events::incoming::unknown_message &) -> void {}
-  static auto handle(const nostr::events::incoming::unknown_protocol &) -> void {}
-  static auto handle(const nostr::events::incoming::identity_announcement &) -> void {}
-  static auto handle(const nostr::events::incoming::session_request &) -> void {}
-  static auto handle(const nostr::events::incoming::node_status &) -> void {}
+  static auto handle(const nostr::events::incoming::ok & /*event*/) -> void {}
+  static auto handle(const nostr::events::incoming::eose & /*event*/) -> void {}
+  static auto handle(const nostr::events::incoming::unknown_message & /*event*/) -> void {}
+  static auto handle(const nostr::events::incoming::unknown_protocol & /*event*/) -> void {}
+  static auto handle(const nostr::events::incoming::identity_announcement & /*event*/) -> void {}
+  static auto handle(const nostr::events::incoming::session_request & /*event*/) -> void {}
+  static auto handle(const nostr::events::incoming::node_status & /*event*/) -> void {}
 
 private:
-  rust::Box<SignalBridge> &bridge_;
+  SignalBridge *bridge_;
 };
 
 }// namespace radix_relay
