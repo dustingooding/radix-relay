@@ -10,7 +10,7 @@
 namespace radix_relay::concepts {
 
 template<typename T>
-concept RequestTracker = requires(T tracker,
+concept request_tracker = requires(T tracker,
   const std::string &event_id,
   std::function<void(const nostr::protocol::ok &)> callback,
   std::chrono::milliseconds timeout,

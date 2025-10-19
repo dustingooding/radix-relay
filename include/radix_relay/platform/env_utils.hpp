@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mutex>
 #include <string>
 
 #ifdef _WIN32
@@ -20,8 +21,10 @@ inline auto get_home_directory() -> std::string
   }
   return "";
 #else
-  // NOLINTNEXTLINE(concurrency-mt-unsafe) - single-threaded main function
-  auto *home = std::getenv("HOME");
+  static std::mutex env_mutex;
+  std::lock_guard<std::mutex> lock(env_mutex);
+
+  auto *home = std::getenv("HOME");// NOLINT(concurrency-mt-unsafe)
   return home != nullptr ? std::string(home) : "";
 #endif
 }
@@ -38,8 +41,11 @@ inline auto get_temp_directory() -> std::string
   }
   return "C:\\temp";
 #else
-  auto *temp = std::getenv("TMPDIR");
-  if (temp != nullptr) { return std::string(temp); }
+  static std::mutex env_mutex;
+  std::lock_guard<std::mutex> lock(env_mutex);
+
+  const char *temp = std::getenv("TMPDIR");// NOLINT(concurrency-mt-unsafe)
+  if (temp != nullptr) { return { temp }; }
   return "/tmp";
 #endif
 }

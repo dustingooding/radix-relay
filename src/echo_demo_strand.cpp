@@ -1,4 +1,3 @@
-#include "internal_use_only/config.hpp"
 #include "signal_bridge_cxx/lib.h"
 #include <algorithm>
 #include <chrono>
@@ -27,7 +26,7 @@ auto main() -> int
   spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
 
   std::cout << "Starting echo_demo_strand (Three-Strand Architecture)...\n";
-  std::cout << "Radix Relay - Echo Demonstration with SessionOrchestrator\n";
+  std::cout << "Radix Relay - Echo Demonstration with session_orchestrator\n";
   std::cout << "=========================================================\n\n";
 
   try {
@@ -58,11 +57,11 @@ auto main() -> int
       auto bob_bridge = radix_relay::new_signal_bridge(bob_db_path.c_str());
 
       std::cout << "\nCreating RequestTrackers...\n";
-      radix_relay::nostr::RequestTracker alice_tracker(io_context);
-      radix_relay::nostr::RequestTracker bob_tracker(io_context);
+      auto alice_tracker = std::make_shared<radix_relay::nostr::request_tracker>(&io_context);
+      auto bob_tracker = std::make_shared<radix_relay::nostr::request_tracker>(&io_context);
 
-      std::vector<radix_relay::events::TransportEventVariant> alice_events;
-      std::vector<radix_relay::events::TransportEventVariant> bob_events;
+      std::vector<radix_relay::events::transport_event_variant_t> alice_events;
+      std::vector<radix_relay::events::transport_event_variant_t> bob_events;
 
       std::string alice_peer_rdx;
       std::string bob_peer_rdx;
@@ -70,8 +69,8 @@ auto main() -> int
       std::cout << "\nCreating SessionOrchestrators and Transports...\n";
 
       // Forward declarations for circular dependency
-      radix_relay::SessionOrchestrator<radix_relay::nostr::RequestTracker> *alice_orch_ptr = nullptr;
-      radix_relay::SessionOrchestrator<radix_relay::nostr::RequestTracker> *bob_orch_ptr = nullptr;
+      std::shared_ptr<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>> alice_orch_ptr = nullptr;
+      std::shared_ptr<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>> bob_orch_ptr = nullptr;
 
       auto alice_send_to_session = [&alice_orch_ptr](const std::vector<std::byte> &bytes) {
         if (alice_orch_ptr) { alice_orch_ptr->handle_bytes_from_transport(bytes); }
@@ -81,8 +80,8 @@ auto main() -> int
         if (bob_orch_ptr) { bob_orch_ptr->handle_bytes_from_transport(bytes); }
       };
 
-      radix_relay::nostr::Transport alice_transport(io_context, alice_send_to_session);
-      radix_relay::nostr::Transport bob_transport(io_context, bob_send_to_session);
+      radix_relay::nostr::transport alice_transport(&io_context, alice_send_to_session);
+      radix_relay::nostr::transport bob_transport(&io_context, bob_send_to_session);
 
       std::cout << "Connecting to Nostr relay...\n";
       try {
@@ -103,7 +102,7 @@ auto main() -> int
       };
 
       auto alice_send_event_to_main = [&main_strand, &alice_events, &alice_peer_rdx](
-                                        radix_relay::events::TransportEventVariant evt) {
+                                        radix_relay::events::transport_event_variant_t evt) {
         boost::asio::post(main_strand, [&alice_events, &alice_peer_rdx, evt = std::move(evt)]() {
           alice_events.push_back(evt);
 
@@ -148,7 +147,7 @@ auto main() -> int
       };
 
       auto bob_send_event_to_main = [&main_strand, &bob_events, &bob_peer_rdx](
-                                      radix_relay::events::TransportEventVariant evt) {
+                                      radix_relay::events::transport_event_variant_t evt) {
         boost::asio::post(main_strand, [&bob_events, &bob_peer_rdx, evt = std::move(evt)]() {
           bob_events.push_back(evt);
 
@@ -186,25 +185,25 @@ auto main() -> int
         });
       };
 
-      radix_relay::SessionOrchestrator alice_orchestrator(alice_bridge,
-        alice_tracker,
-        main_strand,
-        alice_session_strand,
-        alice_transport_strand,
-        alice_send_bytes_to_transport,
-        alice_send_event_to_main);
+      auto alice_orchestrator =
+        std::make_shared<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>(alice_bridge,
+          alice_tracker,
+          radix_relay::strands{
+            .main = &main_strand, .session = &alice_session_strand, .transport = &alice_transport_strand },
+          alice_send_bytes_to_transport,
+          alice_send_event_to_main);
 
-      radix_relay::SessionOrchestrator bob_orchestrator(bob_bridge,
-        bob_tracker,
-        main_strand,
-        bob_session_strand,
-        bob_transport_strand,
-        bob_send_bytes_to_transport,
-        bob_send_event_to_main);
+      auto bob_orchestrator =
+        std::make_shared<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>(bob_bridge,
+          bob_tracker,
+          radix_relay::strands{
+            .main = &main_strand, .session = &bob_session_strand, .transport = &bob_transport_strand },
+          bob_send_bytes_to_transport,
+          bob_send_event_to_main);
 
       // Wire up pointers for circular dependency
-      alice_orch_ptr = &alice_orchestrator;
-      bob_orch_ptr = &bob_orchestrator;
+      alice_orch_ptr = alice_orchestrator;
+      bob_orch_ptr = bob_orchestrator;
 
       std::thread io_thread([&io_context]() {
         spdlog::debug("io_context thread started");
@@ -217,14 +216,14 @@ auto main() -> int
         R"(["REQ","alice_bundles",{"kinds":[30078],"#d":["radix_prekey_bundle_v1"]}])";
       const std::string bob_bundle_sub = R"(["REQ","bob_bundles",{"kinds":[30078],"#d":["radix_prekey_bundle_v1"]}])";
 
-      alice_orchestrator.handle_command(radix_relay::events::subscribe{ .subscription_json = alice_bundle_sub });
-      bob_orchestrator.handle_command(radix_relay::events::subscribe{ .subscription_json = bob_bundle_sub });
+      alice_orchestrator->handle_command(radix_relay::events::subscribe{ .subscription_json = alice_bundle_sub });
+      bob_orchestrator->handle_command(radix_relay::events::subscribe{ .subscription_json = bob_bundle_sub });
 
       std::this_thread::sleep_for(subscription_wait_time);
 
       std::cout << "\n=== Phase 2: Publish identity bundles ===\n";
-      alice_orchestrator.handle_command(radix_relay::events::publish_identity{});
-      bob_orchestrator.handle_command(radix_relay::events::publish_identity{});
+      alice_orchestrator->handle_command(radix_relay::events::publish_identity{});
+      bob_orchestrator->handle_command(radix_relay::events::publish_identity{});
 
       spdlog::info("Waiting for bundles to be received and sessions established...");
       std::this_thread::sleep_for(bundle_wait_time);
@@ -233,29 +232,29 @@ auto main() -> int
       const auto alice_msg_sub = radix_relay::create_subscription_for_self(*alice_bridge, "alice_msgs");
       const auto bob_msg_sub = radix_relay::create_subscription_for_self(*bob_bridge, "bob_msgs");
 
-      alice_orchestrator.handle_command(
+      alice_orchestrator->handle_command(
         radix_relay::events::subscribe{ .subscription_json = std::string(alice_msg_sub) });
-      bob_orchestrator.handle_command(radix_relay::events::subscribe{ .subscription_json = std::string(bob_msg_sub) });
+      bob_orchestrator->handle_command(radix_relay::events::subscribe{ .subscription_json = std::string(bob_msg_sub) });
 
       spdlog::info("Waiting for message subscriptions to establish...");
       std::this_thread::sleep_for(subscription_wait_time);
 
       if (!alice_peer_rdx.empty() && !bob_peer_rdx.empty()) {
         spdlog::info("[Bob] Assigning contact alias 'alice' to RDX: {}", bob_peer_rdx);
-        bob_orchestrator.handle_command(radix_relay::events::trust{ .peer = bob_peer_rdx, .alias = "alice" });
+        bob_orchestrator->handle_command(radix_relay::events::trust{ .peer = bob_peer_rdx, .alias = "alice" });
 
         std::cout << "\n=== Phase 4: Exchange encrypted messages ===\n";
 
         const std::string alice_message = "Hello Bob! This is Alice sending you an encrypted message!";
         spdlog::info("[Alice] Sending message to {}", alice_peer_rdx);
-        alice_orchestrator.handle_command(
+        alice_orchestrator->handle_command(
           radix_relay::events::send{ .peer = alice_peer_rdx, .message = alice_message });
 
         std::this_thread::sleep_for(message_wait_time);
 
         const std::string bob_message = "Hi Alice! I received your message loud and clear!";
         spdlog::info("[Bob] Sending reply to 'alice' (was: {})", bob_peer_rdx);
-        bob_orchestrator.handle_command(radix_relay::events::send{ .peer = "alice", .message = bob_message });
+        bob_orchestrator->handle_command(radix_relay::events::send{ .peer = "alice", .message = bob_message });
 
         std::this_thread::sleep_for(message_wait_time);
 

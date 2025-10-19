@@ -11,9 +11,9 @@
 
 namespace radix_relay {
 
-struct CommandHandler
+struct command_handler
 {
-  explicit CommandHandler(rust::Box<SignalBridge> bridge) : bridge_(std::move(bridge)) {}
+  explicit command_handler(rust::Box<SignalBridge> bridge) : bridge_(std::move(bridge)) {}
 
   template<events::Command T> auto handle(const T &command) const -> void { handle_impl(command); }
 
@@ -136,11 +136,10 @@ private:
     }
   }
 
-private:
   mutable rust::Box<SignalBridge> bridge_;
   bool initialized_ = true;
 };
 
-static_assert(concepts::CommandHandler<CommandHandler>);
+static_assert(concepts::command_handler<command_handler>);
 
 }// namespace radix_relay

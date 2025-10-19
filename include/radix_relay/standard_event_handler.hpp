@@ -6,8 +6,8 @@
 
 namespace radix_relay {
 
-using StandardEventHandler = EventHandler<CommandHandler>;
+using standard_event_handler_t = event_handler<command_handler>;
 
-static_assert(concepts::EventHandler<StandardEventHandler>);
+static_assert(concepts::event_handler<standard_event_handler_t>);
 
 }// namespace radix_relay

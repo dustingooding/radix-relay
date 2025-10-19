@@ -41,6 +41,16 @@ function(setup_rust_workspace)
         FILES lib.rs
     )
 
+    # Mark cxxbridge headers as system to suppress warnings
+    # Note: We keep INTERFACE_INCLUDE_DIRECTORIES and add INTERFACE_SYSTEM_INCLUDE_DIRECTORIES
+    # Both are needed - regular includes for targets to find headers, system to suppress warnings
+    get_target_property(SIGNAL_BRIDGE_INCLUDES signal_bridge_cxx INTERFACE_INCLUDE_DIRECTORIES)
+    if(SIGNAL_BRIDGE_INCLUDES)
+        set_property(TARGET signal_bridge_cxx APPEND PROPERTY
+            INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${SIGNAL_BRIDGE_INCLUDES}"
+        )
+    endif()
+
     if(MSVC)
         if(CMAKE_BUILD_TYPE STREQUAL "Debug")
             corrosion_set_env_vars(signal_bridge

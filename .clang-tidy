@@ -31,3 +31,29 @@ CheckOptions:
     value: 'x|y|z'
   - key: readability-identifier-length.IgnoredParameterNames
     value: 'x|y|z'
+  - key: readability-identifier-naming.ClassCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.StructCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.EnumCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.EnumConstantCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.FunctionCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.MethodCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.NamespaceCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.ScopedEnumCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.ScopedEnumConstantCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.TypeAliasCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.TypedefCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.TypeAliasSuffix
+    value: '_t'
+  - key: readability-identifier-naming.TypedefSuffix
+    value: '_t'

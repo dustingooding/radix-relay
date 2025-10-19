@@ -17,7 +17,7 @@ TEST_CASE("protocol::event_data can be parsed from JSON", "[nostr][parse]")
   SECTION("parse valid Nostr event")
   {
     const auto test_timestamp = 1234567890U;
-    const auto radix_kind = 40001U;
+    const auto radix_kind = radix_relay::nostr::protocol::kind::encrypted_message;
     const std::string json_event = R"({
       "id": "a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890",
       "pubkey": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
@@ -154,7 +154,7 @@ TEST_CASE("protocol::event_data can be serialized to JSON", "[nostr][serialize]"
   SECTION("serialize complete event")
   {
     const auto test_timestamp = 1234567890U;
-    const auto radix_kind = 40001U;
+    const auto radix_kind = radix_relay::nostr::protocol::kind::encrypted_message;
     const radix_relay::nostr::protocol::event_data event{ .id = "test_id",
       .pubkey = "test_pubkey",
       .created_at = test_timestamp,
@@ -185,7 +185,7 @@ TEST_CASE("protocol::event_data can be serialized to JSON", "[nostr][serialize]"
     const radix_relay::nostr::protocol::event_data event{ .id = "test_id",
       .pubkey = "test_pubkey",
       .created_at = test_timestamp,
-      .kind = 1,
+      .kind = radix_relay::nostr::protocol::kind::profile_metadata,
       .tags = {},
       .content = "test content",
       .sig = "test_signature" };
@@ -206,7 +206,7 @@ TEST_CASE("protocol::event_data round-trip serialization", "[nostr][roundtrip]")
   SECTION("complex event with multiple tags")
   {
     const auto test_timestamp = 1234567890U;
-    const auto radix_kind = 40001U;
+    const auto radix_kind = radix_relay::nostr::protocol::kind::encrypted_message;
     const radix_relay::nostr::protocol::event_data original{
       .id = "a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890",
       .pubkey = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
@@ -251,7 +251,7 @@ TEST_CASE("protocol::event_data factory methods create correct message types", "
 
     CHECK(event.pubkey == sender_pubkey);
     CHECK(event.created_at == timestamp);
-    CHECK(event.kind == static_cast<std::uint32_t>(radix_relay::nostr::protocol::kind::identity_announcement));
+    CHECK(event.kind == radix_relay::nostr::protocol::kind::identity_announcement);
     CHECK(event.content == "radix_relay_node_v1");
     CHECK(event.tags.size() == 3);
     CHECK(event.tags[0] == std::vector<std::string>{ "signal_fingerprint", signal_fingerprint });
@@ -272,7 +272,7 @@ TEST_CASE("protocol::event_data factory methods create correct message types", "
 
     CHECK(event.pubkey.empty());// Not provided to create_encrypted_message
     CHECK(event.created_at == timestamp);
-    CHECK(event.kind == static_cast<std::uint32_t>(radix_relay::nostr::protocol::kind::encrypted_message));
+    CHECK(event.kind == radix_relay::nostr::protocol::kind::encrypted_message);
     CHECK(event.content == encrypted_payload);
     CHECK(event.tags.size() == 3);
     CHECK(event.tags[0] == std::vector<std::string>{ "p", recipient_pubkey });
@@ -293,7 +293,7 @@ TEST_CASE("protocol::event_data factory methods create correct message types", "
 
     CHECK(event.pubkey == sender_pubkey);
     CHECK(event.created_at == timestamp);
-    CHECK(event.kind == static_cast<std::uint32_t>(radix_relay::nostr::protocol::kind::session_request));
+    CHECK(event.kind == radix_relay::nostr::protocol::kind::session_request);
     CHECK(event.content == prekey_bundle);
     CHECK(event.tags.size() == 2);
     CHECK(event.tags[0] == std::vector<std::string>{ "p", recipient_pubkey });
@@ -312,7 +312,7 @@ TEST_CASE("protocol::event_data helper methods work correctly", "[nostr][helpers
     const radix_relay::nostr::protocol::event_data standard_event{ .id = "",
       .pubkey = pubkey,
       .created_at = timestamp,
-      .kind = static_cast<std::uint32_t>(radix_relay::nostr::protocol::kind::text_note),
+      .kind = radix_relay::nostr::protocol::kind::text_note,
       .tags = {},
       .content = "hello world",
       .sig = "" };
@@ -334,7 +334,7 @@ TEST_CASE("protocol::event_data helper methods work correctly", "[nostr][helpers
     REQUIRE(kind.has_value());
     if (kind.has_value()) { CHECK(kind.value() == radix_relay::nostr::protocol::kind::identity_announcement); }
 
-    const auto unknown_kind = 99999U;
+    const auto unknown_kind = static_cast<radix_relay::nostr::protocol::kind>(65534);
     const radix_relay::nostr::protocol::event_data unknown_event{ .id = "",
       .pubkey = pubkey,
       .created_at = timestamp,

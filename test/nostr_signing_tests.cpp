@@ -52,7 +52,7 @@ TEST_CASE("Nostr Event Signing via Signal Bridge", "[nostr][signing]")
 
         CHECK(evt.content == "encrypted_test_content");
         CHECK(evt.created_at == 1234567890);
-        CHECK(evt.kind == 40001);
+        CHECK(evt.kind == radix_relay::nostr::protocol::kind::encrypted_message);
       }
     }
 

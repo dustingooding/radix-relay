@@ -114,7 +114,7 @@ concept TransportEvent =
   std::same_as<T, message_received> || std::same_as<T, session_established> || std::same_as<T, message_sent>
   || std::same_as<T, bundle_published> || std::same_as<T, subscription_established>;
 
-using TransportEventVariant =
+using transport_event_variant_t =
   std::variant<message_received, session_established, message_sent, bundle_published, subscription_established>;
 
 template<typename T>

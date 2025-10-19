@@ -11,59 +11,58 @@
 
 namespace {
 
-struct OrchestratorTestFixture
+struct orchestrator_test_fixture
 {
   boost::asio::io_context io_context;
   boost::asio::io_context::strand main_strand{ io_context };
   boost::asio::io_context::strand session_strand{ io_context };
   boost::asio::io_context::strand transport_strand{ io_context };
-  radix_relay::nostr::RequestTracker tracker{ io_context };
+  std::shared_ptr<radix_relay::nostr::request_tracker> tracker{ std::make_shared<radix_relay::nostr::request_tracker>(
+    &io_context) };
   std::vector<std::byte> sent_bytes;
-  std::vector<radix_relay::events::TransportEventVariant> main_events;
+  std::vector<radix_relay::events::transport_event_variant_t> main_events;
 
   auto make_send_bytes_to_transport() -> std::function<void(std::vector<std::byte>)>
   {
     return [this](std::vector<std::byte> bytes) { sent_bytes = std::move(bytes); };
   }
 
-  auto make_send_event_to_main() -> std::function<void(radix_relay::events::TransportEventVariant)>
+  auto make_send_event_to_main() -> std::function<void(radix_relay::events::transport_event_variant_t)>
   {
-    return [this](radix_relay::events::TransportEventVariant evt) { main_events.push_back(std::move(evt)); };
+    return [this](radix_relay::events::transport_event_variant_t evt) { main_events.push_back(std::move(evt)); };
   }
 };
 
-struct SingleBridgeFixture : OrchestratorTestFixture
+struct single_bridge_fixture : orchestrator_test_fixture
 {
   std::string db_path;
   std::optional<rust::Box<radix_relay::SignalBridge>> bridge;
 
-  explicit SingleBridgeFixture(std::string path) : db_path(std::move(path))
+  explicit single_bridge_fixture(std::string path) : db_path(std::move(path))
   {
     std::filesystem::remove(db_path);
     bridge = radix_relay::new_signal_bridge(db_path.c_str());
   }
 
-  ~SingleBridgeFixture() noexcept
+  ~single_bridge_fixture() noexcept
   {
     std::error_code error_code;
     std::filesystem::remove(db_path, error_code);
   }
 
-  SingleBridgeFixture(const SingleBridgeFixture &) = delete;
-  auto operator=(const SingleBridgeFixture &) -> SingleBridgeFixture & = delete;
-  SingleBridgeFixture(SingleBridgeFixture &&) = delete;
-  auto operator=(SingleBridgeFixture &&) -> SingleBridgeFixture & = delete;
+  single_bridge_fixture(const single_bridge_fixture &) = delete;
+  auto operator=(const single_bridge_fixture &) -> single_bridge_fixture & = delete;
+  single_bridge_fixture(single_bridge_fixture &&) = delete;
+  auto operator=(single_bridge_fixture &&) -> single_bridge_fixture & = delete;
 
-  auto make_orchestrator() -> radix_relay::SessionOrchestrator<radix_relay::nostr::RequestTracker>
+  auto make_orchestrator() -> std::shared_ptr<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>
   {
     if (!bridge.has_value()) { throw std::runtime_error("Bridge not initialized"); }
-    return { bridge.value(),
+    return std::make_shared<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>(bridge.value(),
       tracker,
-      main_strand,
-      session_strand,
-      transport_strand,
+      radix_relay::strands{ .main = &main_strand, .session = &session_strand, .transport = &transport_strand },
       make_send_bytes_to_transport(),
-      make_send_event_to_main() };
+      make_send_event_to_main());
   }
 };
 
@@ -97,7 +96,7 @@ auto make_event_message(std::uint32_t kind, const std::string &content = "test_c
   return nlohmann::json::array({ "EVENT", "sub_id", event_json }).dump();
 }
 
-struct TwoBridgeFixture : OrchestratorTestFixture
+struct two_bridge_fixture : orchestrator_test_fixture
 {
   std::string alice_path;
   std::string bob_path;
@@ -106,7 +105,7 @@ struct TwoBridgeFixture : OrchestratorTestFixture
   rust::String bob_rdx;
   std::optional<rust::String> alice_rdx;
 
-  TwoBridgeFixture(std::string alice_db, std::string bob_db, bool bidirectional = false)
+  two_bridge_fixture(std::string alice_db, std::string bob_db, bool bidirectional = false)
     : alice_path(std::move(alice_db)), bob_path(std::move(bob_db))
   {
     std::filesystem::remove(alice_path);
@@ -132,40 +131,47 @@ struct TwoBridgeFixture : OrchestratorTestFixture
     }
   }
 
-  ~TwoBridgeFixture() noexcept
+  ~two_bridge_fixture() noexcept
   {
     std::error_code error_code;
     std::filesystem::remove(alice_path, error_code);
     std::filesystem::remove(bob_path, error_code);
   }
 
-  TwoBridgeFixture(const TwoBridgeFixture &) = delete;
-  auto operator=(const TwoBridgeFixture &) -> TwoBridgeFixture & = delete;
-  TwoBridgeFixture(TwoBridgeFixture &&) = delete;
-  auto operator=(TwoBridgeFixture &&) -> TwoBridgeFixture & = delete;
+  two_bridge_fixture(const two_bridge_fixture &) = delete;
+  auto operator=(const two_bridge_fixture &) -> two_bridge_fixture & = delete;
+  two_bridge_fixture(two_bridge_fixture &&) = delete;
+  auto operator=(two_bridge_fixture &&) -> two_bridge_fixture & = delete;
 
-  auto make_alice_orchestrator() -> radix_relay::SessionOrchestrator<radix_relay::nostr::RequestTracker>
+  auto make_alice_orchestrator()
+    -> std::shared_ptr<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>
   {
     if (!alice_bridge.has_value()) { throw std::runtime_error("Alice bridge not initialized"); }
-    return { alice_bridge.value(),
+    return std::make_shared<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>(
+      alice_bridge.value(),
       tracker,
-      main_strand,
-      session_strand,
-      transport_strand,
+      radix_relay::strands{
+        .main = &main_strand,
+        .session = &session_strand,
+        .transport = &transport_strand,
+      },
       make_send_bytes_to_transport(),
-      make_send_event_to_main() };
+      make_send_event_to_main());
   }
 
-  auto make_bob_orchestrator() -> radix_relay::SessionOrchestrator<radix_relay::nostr::RequestTracker>
+  auto make_bob_orchestrator()
+    -> std::shared_ptr<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>
   {
     if (!bob_bridge.has_value()) { throw std::runtime_error("Bob bridge not initialized"); }
-    return { bob_bridge.value(),
+    return std::make_shared<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>(bob_bridge.value(),
       tracker,
-      main_strand,
-      session_strand,
-      transport_strand,
+      radix_relay::strands{
+        .main = &main_strand,
+        .session = &session_strand,
+        .transport = &transport_strand,
+      },
       make_send_bytes_to_transport(),
-      make_send_event_to_main() };
+      make_send_event_to_main());
   }
 
   auto get_alice_bridge() -> radix_relay::SignalBridge &
@@ -189,13 +195,13 @@ struct TwoBridgeFixture : OrchestratorTestFixture
 
 }// namespace
 
-TEST_CASE("SessionOrchestrator handles send command", "[session_orchestrator]")
+TEST_CASE("session_orchestrator handles send command", "[session_orchestrator]")
 {
-  TwoBridgeFixture fixture("/tmp/session_orch_send_alice.db", "/tmp/session_orch_send_bob.db");
+  two_bridge_fixture fixture("/tmp/session_orch_send_alice.db", "/tmp/session_orch_send_bob.db");
   auto orchestrator = fixture.make_alice_orchestrator();
 
   const std::string plaintext = "Hello Bob!";
-  orchestrator.handle_command(radix_relay::events::send{ .peer = std::string(fixture.bob_rdx), .message = plaintext });
+  orchestrator->handle_command(radix_relay::events::send{ .peer = std::string(fixture.bob_rdx), .message = plaintext });
 
   fixture.io_context.run();
 
@@ -209,12 +215,12 @@ TEST_CASE("SessionOrchestrator handles send command", "[session_orchestrator]")
   CHECK_FALSE(parsed[1]["content"].get<std::string>().empty());
 }
 
-TEST_CASE("SessionOrchestrator handles publish_identity command", "[session_orchestrator]")
+TEST_CASE("session_orchestrator handles publish_identity command", "[session_orchestrator]")
 {
-  SingleBridgeFixture fixture("/tmp/session_orch_publish_alice.db");
+  single_bridge_fixture fixture("/tmp/session_orch_publish_alice.db");
   auto orchestrator = fixture.make_orchestrator();
 
-  orchestrator.handle_command(radix_relay::events::publish_identity{});
+  orchestrator->handle_command(radix_relay::events::publish_identity{});
 
   fixture.io_context.run();
 
@@ -227,13 +233,13 @@ TEST_CASE("SessionOrchestrator handles publish_identity command", "[session_orch
   CHECK(parsed[1]["kind"] == 30078);
 }
 
-TEST_CASE("SessionOrchestrator handles trust command", "[session_orchestrator]")
+TEST_CASE("session_orchestrator handles trust command", "[session_orchestrator]")
 {
-  TwoBridgeFixture fixture("/tmp/session_orch_trust_alice.db", "/tmp/session_orch_trust_bob.db");
+  two_bridge_fixture fixture("/tmp/session_orch_trust_alice.db", "/tmp/session_orch_trust_bob.db");
   auto orchestrator = fixture.make_alice_orchestrator();
 
   const std::string alias = "bob_alias";
-  orchestrator.handle_command(radix_relay::events::trust{ .peer = std::string(fixture.bob_rdx), .alias = alias });
+  orchestrator->handle_command(radix_relay::events::trust{ .peer = std::string(fixture.bob_rdx), .alias = alias });
 
   fixture.io_context.run();
 
@@ -244,9 +250,9 @@ TEST_CASE("SessionOrchestrator handles trust command", "[session_orchestrator]")
   CHECK(std::string(contact.user_alias) == alias);
 }
 
-TEST_CASE("SessionOrchestrator handles incoming encrypted_message bytes", "[session_orchestrator]")
+TEST_CASE("session_orchestrator handles incoming encrypted_message bytes", "[session_orchestrator]")
 {
-  TwoBridgeFixture fixture("/tmp/session_orch_incoming_alice.db", "/tmp/session_orch_incoming_bob.db", true);
+  two_bridge_fixture fixture("/tmp/session_orch_incoming_alice.db", "/tmp/session_orch_incoming_bob.db", true);
   auto orchestrator = fixture.make_bob_orchestrator();
 
   const std::string plaintext = "Hello Bob!";
@@ -270,7 +276,7 @@ TEST_CASE("SessionOrchestrator handles incoming encrypted_message bytes", "[sess
 
   const std::string nostr_message_json = nlohmann::json::array({ "EVENT", "sub_id", event_json }).dump();
 
-  orchestrator.handle_bytes_from_transport(string_to_bytes(nostr_message_json));
+  orchestrator->handle_bytes_from_transport(string_to_bytes(nostr_message_json));
 
   fixture.io_context.run();
 
@@ -283,9 +289,9 @@ TEST_CASE("SessionOrchestrator handles incoming encrypted_message bytes", "[sess
   CHECK(msg.timestamp == test_timestamp);
 }
 
-TEST_CASE("SessionOrchestrator handles incoming bundle_announcement bytes", "[session_orchestrator]")
+TEST_CASE("session_orchestrator handles incoming bundle_announcement bytes", "[session_orchestrator]")
 {
-  TwoBridgeFixture fixture("/tmp/session_orch_bundle_alice.db", "/tmp/session_orch_bundle_bob.db");
+  two_bridge_fixture fixture("/tmp/session_orch_bundle_alice.db", "/tmp/session_orch_bundle_bob.db");
   auto orchestrator = fixture.make_bob_orchestrator();
 
   auto alice_bundle_json = radix_relay::generate_prekey_bundle_announcement(fixture.get_alice_bridge(), "test-0.1.0");
@@ -304,7 +310,7 @@ TEST_CASE("SessionOrchestrator handles incoming bundle_announcement bytes", "[se
 
   const std::string nostr_message_json = nlohmann::json::array({ "EVENT", "sub_id", bundle_event_json }).dump();
 
-  orchestrator.handle_bytes_from_transport(string_to_bytes(nostr_message_json));
+  orchestrator->handle_bytes_from_transport(string_to_bytes(nostr_message_json));
 
   fixture.io_context.run();
 
@@ -316,117 +322,117 @@ TEST_CASE("SessionOrchestrator handles incoming bundle_announcement bytes", "[se
   CHECK(session_evt.peer_rdx.length() == 68);
 }
 
-TEST_CASE("SessionOrchestrator handles incoming OK message", "[session_orchestrator]")
+TEST_CASE("session_orchestrator handles incoming OK message", "[session_orchestrator]")
 {
-  SingleBridgeFixture fixture("/tmp/session_orch_ok.db");
+  single_bridge_fixture fixture("/tmp/session_orch_ok.db");
   auto orchestrator = fixture.make_orchestrator();
 
   const std::string ok_message = R"(["OK","test_event_id",true,""])";
-  orchestrator.handle_bytes_from_transport(string_to_bytes(ok_message));
+  orchestrator->handle_bytes_from_transport(string_to_bytes(ok_message));
 
   fixture.io_context.run();
 
   CHECK(fixture.main_events.empty());
 }
 
-TEST_CASE("SessionOrchestrator handles incoming EOSE message", "[session_orchestrator]")
+TEST_CASE("session_orchestrator handles incoming EOSE message", "[session_orchestrator]")
 {
-  SingleBridgeFixture fixture("/tmp/session_orch_eose.db");
+  single_bridge_fixture fixture("/tmp/session_orch_eose.db");
   auto orchestrator = fixture.make_orchestrator();
 
   const std::string eose_message = R"(["EOSE","test_subscription_id"])";
-  orchestrator.handle_bytes_from_transport(string_to_bytes(eose_message));
+  orchestrator->handle_bytes_from_transport(string_to_bytes(eose_message));
 
   fixture.io_context.run();
 
   CHECK(fixture.main_events.empty());
 }
 
-TEST_CASE("SessionOrchestrator handles incoming identity_announcement", "[session_orchestrator]")
+TEST_CASE("session_orchestrator handles incoming identity_announcement", "[session_orchestrator]")
 {
-  SingleBridgeFixture fixture("/tmp/session_orch_identity.db");
+  single_bridge_fixture fixture("/tmp/session_orch_identity.db");
   auto orchestrator = fixture.make_orchestrator();
 
   constexpr std::uint32_t identity_announcement_kind = 40002;
-  orchestrator.handle_bytes_from_transport(string_to_bytes(make_event_message(identity_announcement_kind)));
+  orchestrator->handle_bytes_from_transport(string_to_bytes(make_event_message(identity_announcement_kind)));
 
   fixture.io_context.run();
 
   CHECK(fixture.main_events.empty());
 }
 
-TEST_CASE("SessionOrchestrator handles incoming session_request", "[session_orchestrator]")
+TEST_CASE("session_orchestrator handles incoming session_request", "[session_orchestrator]")
 {
-  SingleBridgeFixture fixture("/tmp/session_orch_session_req.db");
+  single_bridge_fixture fixture("/tmp/session_orch_session_req.db");
   auto orchestrator = fixture.make_orchestrator();
 
   constexpr std::uint32_t session_request_kind = 40003;
-  orchestrator.handle_bytes_from_transport(string_to_bytes(make_event_message(session_request_kind)));
+  orchestrator->handle_bytes_from_transport(string_to_bytes(make_event_message(session_request_kind)));
 
   fixture.io_context.run();
 
   CHECK(fixture.main_events.empty());
 }
 
-TEST_CASE("SessionOrchestrator handles incoming node_status", "[session_orchestrator]")
+TEST_CASE("session_orchestrator handles incoming node_status", "[session_orchestrator]")
 {
-  SingleBridgeFixture fixture("/tmp/session_orch_node_status.db");
+  single_bridge_fixture fixture("/tmp/session_orch_node_status.db");
   auto orchestrator = fixture.make_orchestrator();
 
   constexpr std::uint32_t node_status_kind = 40004;
-  orchestrator.handle_bytes_from_transport(string_to_bytes(make_event_message(node_status_kind)));
+  orchestrator->handle_bytes_from_transport(string_to_bytes(make_event_message(node_status_kind)));
 
   fixture.io_context.run();
 
   CHECK(fixture.main_events.empty());
 }
 
-TEST_CASE("SessionOrchestrator handles incoming unknown_message", "[session_orchestrator]")
+TEST_CASE("session_orchestrator handles incoming unknown_message", "[session_orchestrator]")
 {
-  SingleBridgeFixture fixture("/tmp/session_orch_unknown_msg.db");
+  single_bridge_fixture fixture("/tmp/session_orch_unknown_msg.db");
   auto orchestrator = fixture.make_orchestrator();
 
   constexpr std::uint32_t unknown_kind = 99999;
-  orchestrator.handle_bytes_from_transport(string_to_bytes(make_event_message(unknown_kind)));
+  orchestrator->handle_bytes_from_transport(string_to_bytes(make_event_message(unknown_kind)));
 
   fixture.io_context.run();
 
   CHECK(fixture.main_events.empty());
 }
 
-TEST_CASE("SessionOrchestrator handles incoming unknown_protocol", "[session_orchestrator]")
+TEST_CASE("session_orchestrator handles incoming unknown_protocol", "[session_orchestrator]")
 {
-  SingleBridgeFixture fixture("/tmp/session_orch_unknown_proto.db");
+  single_bridge_fixture fixture("/tmp/session_orch_unknown_proto.db");
   auto orchestrator = fixture.make_orchestrator();
 
   const std::string unknown_protocol_message = R"(["UNKNOWN","some","stuff"])";
-  orchestrator.handle_bytes_from_transport(string_to_bytes(unknown_protocol_message));
+  orchestrator->handle_bytes_from_transport(string_to_bytes(unknown_protocol_message));
 
   fixture.io_context.run();
 
   CHECK(fixture.main_events.empty());
 }
 
-TEST_CASE("SessionOrchestrator handles malformed JSON", "[session_orchestrator]")
+TEST_CASE("session_orchestrator handles malformed JSON", "[session_orchestrator]")
 {
-  SingleBridgeFixture fixture("/tmp/session_orch_malformed.db");
+  single_bridge_fixture fixture("/tmp/session_orch_malformed.db");
   auto orchestrator = fixture.make_orchestrator();
 
   const std::string malformed_json = "not valid json at all";
-  orchestrator.handle_bytes_from_transport(string_to_bytes(malformed_json));
+  orchestrator->handle_bytes_from_transport(string_to_bytes(malformed_json));
 
   fixture.io_context.run();
 
   CHECK(fixture.main_events.empty());
 }
 
-TEST_CASE("SessionOrchestrator async tracking for send command - success", "[session_orchestrator][async_tracking]")
+TEST_CASE("session_orchestrator async tracking for send command - success", "[session_orchestrator][async_tracking]")
 {
-  TwoBridgeFixture fixture("/tmp/session_orch_send_ok_alice.db", "/tmp/session_orch_send_ok_bob.db");
+  two_bridge_fixture fixture("/tmp/session_orch_send_ok_alice.db", "/tmp/session_orch_send_ok_bob.db");
   auto orchestrator = fixture.make_alice_orchestrator();
 
   const std::string plaintext = "Hello Bob!";
-  orchestrator.handle_command(radix_relay::events::send{ .peer = std::string(fixture.bob_rdx), .message = plaintext });
+  orchestrator->handle_command(radix_relay::events::send{ .peer = std::string(fixture.bob_rdx), .message = plaintext });
 
   fixture.io_context.poll();
 
@@ -435,7 +441,7 @@ TEST_CASE("SessionOrchestrator async tracking for send command - success", "[ses
   const std::string event_id = parsed[1]["id"].get<std::string>();
 
   const std::string ok_message = R"(["OK",")" + event_id + R"(",true,""])";
-  orchestrator.handle_bytes_from_transport(string_to_bytes(ok_message));
+  orchestrator->handle_bytes_from_transport(string_to_bytes(ok_message));
 
   fixture.io_context.run();
 
@@ -447,13 +453,13 @@ TEST_CASE("SessionOrchestrator async tracking for send command - success", "[ses
   CHECK(msg_sent.accepted == true);
 }
 
-TEST_CASE("SessionOrchestrator async tracking for send command - timeout", "[session_orchestrator][async_tracking]")
+TEST_CASE("session_orchestrator async tracking for send command - timeout", "[session_orchestrator][async_tracking]")
 {
-  TwoBridgeFixture fixture("/tmp/session_orch_send_timeout_alice.db", "/tmp/session_orch_send_timeout_bob.db");
+  two_bridge_fixture fixture("/tmp/session_orch_send_timeout_alice.db", "/tmp/session_orch_send_timeout_bob.db");
   auto orchestrator = fixture.make_alice_orchestrator();
 
   const std::string plaintext = "Hello Bob!";
-  orchestrator.handle_command(radix_relay::events::send{ .peer = std::string(fixture.bob_rdx), .message = plaintext });
+  orchestrator->handle_command(radix_relay::events::send{ .peer = std::string(fixture.bob_rdx), .message = plaintext });
 
   fixture.io_context.poll();
   REQUIRE_FALSE(fixture.sent_bytes.empty());
@@ -471,12 +477,13 @@ TEST_CASE("SessionOrchestrator async tracking for send command - timeout", "[ses
   CHECK(msg_sent.accepted == false);
 }
 
-TEST_CASE("SessionOrchestrator async tracking for publish_identity - success", "[session_orchestrator][async_tracking]")
+TEST_CASE("session_orchestrator async tracking for publish_identity - success",
+  "[session_orchestrator][async_tracking]")
 {
-  SingleBridgeFixture fixture("/tmp/session_orch_publish_ok.db");
+  single_bridge_fixture fixture("/tmp/session_orch_publish_ok.db");
   auto orchestrator = fixture.make_orchestrator();
 
-  orchestrator.handle_command(radix_relay::events::publish_identity{});
+  orchestrator->handle_command(radix_relay::events::publish_identity{});
 
   fixture.io_context.poll();
 
@@ -485,7 +492,7 @@ TEST_CASE("SessionOrchestrator async tracking for publish_identity - success", "
   const std::string event_id = parsed[1]["id"].get<std::string>();
 
   const std::string ok_message = R"(["OK",")" + event_id + R"(",true,""])";
-  orchestrator.handle_bytes_from_transport(string_to_bytes(ok_message));
+  orchestrator->handle_bytes_from_transport(string_to_bytes(ok_message));
 
   fixture.io_context.run();
 
@@ -496,12 +503,13 @@ TEST_CASE("SessionOrchestrator async tracking for publish_identity - success", "
   CHECK(bundle.accepted == true);
 }
 
-TEST_CASE("SessionOrchestrator async tracking for publish_identity - timeout", "[session_orchestrator][async_tracking]")
+TEST_CASE("session_orchestrator async tracking for publish_identity - timeout",
+  "[session_orchestrator][async_tracking]")
 {
-  SingleBridgeFixture fixture("/tmp/session_orch_publish_timeout.db");
+  single_bridge_fixture fixture("/tmp/session_orch_publish_timeout.db");
   auto orchestrator = fixture.make_orchestrator();
 
-  orchestrator.handle_command(radix_relay::events::publish_identity{});
+  orchestrator->handle_command(radix_relay::events::publish_identity{});
 
   fixture.io_context.poll();
   REQUIRE_FALSE(fixture.sent_bytes.empty());
@@ -518,14 +526,14 @@ TEST_CASE("SessionOrchestrator async tracking for publish_identity - timeout", "
   CHECK(bundle.accepted == false);
 }
 
-TEST_CASE("SessionOrchestrator async tracking for subscribe command - success",
+TEST_CASE("session_orchestrator async tracking for subscribe command - success",
   "[session_orchestrator][async_tracking]")
 {
-  SingleBridgeFixture fixture("/tmp/session_orch_subscribe_ok.db");
+  single_bridge_fixture fixture("/tmp/session_orch_subscribe_ok.db");
   auto orchestrator = fixture.make_orchestrator();
 
   const std::string subscription_json = R"(["REQ","test_sub_123",{"kinds":[40001]}])";
-  orchestrator.handle_command(radix_relay::events::subscribe{ .subscription_json = subscription_json });
+  orchestrator->handle_command(radix_relay::events::subscribe{ .subscription_json = subscription_json });
 
   fixture.io_context.poll();
 
@@ -534,7 +542,7 @@ TEST_CASE("SessionOrchestrator async tracking for subscribe command - success",
   CHECK(sent_str == subscription_json);
 
   const std::string eose_message = R"(["EOSE","test_sub_123"])";
-  orchestrator.handle_bytes_from_transport(string_to_bytes(eose_message));
+  orchestrator->handle_bytes_from_transport(string_to_bytes(eose_message));
 
   fixture.io_context.run();
 
@@ -544,14 +552,14 @@ TEST_CASE("SessionOrchestrator async tracking for subscribe command - success",
   CHECK(sub.subscription_id == "test_sub_123");
 }
 
-TEST_CASE("SessionOrchestrator async tracking for subscribe command - timeout",
+TEST_CASE("session_orchestrator async tracking for subscribe command - timeout",
   "[session_orchestrator][async_tracking]")
 {
-  SingleBridgeFixture fixture("/tmp/session_orch_subscribe_timeout.db");
+  single_bridge_fixture fixture("/tmp/session_orch_subscribe_timeout.db");
   auto orchestrator = fixture.make_orchestrator();
 
   const std::string subscription_json = R"(["REQ","test_sub_456",{"kinds":[40001]}])";
-  orchestrator.handle_command(radix_relay::events::subscribe{ .subscription_json = subscription_json });
+  orchestrator->handle_command(radix_relay::events::subscribe{ .subscription_json = subscription_json });
 
   fixture.io_context.poll();
   REQUIRE_FALSE(fixture.sent_bytes.empty());

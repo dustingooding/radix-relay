@@ -1,6 +1,5 @@
 #pragma once
 
-#include <concepts>
 #include <functional>
 #include <radix_relay/events/nostr_events.hpp>
 #include <radix_relay/nostr_protocol.hpp>

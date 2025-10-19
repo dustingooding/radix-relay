@@ -245,7 +245,7 @@ cmake --build --preset=unixlike-clang-debug --target rust-fmt
 cmake --build --preset=unixlike-clang-debug --target rust-clippy
 
 # Run all quality checks
-cmake --build --preset=unixlike-clang-debug --target quality-checks
+cmake --build --preset=unixlike-clang-debug --target quality-rust
 ```
 
 **Note**: Rust quality tools (clippy and rustfmt) are automatically installed via `.envrc` when using direnv.

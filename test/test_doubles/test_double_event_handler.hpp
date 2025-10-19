@@ -34,6 +34,6 @@ struct TestDoubleEventHandler
   }
 };
 
-static_assert(radix_relay::concepts::EventHandler<TestDoubleEventHandler>);
+static_assert(radix_relay::concepts::event_handler<TestDoubleEventHandler>);
 
 }// namespace radix_relay_test

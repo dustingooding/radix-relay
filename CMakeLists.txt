@@ -90,6 +90,14 @@ if(BUILD_TESTING)
   add_subdirectory(test)
 endif()
 
+# Header validation targets
+include(cmake/HeaderValidation.cmake)
+if(BUILD_TESTING)
+  add_header_validation_targets(TARGET radix_relay::radix_relay_core)
+endif()
+
+# Code quality targets (clang-tidy, etc.)
+include(cmake/Quality.cmake)
 
 if(radix_relay_BUILD_FUZZ_TESTS)
   message(AUTHOR_WARNING "Building Fuzz Tests, using fuzzing sanitizer https://www.llvm.org/docs/LibFuzzer.html")

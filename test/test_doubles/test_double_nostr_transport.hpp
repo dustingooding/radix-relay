@@ -2,7 +2,6 @@
 
 #include <boost/asio.hpp>
 #include <concepts>
-#include <functional>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -17,7 +16,6 @@ public:
   boost::asio::io_context &io_context_;
   mutable std::vector<std::vector<std::byte>> sent_messages;
   mutable bool is_connected = false;
-  mutable std::function<void(std::span<const std::byte>)> message_callback;
 
   explicit TestDoubleNostrTransport(boost::asio::io_context &io_context) : io_context_(io_context) {}
 
@@ -29,13 +27,8 @@ public:
   {
     sent_messages.emplace_back(message.begin(), message.end());
   }
-
-  auto register_message_callback(std::function<void(std::span<const std::byte>)> callback) const -> void
-  {
-    message_callback = callback;
-  }
 };
 
-static_assert(radix_relay::concepts::Transport<TestDoubleNostrTransport>);
+static_assert(radix_relay::concepts::transport<TestDoubleNostrTransport>);
 
 }// namespace radix_relay_test

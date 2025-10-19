@@ -16,7 +16,9 @@ target_link_system_libraries(
           nlohmann_json::nlohmann_json
           Boost::asio
           OpenSSL::SSL
-          OpenSSL::Crypto)
+          OpenSSL::Crypto
+          CLI11::CLI11
+          spdlog::spdlog)
 
 target_include_directories(radix_relay_core ${WARNING_GUARD} INTERFACE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
                                                                      $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
