@@ -5,21 +5,22 @@
 #include <ctime>
 #include <fmt/format.h>
 #include <iterator>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <radix_relay/concepts/signal_bridge.hpp>
 #include <radix_relay/events/events.hpp>
 #include <radix_relay/events/nostr_events.hpp>
 #include <radix_relay/nostr_protocol.hpp>
-#include <signal_bridge_cxx/lib.h>
 #include <string>
 #include <vector>
 
 namespace radix_relay {
 
-class nostr_message_handler
+template<concepts::signal_bridge Bridge> class nostr_message_handler
 {
 public:
-  explicit nostr_message_handler(SignalBridge *bridge) : bridge_(bridge) {}
+  explicit nostr_message_handler(std::shared_ptr<Bridge> bridge) : bridge_(bridge) {}
 
   // Incoming Nostr events (called by Session on session_strand)
   // Returns optional event to post to main_strand
@@ -39,8 +40,7 @@ public:
       encrypted_bytes.push_back(byte_value);
     }
 
-    auto decrypted_bytes = radix_relay::decrypt_message(
-      *bridge_, sender_rdx.c_str(), rust::Slice<const uint8_t>{ encrypted_bytes.data(), encrypted_bytes.size() });
+    auto decrypted_bytes = bridge_->decrypt_message(sender_rdx, encrypted_bytes);
 
     const std::string decrypted_content(decrypted_bytes.begin(), decrypted_bytes.end());
 
@@ -51,8 +51,8 @@ public:
 
   auto handle(const nostr::events::incoming::bundle_announcement &event) -> std::optional<events::session_established>
   {
-    auto peer_rdx = radix_relay::add_contact_and_establish_session_from_base64(*bridge_, event.content.c_str(), "");
-    return events::session_established{ std::string(peer_rdx) };
+    auto peer_rdx = bridge_->add_contact_and_establish_session_from_base64(event.content, "");
+    return events::session_established{ peer_rdx };
   }
 
   // Command events (called by Session on session_strand)
@@ -60,25 +60,24 @@ public:
   auto handle(const events::send &cmd) -> std::pair<std::string, std::vector<std::byte>>
   {
     std::vector<uint8_t> plaintext_bytes(cmd.message.begin(), cmd.message.end());
-    auto encrypted_bytes = radix_relay::encrypt_message(
-      *bridge_, cmd.peer.c_str(), rust::Slice<const uint8_t>{ plaintext_bytes.data(), plaintext_bytes.size() });
+    auto encrypted_bytes = bridge_->encrypt_message(cmd.peer, plaintext_bytes);
 
     std::string hex_content;
     for (const auto &byte : encrypted_bytes) { hex_content += fmt::format("{:02x}", byte); }
 
-    auto signed_event_json = radix_relay::create_and_sign_encrypted_message(
-      *bridge_, cmd.peer.c_str(), hex_content.c_str(), static_cast<std::uint32_t>(std::time(nullptr)), "0.1.0");
+    auto signed_event_json = bridge_->create_and_sign_encrypted_message(
+      cmd.peer, hex_content, static_cast<std::uint32_t>(std::time(nullptr)), "0.1.0");
 
     auto event_json = nlohmann::json::parse(signed_event_json);
-    const std::string event_id = event_json["id"].get<std::string>();
+    const std::string event_id = event_json["id"].template get<std::string>();
 
     nostr::protocol::event_data event_data;
     event_data.id = event_id;
-    event_data.pubkey = event_json["pubkey"].get<std::string>();
-    event_data.created_at = event_json["created_at"].get<std::uint64_t>();
-    event_data.kind = event_json["kind"].get<nostr::protocol::kind>();
-    event_data.content = event_json["content"].get<std::string>();
-    event_data.sig = event_json["sig"].get<std::string>();
+    event_data.pubkey = event_json["pubkey"].template get<std::string>();
+    event_data.created_at = event_json["created_at"].template get<std::uint64_t>();
+    event_data.kind = event_json["kind"].template get<nostr::protocol::kind>();
+    event_data.content = event_json["content"].template get<std::string>();
+    event_data.sig = event_json["sig"].template get<std::string>();
 
     for (const auto &tag : event_json["tags"]) {
       std::vector<std::string> tag_vec;
@@ -100,18 +99,18 @@ public:
   auto handle(const events::publish_identity & /*command*/) -> std::pair<std::string, std::vector<std::byte>>
   {
     const std::string version_str = "0.1.0";
-    auto bundle_json = radix_relay::generate_prekey_bundle_announcement(*bridge_, version_str.c_str());
+    auto bundle_json = bridge_->generate_prekey_bundle_announcement(version_str);
     auto event_json = nlohmann::json::parse(bundle_json);
 
-    const std::string event_id = event_json["id"].get<std::string>();
+    const std::string event_id = event_json["id"].template get<std::string>();
 
     nostr::protocol::event_data event_data;
     event_data.id = event_id;
-    event_data.pubkey = event_json["pubkey"].get<std::string>();
-    event_data.created_at = event_json["created_at"].get<std::uint64_t>();
-    event_data.kind = event_json["kind"].get<nostr::protocol::kind>();
-    event_data.content = event_json["content"].get<std::string>();
-    event_data.sig = event_json["sig"].get<std::string>();
+    event_data.pubkey = event_json["pubkey"].template get<std::string>();
+    event_data.created_at = event_json["created_at"].template get<std::uint64_t>();
+    event_data.kind = event_json["kind"].template get<nostr::protocol::kind>();
+    event_data.content = event_json["content"].template get<std::string>();
+    event_data.sig = event_json["sig"].template get<std::string>();
 
     for (const auto &tag : event_json["tags"]) {
       std::vector<std::string> tag_vec;
@@ -131,10 +130,7 @@ public:
   }
 
   // Local operation (no networking, just updates DB)
-  auto handle(const events::trust &cmd) -> void
-  {
-    radix_relay::assign_contact_alias(*bridge_, cmd.peer.c_str(), cmd.alias.c_str());
-  }
+  auto handle(const events::trust &cmd) -> void { bridge_->assign_contact_alias(cmd.peer, cmd.alias); }
 
   // Subscription request returns subscription_id + bytes
   static auto handle(const events::subscribe &cmd) -> std::pair<std::string, std::vector<std::byte>>
@@ -160,7 +156,7 @@ public:
   static auto handle(const nostr::events::incoming::node_status & /*event*/) -> void {}
 
 private:
-  SignalBridge *bridge_;
+  std::shared_ptr<Bridge> bridge_;
 };
 
 }// namespace radix_relay

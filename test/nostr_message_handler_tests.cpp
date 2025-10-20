@@ -1,9 +1,10 @@
+#include <bit>
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <nlohmann/json.hpp>
 #include <radix_relay/node_identity.hpp>
 #include <radix_relay/nostr_message_handler.hpp>
-#include <signal_bridge_cxx/lib.h>
+#include <radix_relay/signal_bridge.hpp>
 
 TEST_CASE("nostr_message_handler handles incoming encrypted_message", "[nostr_message_handler]")
 {
@@ -14,26 +15,22 @@ TEST_CASE("nostr_message_handler handles incoming encrypted_message", "[nostr_me
   std::filesystem::remove(bob_path);
 
   {
-    auto alice_bridge = radix_relay::new_signal_bridge(alice_path.c_str());
-    auto bob_bridge = radix_relay::new_signal_bridge(bob_path.c_str());
+    auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
+    auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_path);
 
-    auto alice_bundle_json = radix_relay::generate_prekey_bundle_announcement(*alice_bridge, "test-0.1.0");
+    auto alice_bundle_json = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
     auto alice_event_json = nlohmann::json::parse(alice_bundle_json);
     const std::string alice_bundle_base64 = alice_event_json["content"].get<std::string>();
-    auto alice_rdx =
-      radix_relay::add_contact_and_establish_session_from_base64(*bob_bridge, alice_bundle_base64.c_str(), "alice");
+    auto alice_rdx = bob_bridge->add_contact_and_establish_session_from_base64(alice_bundle_base64, "alice");
 
-    auto bob_bundle_json = radix_relay::generate_prekey_bundle_announcement(*bob_bridge, "test-0.1.0");
+    auto bob_bundle_json = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
     auto bob_event_json = nlohmann::json::parse(bob_bundle_json);
     const std::string bob_bundle_base64 = bob_event_json["content"].get<std::string>();
-    auto bob_rdx =
-      radix_relay::add_contact_and_establish_session_from_base64(*alice_bridge, bob_bundle_base64.c_str(), "bob");
+    auto bob_rdx = alice_bridge->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob");
 
     const std::string plaintext = "Hello Bob!";
-    std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
-    auto encrypted_bytes = radix_relay::encrypt_message(*alice_bridge,
-      std::string(bob_rdx).c_str(),
-      rust::Slice<const uint8_t>{ message_bytes.data(), message_bytes.size() });
+    const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
+    auto encrypted_bytes = alice_bridge->encrypt_message(bob_rdx, message_bytes);
 
     std::string hex_content;
     for (const auto &byte : encrypted_bytes) { hex_content += fmt::format("{:02x}", byte); }
@@ -46,16 +43,16 @@ TEST_CASE("nostr_message_handler handles incoming encrypted_message", "[nostr_me
     event_data.kind = radix_relay::nostr::protocol::kind::encrypted_message;
     event_data.content = hex_content;
     event_data.sig = "signature";
-    event_data.tags.push_back({ "p", std::string(alice_rdx) });
+    event_data.tags.push_back({ "p", alice_rdx });
 
     const radix_relay::nostr::events::incoming::encrypted_message event{ event_data };
 
-    radix_relay::nostr_message_handler handler(&(*bob_bridge));
+    radix_relay::nostr_message_handler<radix_relay::signal::bridge> handler(bob_bridge);
     auto result = handler.handle(event);
 
     REQUIRE(result.has_value());
     if (result.has_value()) {
-      CHECK(result->sender_rdx == std::string(alice_rdx));
+      CHECK(result->sender_rdx == alice_rdx);
       CHECK(result->content == plaintext);
       CHECK(result->timestamp == test_timestamp);
     }
@@ -74,10 +71,10 @@ TEST_CASE("nostr_message_handler handles incoming bundle_announcement", "[nostr_
   std::filesystem::remove(bob_path);
 
   {
-    auto alice_bridge = radix_relay::new_signal_bridge(alice_path.c_str());
-    auto bob_bridge = radix_relay::new_signal_bridge(bob_path.c_str());
+    auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
+    auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_path);
 
-    auto alice_bundle_json = radix_relay::generate_prekey_bundle_announcement(*alice_bridge, "test-0.1.0");
+    auto alice_bundle_json = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
     auto alice_event_json = nlohmann::json::parse(alice_bundle_json);
     const std::string alice_bundle_base64 = alice_event_json["content"].get<std::string>();
 
@@ -92,7 +89,7 @@ TEST_CASE("nostr_message_handler handles incoming bundle_announcement", "[nostr_
 
     const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
 
-    radix_relay::nostr_message_handler handler(&(*bob_bridge));
+    radix_relay::nostr_message_handler<radix_relay::signal::bridge> handler(bob_bridge);
     auto result = handler.handle(event);
 
     REQUIRE(result.has_value());
@@ -115,27 +112,26 @@ TEST_CASE("nostr_message_handler handles send command", "[nostr_message_handler]
   std::filesystem::remove(bob_path);
 
   {
-    auto alice_bridge = radix_relay::new_signal_bridge(alice_path.c_str());
-    auto bob_bridge = radix_relay::new_signal_bridge(bob_path.c_str());
+    auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
+    auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_path);
 
-    auto bob_bundle_json = radix_relay::generate_prekey_bundle_announcement(*bob_bridge, "test-0.1.0");
+    auto bob_bundle_json = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
     auto bob_event_json = nlohmann::json::parse(bob_bundle_json);
     const std::string bob_bundle_base64 = bob_event_json["content"].get<std::string>();
 
-    auto bob_rdx =
-      radix_relay::add_contact_and_establish_session_from_base64(*alice_bridge, bob_bundle_base64.c_str(), "bob");
+    auto bob_rdx = alice_bridge->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob");
 
     const std::string plaintext = "Hello Bob!";
 
-    radix_relay::nostr_message_handler handler(&(*alice_bridge));
-    auto [event_id, bytes] =
-      handler.handle(radix_relay::events::send{ .peer = std::string(bob_rdx), .message = plaintext });
+    radix_relay::nostr_message_handler<radix_relay::signal::bridge> handler(alice_bridge);
+    auto [event_id, bytes] = handler.handle(radix_relay::events::send{ .peer = bob_rdx, .message = plaintext });
 
     CHECK_FALSE(event_id.empty());
 
     std::string json_str;
     json_str.reserve(bytes.size());
-    std::ranges::transform(bytes, std::back_inserter(json_str), [](std::byte byte) { return static_cast<char>(byte); });
+    std::ranges::transform(
+      bytes, std::back_inserter(json_str), [](std::byte byte) { return std::bit_cast<char>(byte); });
     auto parsed = nlohmann::json::parse(json_str);
 
     CHECK(parsed.is_array());
@@ -169,16 +165,17 @@ TEST_CASE("nostr_message_handler handles publish_identity command", "[nostr_mess
   std::filesystem::remove(alice_path);
 
   {
-    auto alice_bridge = radix_relay::new_signal_bridge(alice_path.c_str());
+    auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
 
-    radix_relay::nostr_message_handler handler(&(*alice_bridge));
+    radix_relay::nostr_message_handler<radix_relay::signal::bridge> handler(alice_bridge);
     auto [event_id, bytes] = handler.handle(radix_relay::events::publish_identity{});
 
     CHECK_FALSE(event_id.empty());
 
     std::string json_str;
     json_str.reserve(bytes.size());
-    std::ranges::transform(bytes, std::back_inserter(json_str), [](std::byte byte) { return static_cast<char>(byte); });
+    std::ranges::transform(
+      bytes, std::back_inserter(json_str), [](std::byte byte) { return std::bit_cast<char>(byte); });
     auto parsed = nlohmann::json::parse(json_str);
 
     CHECK(parsed.is_array());
@@ -202,24 +199,23 @@ TEST_CASE("nostr_message_handler handles trust command", "[nostr_message_handler
   std::filesystem::remove(bob_path);
 
   {
-    auto alice_bridge = radix_relay::new_signal_bridge(alice_path.c_str());
-    auto bob_bridge = radix_relay::new_signal_bridge(bob_path.c_str());
+    auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
+    auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_path);
 
-    auto bob_bundle_json = radix_relay::generate_prekey_bundle_announcement(*bob_bridge, "test-0.1.0");
+    auto bob_bundle_json = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
     auto bob_event_json = nlohmann::json::parse(bob_bundle_json);
-    const std::string bob_bundle_base64 = bob_event_json["content"].get<std::string>();
+    const std::string bob_bundle_base64 = bob_event_json["content"].template get<std::string>();
 
-    auto bob_rdx =
-      radix_relay::add_contact_and_establish_session_from_base64(*alice_bridge, bob_bundle_base64.c_str(), "");
+    auto bob_rdx = alice_bridge->add_contact_and_establish_session_from_base64(bob_bundle_base64, "");
 
     const std::string alias = "bob_alias";
 
-    radix_relay::nostr_message_handler handler(&(*alice_bridge));
-    handler.handle(radix_relay::events::trust{ .peer = std::string(bob_rdx), .alias = alias });
+    radix_relay::nostr_message_handler<radix_relay::signal::bridge> handler(alice_bridge);
+    handler.handle(radix_relay::events::trust{ .peer = bob_rdx, .alias = alias });
 
-    auto contact = radix_relay::lookup_contact(*alice_bridge, alias.c_str());
-    CHECK(std::string(contact.rdx_fingerprint) == std::string(bob_rdx));
-    CHECK(std::string(contact.user_alias) == alias);
+    auto contact = alice_bridge->lookup_contact(alias);
+    CHECK(contact.rdx_fingerprint == bob_rdx);
+    CHECK(contact.user_alias == alias);
   }
 
   std::filesystem::remove(alice_path);

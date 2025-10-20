@@ -6,6 +6,7 @@
 #include <radix_relay/node_identity.hpp>
 #include <radix_relay/nostr_request_tracker.hpp>
 #include <radix_relay/session_orchestrator.hpp>
+#include <radix_relay/signal_bridge.hpp>
 #include <ranges>
 #include <signal_bridge_cxx/lib.h>
 
@@ -19,15 +20,15 @@ struct orchestrator_test_fixture
   boost::asio::io_context::strand transport_strand{ io_context };
   std::shared_ptr<radix_relay::nostr::request_tracker> tracker{ std::make_shared<radix_relay::nostr::request_tracker>(
     &io_context) };
-  std::vector<std::byte> sent_bytes;
-  std::vector<radix_relay::events::transport_event_variant_t> main_events;
+  mutable std::vector<std::byte> sent_bytes;
+  mutable std::vector<radix_relay::events::transport_event_variant_t> main_events;
 
-  auto make_send_bytes_to_transport() -> std::function<void(std::vector<std::byte>)>
+  auto make_send_bytes_to_transport() const -> std::function<void(std::vector<std::byte>)>
   {
     return [this](std::vector<std::byte> bytes) { sent_bytes = std::move(bytes); };
   }
 
-  auto make_send_event_to_main() -> std::function<void(radix_relay::events::transport_event_variant_t)>
+  auto make_send_event_to_main() const -> std::function<void(radix_relay::events::transport_event_variant_t)>
   {
     return [this](radix_relay::events::transport_event_variant_t evt) { main_events.push_back(std::move(evt)); };
   }
@@ -36,12 +37,12 @@ struct orchestrator_test_fixture
 struct single_bridge_fixture : orchestrator_test_fixture
 {
   std::string db_path;
-  std::optional<rust::Box<radix_relay::SignalBridge>> bridge;
+  std::shared_ptr<radix_relay::signal::bridge> bridge;
 
   explicit single_bridge_fixture(std::string path) : db_path(std::move(path))
   {
     std::filesystem::remove(db_path);
-    bridge = radix_relay::new_signal_bridge(db_path.c_str());
+    bridge = std::make_shared<radix_relay::signal::bridge>(db_path);
   }
 
   ~single_bridge_fixture() noexcept
@@ -55,10 +56,12 @@ struct single_bridge_fixture : orchestrator_test_fixture
   single_bridge_fixture(single_bridge_fixture &&) = delete;
   auto operator=(single_bridge_fixture &&) -> single_bridge_fixture & = delete;
 
-  auto make_orchestrator() -> std::shared_ptr<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>
+  auto make_orchestrator() const -> std::shared_ptr<
+    radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
   {
-    if (!bridge.has_value()) { throw std::runtime_error("Bridge not initialized"); }
-    return std::make_shared<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>(bridge.value(),
+    if (!bridge) { throw std::runtime_error("Bridge not initialized"); }
+    return std::make_shared<
+      radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(bridge,
       tracker,
       radix_relay::strands{ .main = &main_strand, .session = &session_strand, .transport = &transport_strand },
       make_send_bytes_to_transport(),
@@ -100,10 +103,10 @@ struct two_bridge_fixture : orchestrator_test_fixture
 {
   std::string alice_path;
   std::string bob_path;
-  std::optional<rust::Box<radix_relay::SignalBridge>> alice_bridge;
-  std::optional<rust::Box<radix_relay::SignalBridge>> bob_bridge;
-  rust::String bob_rdx;
-  std::optional<rust::String> alice_rdx;
+  std::shared_ptr<radix_relay::signal::bridge> alice_bridge;
+  std::shared_ptr<radix_relay::signal::bridge> bob_bridge;
+  std::string bob_rdx;
+  std::string alice_rdx;
 
   two_bridge_fixture(std::string alice_db, std::string bob_db, bool bidirectional = false)
     : alice_path(std::move(alice_db)), bob_path(std::move(bob_db))
@@ -111,23 +114,21 @@ struct two_bridge_fixture : orchestrator_test_fixture
     std::filesystem::remove(alice_path);
     std::filesystem::remove(bob_path);
 
-    alice_bridge = radix_relay::new_signal_bridge(alice_path.c_str());
-    bob_bridge = radix_relay::new_signal_bridge(bob_path.c_str());
+    alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
+    bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_path);
 
-    auto bob_bundle_json = radix_relay::generate_prekey_bundle_announcement(*bob_bridge.value(), "test-0.1.0");
+    auto bob_bundle_json = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
     auto bob_event_json = nlohmann::json::parse(bob_bundle_json);
-    const std::string bob_bundle_base64 = bob_event_json["content"].get<std::string>();
+    const std::string bob_bundle_base64 = bob_event_json["content"].template get<std::string>();
 
-    bob_rdx = radix_relay::add_contact_and_establish_session_from_base64(
-      *alice_bridge.value(), bob_bundle_base64.c_str(), "bob");
+    bob_rdx = alice_bridge->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob");
 
     if (bidirectional) {
-      auto alice_bundle_json = radix_relay::generate_prekey_bundle_announcement(*alice_bridge.value(), "test-0.1.0");
+      auto alice_bundle_json = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
       auto alice_event_json = nlohmann::json::parse(alice_bundle_json);
-      const std::string alice_bundle_base64 = alice_event_json["content"].get<std::string>();
+      const std::string alice_bundle_base64 = alice_event_json["content"].template get<std::string>();
 
-      alice_rdx = radix_relay::add_contact_and_establish_session_from_base64(
-        *bob_bridge.value(), alice_bundle_base64.c_str(), "alice");
+      alice_rdx = bob_bridge->add_contact_and_establish_session_from_base64(alice_bundle_base64, "alice");
     }
   }
 
@@ -143,12 +144,12 @@ struct two_bridge_fixture : orchestrator_test_fixture
   two_bridge_fixture(two_bridge_fixture &&) = delete;
   auto operator=(two_bridge_fixture &&) -> two_bridge_fixture & = delete;
 
-  auto make_alice_orchestrator()
-    -> std::shared_ptr<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>
+  auto make_alice_orchestrator() const -> std::shared_ptr<
+    radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
   {
-    if (!alice_bridge.has_value()) { throw std::runtime_error("Alice bridge not initialized"); }
-    return std::make_shared<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>(
-      alice_bridge.value(),
+    if (!alice_bridge) { throw std::runtime_error("Alice bridge not initialized"); }
+    return std::make_shared<
+      radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(alice_bridge,
       tracker,
       radix_relay::strands{
         .main = &main_strand,
@@ -159,11 +160,12 @@ struct two_bridge_fixture : orchestrator_test_fixture
       make_send_event_to_main());
   }
 
-  auto make_bob_orchestrator()
-    -> std::shared_ptr<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>
+  auto make_bob_orchestrator() const -> std::shared_ptr<
+    radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
   {
-    if (!bob_bridge.has_value()) { throw std::runtime_error("Bob bridge not initialized"); }
-    return std::make_shared<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>(bob_bridge.value(),
+    if (!bob_bridge) { throw std::runtime_error("Bob bridge not initialized"); }
+    return std::make_shared<
+      radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(bob_bridge,
       tracker,
       radix_relay::strands{
         .main = &main_strand,
@@ -174,22 +176,22 @@ struct two_bridge_fixture : orchestrator_test_fixture
       make_send_event_to_main());
   }
 
-  auto get_alice_bridge() -> radix_relay::SignalBridge &
+  auto get_alice_bridge() const -> std::shared_ptr<radix_relay::signal::bridge>
   {
-    if (!alice_bridge.has_value()) { throw std::runtime_error("Alice bridge not initialized"); }
-    return *alice_bridge.value();
+    if (!alice_bridge) { throw std::runtime_error("Alice bridge not initialized"); }
+    return alice_bridge;
   }
 
-  auto get_bob_bridge() -> radix_relay::SignalBridge &
+  auto get_bob_bridge() const -> std::shared_ptr<radix_relay::signal::bridge>
   {
-    if (!bob_bridge.has_value()) { throw std::runtime_error("Bob bridge not initialized"); }
-    return *bob_bridge.value();
+    if (!bob_bridge) { throw std::runtime_error("Bob bridge not initialized"); }
+    return bob_bridge;
   }
 
-  auto get_alice_rdx() -> const rust::String &
+  auto get_alice_rdx() const -> const std::string &
   {
-    if (!alice_rdx.has_value()) { throw std::runtime_error("Alice RDX not initialized - use bidirectional=true"); }
-    return alice_rdx.value();
+    if (alice_rdx.empty()) { throw std::runtime_error("Alice RDX not initialized - use bidirectional=true"); }
+    return alice_rdx;
   }
 };
 
@@ -245,7 +247,7 @@ TEST_CASE("session_orchestrator handles trust command", "[session_orchestrator]"
 
   CHECK(fixture.sent_bytes.empty());
 
-  auto contact = radix_relay::lookup_contact(fixture.get_alice_bridge(), alias.c_str());
+  auto contact = fixture.get_alice_bridge()->lookup_contact(alias);
   CHECK(std::string(contact.rdx_fingerprint) == std::string(fixture.bob_rdx));
   CHECK(std::string(contact.user_alias) == alias);
 }
@@ -256,10 +258,8 @@ TEST_CASE("session_orchestrator handles incoming encrypted_message bytes", "[ses
   auto orchestrator = fixture.make_bob_orchestrator();
 
   const std::string plaintext = "Hello Bob!";
-  std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
-  auto encrypted_bytes = radix_relay::encrypt_message(fixture.get_alice_bridge(),
-    std::string(fixture.bob_rdx).c_str(),
-    rust::Slice<const uint8_t>{ message_bytes.data(), message_bytes.size() });
+  const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
+  auto encrypted_bytes = fixture.get_alice_bridge()->encrypt_message(fixture.bob_rdx, message_bytes);
 
   std::string hex_content;
   for (const auto &byte : encrypted_bytes) { hex_content += fmt::format("{:02x}", byte); }
@@ -294,9 +294,9 @@ TEST_CASE("session_orchestrator handles incoming bundle_announcement bytes", "[s
   two_bridge_fixture fixture("/tmp/session_orch_bundle_alice.db", "/tmp/session_orch_bundle_bob.db");
   auto orchestrator = fixture.make_bob_orchestrator();
 
-  auto alice_bundle_json = radix_relay::generate_prekey_bundle_announcement(fixture.get_alice_bridge(), "test-0.1.0");
+  auto alice_bundle_json = fixture.get_alice_bridge()->generate_prekey_bundle_announcement("test-0.1.0");
   auto alice_event_json = nlohmann::json::parse(alice_bundle_json);
-  const std::string alice_bundle_base64 = alice_event_json["content"].get<std::string>();
+  const std::string alice_bundle_base64 = alice_event_json["content"].template get<std::string>();
 
   constexpr std::uint64_t test_timestamp = 1234567890;
   constexpr std::uint32_t bundle_announcement_kind = 30078;

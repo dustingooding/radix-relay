@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdio>
 #include <filesystem>
+#include <radix_relay/signal_bridge.hpp>
 #include <sstream>
 #include <tuple>
 #include <vector>
@@ -99,76 +100,75 @@ TEST_CASE("validate_cli_args validates send command", "[cli_utils][cli_parser]")
 
 TEST_CASE("execute_cli_command handles version flag", "[cli_utils][app_init]")
 {
-  auto bridge = radix_relay::new_signal_bridge(
-    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_version.db").string());
-  auto command_handler = std::make_shared<radix_relay::standard_event_handler_t::command_handler_t>(std::move(bridge));
-  radix_relay::cli_args args;
-  args.show_version = true;
+  const auto db_path =
+    std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_version.db";
+  {
+    auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
+    auto command_handler = std::make_shared<radix_relay::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+    radix_relay::cli_args args;
+    args.show_version = true;
 
-  REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
-  std::ignore =
-    std::remove((std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_version.db")
-        .string()
-        .c_str());
+    REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
+  }
+  std::ignore = std::filesystem::remove(db_path);
 }
 
 TEST_CASE("execute_cli_command handles send command", "[cli_utils][app_init]")
 {
-  auto bridge = radix_relay::new_signal_bridge(
-    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_send.db").string());
-  auto command_handler = std::make_shared<radix_relay::standard_event_handler_t::command_handler_t>(std::move(bridge));
-  radix_relay::cli_args args;
-  args.send_parsed = true;
-  args.send_recipient = "alice";
-  args.send_message = "test message";
+  const auto db_path = std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_send.db";
+  {
+    auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
+    auto command_handler = std::make_shared<radix_relay::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+    radix_relay::cli_args args;
+    args.send_parsed = true;
+    args.send_recipient = "alice";
+    args.send_message = "test message";
 
-  REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
-  std::ignore = std::remove(
-    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_send.db").string().c_str());
+    REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
+  }
+  std::ignore = std::filesystem::remove(db_path);
 }
 
 TEST_CASE("execute_cli_command handles peers command", "[cli_utils][app_init]")
 {
-  auto bridge = radix_relay::new_signal_bridge(
-    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_peers.db").string());
-  auto command_handler = std::make_shared<radix_relay::standard_event_handler_t::command_handler_t>(std::move(bridge));
-  radix_relay::cli_args args;
-  args.peers_parsed = true;
+  const auto db_path = std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_peers.db";
+  {
+    auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
+    auto command_handler = std::make_shared<radix_relay::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+    radix_relay::cli_args args;
+    args.peers_parsed = true;
 
-  REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
-  std::ignore =
-    std::remove((std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_peers.db")
-        .string()
-        .c_str());
+    REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
+  }
+  std::ignore = std::filesystem::remove(db_path);
 }
 
 TEST_CASE("execute_cli_command handles status command", "[cli_utils][app_init]")
 {
-  auto bridge = radix_relay::new_signal_bridge(
-    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_status.db").string());
-  auto command_handler = std::make_shared<radix_relay::standard_event_handler_t::command_handler_t>(std::move(bridge));
-  radix_relay::cli_args args;
-  args.status_parsed = true;
+  const auto db_path =
+    std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_status.db";
+  {
+    auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
+    auto command_handler = std::make_shared<radix_relay::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+    radix_relay::cli_args args;
+    args.status_parsed = true;
 
-  REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
-  std::ignore =
-    std::remove((std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_status.db")
-        .string()
-        .c_str());
+    REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
+  }
+  std::ignore = std::filesystem::remove(db_path);
 }
 
 TEST_CASE("execute_cli_command returns false for no commands", "[cli_utils][app_init]")
 {
-  auto bridge = radix_relay::new_signal_bridge(
-    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_false.db").string());
-  auto command_handler = std::make_shared<radix_relay::standard_event_handler_t::command_handler_t>(std::move(bridge));
-  const radix_relay::cli_args args;
+  const auto db_path = std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_false.db";
+  {
+    auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
+    auto command_handler = std::make_shared<radix_relay::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+    const radix_relay::cli_args args;
 
-  REQUIRE(radix_relay::execute_cli_command(args, command_handler) == false);
-  std::ignore =
-    std::remove((std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_false.db")
-        .string()
-        .c_str());
+    REQUIRE(radix_relay::execute_cli_command(args, command_handler) == false);
+  }
+  std::ignore = std::filesystem::remove(db_path);
 }
 
 TEST_CASE("configure_logging sets debug level when verbose", "[cli_utils][app_init]")
@@ -190,19 +190,17 @@ TEST_CASE("configure_logging sets debug level when verbose", "[cli_utils][app_in
 
 TEST_CASE("get_node_fingerprint returns valid fingerprint", "[cli_utils][app_init]")
 {
-  auto bridge = radix_relay::new_signal_bridge(
-    (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_cli_utils_fingerprint.db").string());
-  auto fingerprint = radix_relay::get_node_fingerprint(*bridge);
+  const auto db_path =
+    std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_cli_utils_fingerprint.db";
+  {
+    auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
+    auto fingerprint = bridge_wrapper->get_node_fingerprint();
 
-  REQUIRE_FALSE(fingerprint.empty());
-  REQUIRE(fingerprint.starts_with("RDX:"));
-  REQUIRE(fingerprint.length() == 68);
-
-  // Clean up test database
-  std::ignore =
-    std::remove((std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_cli_utils_fingerprint.db")
-        .string()
-        .c_str());
+    REQUIRE_FALSE(fingerprint.empty());
+    REQUIRE(fingerprint.starts_with("RDX:"));
+    REQUIRE(fingerprint.length() == 68);
+  }
+  std::ignore = std::filesystem::remove(db_path);
 }
 
 TEST_CASE("app_state construction", "[cli_utils][app_init]")

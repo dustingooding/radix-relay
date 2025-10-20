@@ -73,6 +73,8 @@ add_catch_test(NAME nostr_message_handler_tests SOURCES nostr_message_handler_te
 add_catch_test(NAME session_orchestrator_tests SOURCES session_orchestrator_tests.cpp LIBS signal_bridge_cxx Boost::asio nlohmann_json::nlohmann_json fmt::fmt)
 add_catch_test(NAME nostr_request_tracker_tests SOURCES nostr_request_tracker_tests.cpp LIBS nlohmann_json::nlohmann_json)
 add_catch_test(NAME nostr_signing_tests SOURCES nostr_signing_tests.cpp LIBS nlohmann_json::nlohmann_json signal_bridge_cxx)
+add_catch_test(NAME raw_signal_bridge_tests SOURCES raw_signal_bridge_tests.cpp LIBS signal_bridge_cxx PREFIX signal)
+add_catch_test(NAME signal_bridge_tests SOURCES signal_bridge_tests.cpp LIBS signal_bridge_cxx PREFIX signal)
 
 if(WIN32 AND BUILD_SHARED_LIBS)
   add_custom_command(
@@ -82,11 +84,7 @@ if(WIN32 AND BUILD_SHARED_LIBS)
     COMMAND_EXPAND_LISTS)
 endif()
 
-if(TARGET signal_bridge_cxx)
-  add_catch_test(NAME signal_bridge_tests SOURCES signal_bridge_tests.cpp LIBS signal_bridge_cxx PREFIX signal)
-
-  # Disable static analysis for generated CXX bridge code
-  set_target_properties(signal_bridge_tests PROPERTIES
-    CXX_CLANG_TIDY ""
-    CXX_CPPCHECK "")
-endif()
+# Disable static analysis for generated CXX bridge code
+set_target_properties(signal_bridge_tests PROPERTIES
+  CXX_CLANG_TIDY ""
+  CXX_CPPCHECK "")

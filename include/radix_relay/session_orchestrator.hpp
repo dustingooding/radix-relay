@@ -10,13 +10,14 @@
 #include <chrono>
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <radix_relay/concepts/request_tracker.hpp>
+#include <radix_relay/concepts/signal_bridge.hpp>
 #include <radix_relay/events/events.hpp>
 #include <radix_relay/events/nostr_events.hpp>
 #include <radix_relay/nostr_message_handler.hpp>
 #include <radix_relay/nostr_protocol.hpp>
-#include <signal_bridge_cxx/lib.h>
 #include <vector>
 
 namespace radix_relay {
@@ -28,21 +29,21 @@ struct strands
   const boost::asio::io_context::strand *transport;
 };
 
-template<concepts::request_tracker Tracker>
-class session_orchestrator : public std::enable_shared_from_this<session_orchestrator<Tracker>>
+template<concepts::signal_bridge Bridge, concepts::request_tracker Tracker>
+class session_orchestrator : public std::enable_shared_from_this<session_orchestrator<Bridge, Tracker>>
 {
 public:
   using send_bytes_to_transport_fn_t = std::function<void(std::vector<std::byte>)>;
   using send_event_to_main_fn_t = std::function<void(events::transport_event_variant_t)>;
 
-  session_orchestrator(rust::Box<SignalBridge> &bridge,
+  session_orchestrator(std::shared_ptr<Bridge> bridge,
     std::shared_ptr<Tracker> tracker,
     strands strands,
     send_bytes_to_transport_fn_t send_bytes_to_transport,
     send_event_to_main_fn_t send_event_to_main)
-    : handler_(std::addressof(*bridge)), tracker_(std::move(tracker)), main_strand_(strands.main),
-      session_strand_(strands.session), transport_strand_(strands.transport),
-      send_bytes_to_transport_(std::move(send_bytes_to_transport)), send_event_to_main_(std::move(send_event_to_main))
+    : handler_(bridge), tracker_(std::move(tracker)), main_strand_(strands.main), session_strand_(strands.session),
+      transport_strand_(strands.transport), send_bytes_to_transport_(std::move(send_bytes_to_transport)),
+      send_event_to_main_(std::move(send_event_to_main))
   {}
 
   auto handle_command(const events::send &cmd) -> void
@@ -265,7 +266,7 @@ public:
 private:
   static constexpr auto default_timeout = std::chrono::seconds(5);
 
-  nostr_message_handler handler_;
+  nostr_message_handler<Bridge> handler_;
   std::shared_ptr<Tracker> tracker_;
   const boost::asio::io_context::strand *main_strand_;
   const boost::asio::io_context::strand *session_strand_;
