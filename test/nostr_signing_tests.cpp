@@ -1,8 +1,8 @@
-#include "signal_bridge_cxx/lib.h"
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <radix_relay/nostr_protocol.hpp>
 #include <radix_relay/platform/env_utils.hpp>
+#include <radix_relay/signal_bridge.hpp>
 #include <ranges>
 
 // Helper function to convert string literals to byte spans for testing
@@ -20,11 +20,10 @@ TEST_CASE("Nostr Event Signing via Signal Bridge", "[nostr][signing]")
 
   SECTION("sign_nostr_event produces valid signed event")
   {
-    const auto db_path =
-      (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_nostr_signing.db").string();
+    const auto db_path = std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_nostr_signing.db";
 
     {
-      auto signal_bridge = radix_relay::new_signal_bridge(db_path.c_str());
+      auto signal_bridge = std::make_shared<radix_relay::signal::bridge>(db_path);
 
       auto event = radix_relay::nostr::protocol::event_data::create_encrypted_message(
         test_timestamp, "test_recipient", "encrypted_test_content", "test_session");
@@ -34,9 +33,9 @@ TEST_CASE("Nostr Event Signing via Signal Bridge", "[nostr][signing]")
       event_json.resize(json_bytes.size());
       std::ranges::transform(json_bytes, event_json.begin(), [](std::byte byte) { return std::bit_cast<char>(byte); });
 
-      auto signed_event_json = radix_relay::sign_nostr_event(*signal_bridge, event_json);
+      auto signed_event_json = signal_bridge->sign_nostr_event(event_json);
 
-      auto signed_json_bytes = string_to_bytes(std::string(signed_event_json));
+      auto signed_json_bytes = string_to_bytes(signed_event_json);
       auto signed_event = radix_relay::nostr::protocol::event_data::deserialize(signed_json_bytes);
 
       REQUIRE(signed_event.has_value());
@@ -56,16 +55,16 @@ TEST_CASE("Nostr Event Signing via Signal Bridge", "[nostr][signing]")
       }
     }
 
-    std::ignore = std::remove(db_path.c_str());
+    std::ignore = std::filesystem::remove(db_path);
   }
 
   SECTION("signing is deterministic for identical events")
   {
     const auto db_path =
-      (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_nostr_deterministic.db").string();
+      std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_nostr_deterministic.db";
 
     {
-      auto signal_bridge = radix_relay::new_signal_bridge(db_path.c_str());
+      auto signal_bridge = std::make_shared<radix_relay::signal::bridge>(db_path);
 
       auto event1 = radix_relay::nostr::protocol::event_data::create_encrypted_message(
         test_timestamp, "test_recipient", "test_content", "test_session");
@@ -81,11 +80,11 @@ TEST_CASE("Nostr Event Signing via Signal Bridge", "[nostr][signing]")
       std::ranges::transform(json1_bytes, json1.begin(), [](std::byte byte) { return std::bit_cast<char>(byte); });
       std::ranges::transform(json2_bytes, json2.begin(), [](std::byte byte) { return std::bit_cast<char>(byte); });
 
-      auto signed1 = radix_relay::sign_nostr_event(*signal_bridge, json1);
-      auto signed2 = radix_relay::sign_nostr_event(*signal_bridge, json2);
+      auto signed1 = signal_bridge->sign_nostr_event(json1);
+      auto signed2 = signal_bridge->sign_nostr_event(json2);
 
-      auto event1_signed = radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(std::string(signed1)));
-      auto event2_signed = radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(std::string(signed2)));
+      auto event1_signed = radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(signed1));
+      auto event2_signed = radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(signed2));
 
       REQUIRE(event1_signed.has_value());
       REQUIRE(event2_signed.has_value());
@@ -100,6 +99,6 @@ TEST_CASE("Nostr Event Signing via Signal Bridge", "[nostr][signing]")
       }
     }
 
-    std::ignore = std::remove(db_path.c_str());
+    std::ignore = std::filesystem::remove(db_path);
   }
 }

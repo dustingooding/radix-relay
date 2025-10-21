@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <radix_relay/node_identity.hpp>
 #include <radix_relay/platform/env_utils.hpp>
+#include <radix_relay/signal_bridge.hpp>
 #include <tuple>
 
 TEST_CASE("Node Identity Functions", "[node_identity]")
@@ -19,20 +20,20 @@ TEST_CASE("Node Identity Functions", "[node_identity]")
 
   SECTION("get_node_fingerprint returns deterministic fingerprint")
   {
-    auto bridge = radix_relay::new_signal_bridge(
-      (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_node_identity_fingerprint.db")
-        .string());
+    {
+      auto bridge = std::make_shared<radix_relay::signal::bridge>(
+        std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_node_identity_fingerprint.db");
 
-    auto fingerprint1 = radix_relay::get_node_fingerprint(*bridge);
-    auto fingerprint2 = radix_relay::get_node_fingerprint(*bridge);
+      // cppcheck-suppress duplicateAssignExpression
+      auto fingerprint1 = bridge->get_node_fingerprint();
+      auto fingerprint2 = bridge->get_node_fingerprint();
 
-    REQUIRE(fingerprint1.starts_with("RDX:"));
-    REQUIRE(fingerprint1.length() == 68);
-    REQUIRE(fingerprint1 == fingerprint2);
+      REQUIRE(fingerprint1.starts_with("RDX:"));
+      REQUIRE(fingerprint1.length() == 68);
+      REQUIRE(fingerprint1 == fingerprint2);
+    }
 
-    std::ignore = std::remove(
-      (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_node_identity_fingerprint.db")
-        .string()
-        .c_str());
+    std::ignore = std::filesystem::remove(
+      std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_node_identity_fingerprint.db");
   }
 }

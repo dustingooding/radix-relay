@@ -1,21 +1,22 @@
 #pragma once
 
 #include <fmt/core.h>
+#include <memory>
 #include <radix_relay/concepts/command_handler.hpp>
+#include <radix_relay/concepts/signal_bridge.hpp>
 #include <radix_relay/events/events.hpp>
-#include <utility>
-
-#include <radix_relay/node_identity.hpp>
 
 #include "internal_use_only/config.hpp"
 
 namespace radix_relay {
 
-struct command_handler
+template<concepts::signal_bridge Bridge> struct command_handler
 {
-  explicit command_handler(rust::Box<SignalBridge> bridge) : bridge_(std::move(bridge)) {}
+  explicit command_handler(std::shared_ptr<Bridge> bridge) : bridge_(bridge) {}
 
   template<events::Command T> auto handle(const T &command) const -> void { handle_impl(command); }
+
+  auto get_bridge() -> std::shared_ptr<Bridge> { return bridge_; }
 
 private:
   auto handle_impl(const events::help & /*command*/) const -> void
@@ -52,15 +53,28 @@ private:
     fmt::print("  Active Sessions: 0\n");
 
     fmt::print("\nCrypto Status:\n");
-    std::string node_fingerprint = get_node_fingerprint(*bridge_);
+    std::string node_fingerprint = bridge_->get_node_fingerprint();
     fmt::print("  Node Fingerprint: {}\n", node_fingerprint);
   }
 
   auto handle_impl(const events::sessions & /*command*/) const -> void
   {
     std::ignore = initialized_;
-    fmt::print("Active Encrypted Sessions: (Signal Protocol not implemented)\n");
-    fmt::print("  No active sessions\n");
+    auto contacts = bridge_->list_contacts();
+
+    if (contacts.empty()) {
+      fmt::print("No active sessions\n");
+      return;
+    }
+
+    fmt::print("Active Sessions ({}):\n", contacts.size());
+    for (const auto &contact : contacts) {
+      if (contact.user_alias.empty()) {
+        fmt::print("  {}\n", contact.rdx_fingerprint);
+      } else {
+        fmt::print("  {} ({})\n", contact.user_alias, contact.rdx_fingerprint);
+      }
+    }
   }
 
   auto handle_impl(const events::scan & /*command*/) const -> void
@@ -136,10 +150,8 @@ private:
     }
   }
 
-  mutable rust::Box<SignalBridge> bridge_;
+  std::shared_ptr<Bridge> bridge_;
   bool initialized_ = true;
 };
-
-static_assert(concepts::command_handler<command_handler>);
 
 }// namespace radix_relay

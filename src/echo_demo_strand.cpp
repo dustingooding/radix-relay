@@ -1,4 +1,3 @@
-#include "signal_bridge_cxx/lib.h"
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
@@ -8,6 +7,7 @@
 #include <radix_relay/nostr_transport.hpp>
 #include <radix_relay/platform/env_utils.hpp>
 #include <radix_relay/session_orchestrator.hpp>
+#include <radix_relay/signal_bridge.hpp>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <thread>
@@ -53,8 +53,8 @@ auto main() -> int
     std::cout << "   Bob database: " << bob_db_path << "\n";
 
     {
-      auto alice_bridge = radix_relay::new_signal_bridge(alice_db_path.c_str());
-      auto bob_bridge = radix_relay::new_signal_bridge(bob_db_path.c_str());
+      auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_db_path);
+      auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_db_path);
 
       std::cout << "\nCreating RequestTrackers...\n";
       auto alice_tracker = std::make_shared<radix_relay::nostr::request_tracker>(&io_context);
@@ -69,8 +69,12 @@ auto main() -> int
       std::cout << "\nCreating SessionOrchestrators and Transports...\n";
 
       // Forward declarations for circular dependency
-      std::shared_ptr<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>> alice_orch_ptr = nullptr;
-      std::shared_ptr<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>> bob_orch_ptr = nullptr;
+      std::shared_ptr<
+        radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
+        alice_orch_ptr = nullptr;
+      std::shared_ptr<
+        radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
+        bob_orch_ptr = nullptr;
 
       auto alice_send_to_session = [&alice_orch_ptr](const std::vector<std::byte> &bytes) {
         if (alice_orch_ptr) { alice_orch_ptr->handle_bytes_from_transport(bytes); }
@@ -185,21 +189,22 @@ auto main() -> int
         });
       };
 
-      auto alice_orchestrator =
-        std::make_shared<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>(alice_bridge,
-          alice_tracker,
-          radix_relay::strands{
-            .main = &main_strand, .session = &alice_session_strand, .transport = &alice_transport_strand },
-          alice_send_bytes_to_transport,
-          alice_send_event_to_main);
+      auto alice_orchestrator = std::make_shared<
+        radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
+        alice_bridge,
+        alice_tracker,
+        radix_relay::strands{
+          .main = &main_strand, .session = &alice_session_strand, .transport = &alice_transport_strand },
+        alice_send_bytes_to_transport,
+        alice_send_event_to_main);
 
-      auto bob_orchestrator =
-        std::make_shared<radix_relay::session_orchestrator<radix_relay::nostr::request_tracker>>(bob_bridge,
-          bob_tracker,
-          radix_relay::strands{
-            .main = &main_strand, .session = &bob_session_strand, .transport = &bob_transport_strand },
-          bob_send_bytes_to_transport,
-          bob_send_event_to_main);
+      auto bob_orchestrator = std::make_shared<
+        radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(bob_bridge,
+        bob_tracker,
+        radix_relay::strands{
+          .main = &main_strand, .session = &bob_session_strand, .transport = &bob_transport_strand },
+        bob_send_bytes_to_transport,
+        bob_send_event_to_main);
 
       // Wire up pointers for circular dependency
       alice_orch_ptr = alice_orchestrator;
@@ -229,8 +234,9 @@ auto main() -> int
       std::this_thread::sleep_for(bundle_wait_time);
 
       std::cout << "\n=== Phase 3: Subscribe to encrypted messages ===\n";
-      const auto alice_msg_sub = radix_relay::create_subscription_for_self(*alice_bridge, "alice_msgs");
-      const auto bob_msg_sub = radix_relay::create_subscription_for_self(*bob_bridge, "bob_msgs");
+      const auto alice_msg_sub =
+        radix_relay::create_subscription_for_self(alice_bridge->get_rust_bridge(), "alice_msgs");
+      const auto bob_msg_sub = radix_relay::create_subscription_for_self(bob_bridge->get_rust_bridge(), "bob_msgs");
 
       alice_orchestrator->handle_command(
         radix_relay::events::subscribe{ .subscription_json = std::string(alice_msg_sub) });
