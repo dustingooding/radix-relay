@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 #include <tuple>
 
+#include "test_doubles/test_double_printer.hpp"
 #include "test_doubles/test_double_signal_bridge.hpp"
 #include <radix_relay/command_handler.hpp>
 #include <radix_relay/events/events.hpp>
@@ -19,16 +20,15 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
     {
       auto help_command = radix_relay::events::help{};
 
-      THEN("handler should process without throwing")
+      THEN("handler outputs available commands")
       {
-        auto db_path =
-          std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_help.db";
-        {
-          auto bridge = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge };
-          REQUIRE_NOTHROW(handler.handle(help_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(help_command);
+        REQUIRE(test_printer->get_output().find("Interactive Commands") != std::string::npos);
       }
     }
 
@@ -36,16 +36,15 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
     {
       auto version_command = radix_relay::events::version{};
 
-      THEN("handler should process without throwing")
+      THEN("handler outputs version information")
       {
-        auto db_path =
-          std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_version.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(version_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(version_command);
+        REQUIRE(test_printer->get_output().find("Radix Relay v") != std::string::npos);
       }
     }
 
@@ -53,16 +52,15 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
     {
       auto peers_command = radix_relay::events::peers{};
 
-      THEN("handler should process without throwing")
+      THEN("handler outputs peer discovery information")
       {
-        auto db_path =
-          std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_peers.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(peers_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(peers_command);
+        REQUIRE(test_printer->get_output().find("Connected Peers") != std::string::npos);
       }
     }
 
@@ -70,16 +68,18 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
     {
       auto status_command = radix_relay::events::status{};
 
-      THEN("handler should process without throwing")
+      THEN("handler outputs network and crypto status")
       {
-        auto db_path =
-          std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_status.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(status_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(status_command);
+        const auto output = test_printer->get_output();
+        REQUIRE(output.find("Network Status") != std::string::npos);
+        REQUIRE(output.find("Node Fingerprint") != std::string::npos);
+        REQUIRE(output.find("RDX:") != std::string::npos);
       }
     }
 
@@ -87,15 +87,16 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
     {
       auto sessions_command = radix_relay::events::sessions{};
 
-      THEN("handler should process without throwing")
+      THEN("handler outputs no active sessions message")
       {
-        auto db_path = std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_sessions_empty.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(sessions_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        bridge->contacts_to_return = {};
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(sessions_command);
+        REQUIRE(test_printer->get_output().find("No active sessions") != std::string::npos);
       }
     }
 
@@ -103,25 +104,33 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
     {
       auto sessions_command = radix_relay::events::sessions{};
 
-      THEN("handler should process without throwing")
+      THEN("handler outputs active sessions with contact information")
       {
-        auto alice_db = std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_sessions_alice.db";
-        auto bob_db = std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_sessions_bob.db";
-        {
-          auto alice_wrapper = std::make_shared<radix_relay::signal::bridge>(alice_db);
-          auto bob_wrapper = std::make_shared<radix_relay::signal::bridge>(bob_db);
-
-          auto bob_bundle_json = bob_wrapper->generate_prekey_bundle_announcement("test-0.1.0");
-          auto bob_event_json = nlohmann::json::parse(bob_bundle_json);
-          const std::string bob_bundle_base64 = bob_event_json["content"].template get<std::string>();
-
-          alice_wrapper->add_contact_and_establish_session_from_base64(bob_bundle_base64, "");
-
-          const radix_relay::command_handler handler{ alice_wrapper };
-          REQUIRE_NOTHROW(handler.handle(sessions_command));
-        }
-        std::ignore = std::filesystem::remove(alice_db);
-        std::ignore = std::filesystem::remove(bob_db);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        bridge->contacts_to_return = {
+          radix_relay::signal::contact_info{
+            .rdx_fingerprint = "RDX:alice123",
+            .nostr_pubkey = "npub_alice",
+            .user_alias = "Alice",
+            .has_active_session = true,
+          },
+          radix_relay::signal::contact_info{
+            .rdx_fingerprint = "RDX:bob456",
+            .nostr_pubkey = "npub_bob",
+            .user_alias = "",
+            .has_active_session = true,
+          },
+        };
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(sessions_command);
+        const auto output = test_printer->get_output();
+        REQUIRE(output.find("Active Sessions") != std::string::npos);
+        REQUIRE(output.find("Alice") != std::string::npos);
+        REQUIRE(output.find("RDX:alice123") != std::string::npos);
+        REQUIRE(output.find("RDX:bob456") != std::string::npos);
       }
     }
 
@@ -129,16 +138,15 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
     {
       auto scan_command = radix_relay::events::scan{};
 
-      THEN("handler should process without throwing")
+      THEN("handler outputs scan information")
       {
-        auto db_path =
-          std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_scan.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(scan_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(scan_command);
+        REQUIRE(test_printer->get_output().find("Scanning") != std::string::npos);
       }
     }
   }
@@ -152,16 +160,15 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
     {
       auto mode_command = radix_relay::events::mode{ .new_mode = "internet" };
 
-      THEN("handler should process without throwing")
+      THEN("handler outputs mode change confirmation")
       {
-        auto db_path =
-          std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_mode.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(mode_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(mode_command);
+        REQUIRE(test_printer->get_output().find("internet") != std::string::npos);
       }
     }
 
@@ -169,16 +176,17 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
     {
       auto send_command = radix_relay::events::send{ .peer = "alice", .message = "hello world" };
 
-      THEN("handler should process without throwing")
+      THEN("handler outputs send command confirmation with peer and message")
       {
-        auto db_path =
-          std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_send.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(send_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(send_command);
+        const auto output = test_printer->get_output();
+        REQUIRE(output.find("alice") != std::string::npos);
+        REQUIRE(output.find("hello world") != std::string::npos);
       }
     }
 
@@ -186,16 +194,15 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
     {
       auto broadcast_command = radix_relay::events::broadcast{ .message = "hello everyone" };
 
-      THEN("handler should process without throwing")
+      THEN("handler outputs broadcast command confirmation with message")
       {
-        auto db_path =
-          std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_broadcast.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(broadcast_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(broadcast_command);
+        REQUIRE(test_printer->get_output().find("hello everyone") != std::string::npos);
       }
     }
 
@@ -203,16 +210,15 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
     {
       auto connect_command = radix_relay::events::connect{ .relay = "wss://relay.damus.io" };
 
-      THEN("handler should process without throwing")
+      THEN("handler outputs connect command confirmation with relay URL")
       {
-        auto db_path =
-          std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_connect.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(connect_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(connect_command);
+        REQUIRE(test_printer->get_output().find("relay.damus.io") != std::string::npos);
       }
     }
 
@@ -220,16 +226,15 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
     {
       auto trust_command = radix_relay::events::trust{ .peer = "alice", .alias = "" };
 
-      THEN("handler should process without throwing")
+      THEN("handler outputs trust command confirmation with peer")
       {
-        auto db_path =
-          std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_trust.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(trust_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(trust_command);
+        REQUIRE(test_printer->get_output().find("alice") != std::string::npos);
       }
     }
 
@@ -237,16 +242,15 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
     {
       auto verify_command = radix_relay::events::verify{ .peer = "bob" };
 
-      THEN("handler should process without throwing")
+      THEN("handler outputs verify command confirmation with peer")
       {
-        auto db_path =
-          std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_verify.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(verify_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(verify_command);
+        REQUIRE(test_printer->get_output().find("bob") != std::string::npos);
       }
     }
   }
@@ -260,16 +264,15 @@ SCENARIO("Command handler validates command parameters", "[commands][handler][va
     {
       auto send_command = radix_relay::events::send{ .peer = "", .message = "" };
 
-      THEN("handler should process gracefully")
+      THEN("handler outputs usage information")
       {
-        auto db_path =
-          std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_send_empty.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(send_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(send_command);
+        REQUIRE(test_printer->get_output().find("Usage") != std::string::npos);
       }
     }
 
@@ -277,16 +280,15 @@ SCENARIO("Command handler validates command parameters", "[commands][handler][va
     {
       auto broadcast_command = radix_relay::events::broadcast{ .message = "" };
 
-      THEN("handler should process gracefully")
+      THEN("handler outputs usage information")
       {
-        auto db_path = std::filesystem::path(radix_relay::platform::get_temp_directory())
-                       / "test_command_handler_broadcast_empty.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(broadcast_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(broadcast_command);
+        REQUIRE(test_printer->get_output().find("Usage") != std::string::npos);
       }
     }
 
@@ -294,75 +296,15 @@ SCENARIO("Command handler validates command parameters", "[commands][handler][va
     {
       auto mode_command = radix_relay::events::mode{ .new_mode = "invalid" };
 
-      THEN("handler should process gracefully")
+      THEN("handler outputs invalid mode error message")
       {
-        auto db_path =
-          std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_command_handler_mode_invalid.db";
-        {
-          auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-          const radix_relay::command_handler handler{ bridge_wrapper };
-          REQUIRE_NOTHROW(handler.handle(mode_command));
-        }
-        std::ignore = std::filesystem::remove(db_path);
-      }
-    }
-  }
-}
-
-SCENARIO("Command handler calls bridge methods correctly", "[commands][handler][bridge]")
-{
-  GIVEN("A test double signal bridge")
-  {
-    auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
-
-    WHEN("sessions command is executed with no sessions")
-    {
-      const radix_relay::command_handler handler{ bridge };
-      handler.handle(radix_relay::events::sessions{});
-
-      THEN("list_contacts should be called")
-      {
-        REQUIRE(bridge->was_called("list_contacts"));
-        REQUIRE(bridge->call_count("list_contacts") == 1);
-      }
-    }
-
-    WHEN("sessions command is executed with sessions")
-    {
-      bridge->contacts_to_return = {
-        radix_relay::signal::contact_info{
-          .rdx_fingerprint = "RDX:alice123",
-          .nostr_pubkey = "npub_alice",
-          .user_alias = "Alice",
-          .has_active_session = true,
-        },
-        radix_relay::signal::contact_info{
-          .rdx_fingerprint = "RDX:bob456",
-          .nostr_pubkey = "npub_bob",
-          .user_alias = "",
-          .has_active_session = true,
-        },
-      };
-
-      const radix_relay::command_handler handler{ bridge };
-      handler.handle(radix_relay::events::sessions{});
-
-      THEN("list_contacts should be called once")
-      {
-        REQUIRE(bridge->was_called("list_contacts"));
-        REQUIRE(bridge->call_count("list_contacts") == 1);
-      }
-    }
-
-    WHEN("status command is executed")
-    {
-      const radix_relay::command_handler handler{ bridge };
-      handler.handle(radix_relay::events::status{});
-
-      THEN("get_node_fingerprint should be called")
-      {
-        REQUIRE(bridge->was_called("get_node_fingerprint"));
-        REQUIRE(bridge->call_count("get_node_fingerprint") == 1);
+        auto bridge = std::make_shared<radix_relay_test::TestDoubleSignalBridge>();
+        auto test_printer = std::make_shared<radix_relay_test::TestDoublePrinter>();
+        const radix_relay::command_handler<radix_relay_test::TestDoubleSignalBridge,
+          radix_relay_test::TestDoublePrinter>
+          handler{ bridge, test_printer };
+        handler.handle(mode_command);
+        REQUIRE(test_printer->get_output().find("Invalid mode") != std::string::npos);
       }
     }
   }
