@@ -18,3 +18,8 @@ target_link_system_libraries(
           nlohmann_json::nlohmann_json)
 
 target_include_directories(echo_demo_strand PRIVATE "${CMAKE_BINARY_DIR}/configured_files/include")
+
+# Windows MSVC requires /bigobj for files with many template instantiations
+if(MSVC)
+  target_compile_options(echo_demo_strand PRIVATE /bigobj)
+endif()

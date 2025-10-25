@@ -44,6 +44,11 @@ function(add_header_validation_targets)
       continue()
     endif()
 
+    # Skip CPM dependency headers in _deps directory
+    if(INCLUDE_DIR MATCHES "/_deps/")
+      continue()
+    endif()
+
     # Only process headers within the project source directory
     file(RELATIVE_PATH REL_TO_PROJECT "${PROJECT_SOURCE_DIR}" "${INCLUDE_DIR}")
     # Skip if path goes up (..) or is an absolute path (starts with / or drive letter on Windows)
@@ -92,6 +97,11 @@ function(add_header_validation_targets)
 
       # Skip if still contains generator expression syntax
       if(INCLUDE_DIR MATCHES "\\$<")
+        continue()
+      endif()
+
+      # Skip CPM dependency headers in _deps directory
+      if(INCLUDE_DIR MATCHES "/_deps/")
         continue()
       endif()
 

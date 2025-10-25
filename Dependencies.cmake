@@ -6,35 +6,58 @@ include(cmake/CPM.cmake)
 function(radix_relay_setup_dependencies)
 
   if(NOT TARGET fmtlib::fmtlib)
-    cpmaddpackage("gh:fmtlib/fmt#11.1.4")
+    cpmaddpackage(
+      NAME fmt
+      GITHUB_REPOSITORY fmtlib/fmt
+      GIT_TAG 11.1.4
+      SYSTEM YES
+    )
   endif()
 
   if(NOT TARGET spdlog::spdlog)
     cpmaddpackage(
-      NAME
-      spdlog
-      VERSION
-      1.15.2
-      GITHUB_REPOSITORY
-      "gabime/spdlog"
-      OPTIONS
-      "SPDLOG_FMT_EXTERNAL ON")
+      NAME spdlog
+      VERSION 1.15.2
+      GITHUB_REPOSITORY "gabime/spdlog"
+      OPTIONS "SPDLOG_FMT_EXTERNAL ON"
+      SYSTEM YES
+    )
   endif()
 
   if(NOT TARGET Catch2::Catch2WithMain)
-    cpmaddpackage("gh:catchorg/Catch2@3.8.1")
+    cpmaddpackage(
+      NAME Catch2
+      GITHUB_REPOSITORY catchorg/Catch2
+      VERSION 3.8.1
+      SYSTEM YES
+    )
   endif()
 
   if(NOT TARGET CLI11::CLI11)
-    cpmaddpackage("gh:CLIUtils/CLI11@2.5.0")
+    cpmaddpackage(
+      NAME CLI11
+      GITHUB_REPOSITORY CLIUtils/CLI11
+      VERSION 2.5.0
+      SYSTEM YES
+    )
   endif()
 
   if(NOT TARGET ftxui::screen)
-    cpmaddpackage("gh:ArthurSonzogni/FTXUI@6.0.2")
+    cpmaddpackage(
+      NAME FTXUI
+      GITHUB_REPOSITORY ArthurSonzogni/FTXUI
+      VERSION 6.0.2
+      SYSTEM YES
+    )
   endif()
 
   if(NOT TARGET tools::tools)
-    cpmaddpackage("gh:lefticus/tools#update_build_system")
+    cpmaddpackage(
+      NAME tools
+      GITHUB_REPOSITORY lefticus/tools
+      GIT_TAG update_build_system
+      SYSTEM YES
+    )
   endif()
 
   if(NOT TARGET corrosion)
@@ -47,14 +70,11 @@ function(radix_relay_setup_dependencies)
     endif()
 
     cpmaddpackage(
-      NAME
-      corrosion
-      VERSION
-      0.5.2
-      GITHUB_REPOSITORY
-      "corrosion-rs/corrosion"
-      OPTIONS
-      "CORROSION_VERBOSE_OUTPUT ON"
+      NAME corrosion
+      VERSION 0.5.2
+      GITHUB_REPOSITORY "corrosion-rs/corrosion"
+      OPTIONS "CORROSION_VERBOSE_OUTPUT ON"
+      SYSTEM YES
     )
   endif()
 
@@ -72,23 +92,48 @@ function(radix_relay_setup_dependencies)
     message(STATUS "  OpenSSL libraries: ${OPENSSL_LIBRARIES}")
   endif()
 
-  if(NOT TARGET Boost::asio)
-    cpmaddpackage(
-      NAME Boost
-      GITHUB_REPOSITORY boostorg/boost
-      VERSION 1.89.0
-      GIT_TAG boost-1.89.0
-      GIT_SHALLOW TRUE
-      GIT_SUBMODULES ""
-      SYSTEM YES
-      OPTIONS
-        "BOOST_INCLUDE_LIBRARIES asio;system;date_time;regex"
-        "BOOST_ENABLE_CMAKE ON"
-    )
+  find_package(Boost 1.89.0 QUIET COMPONENTS asio beast date_time logic regex system)
+
+  if(NOT Boost_FOUND)
+    message(STATUS "System Boost not found, building from source via CPM...")
+    if(NOT TARGET Boost::asio)
+      cpmaddpackage(s
+        NAME Boost
+        GITHUB_REPOSITORY boostorg/boost
+        VERSION 1.89.0
+        GIT_TAG boost-1.89.0
+        GIT_SHALLOW TRUE
+        OPTIONS
+          "BOOST_INCLUDE_LIBRARIES asio;beast;system;date_time;regex;logic"
+          "BOOST_ENABLE_CMAKE ON"
+        SYSTEM YES
+      )
+    endif()
+
+    # Beast is header-only but doesn't create a CMake target with BOOST_INCLUDE_LIBRARIES
+    # Create our own interface library to provide the Beast headers
+    if(NOT TARGET Boost::beast)
+      add_library(Boost::beast INTERFACE IMPORTED GLOBAL)
+      target_include_directories(Boost::beast SYSTEM INTERFACE
+        "${Boost_SOURCE_DIR}/libs/beast/include"
+        "${Boost_SOURCE_DIR}/libs/endian/include"
+        "${Boost_SOURCE_DIR}/libs/static_string/include"
+        "${Boost_SOURCE_DIR}/libs/logic/include"
+      )
+      target_link_libraries(Boost::beast INTERFACE Boost::asio Boost::system)
+    endif()
+  else()
+    message(STATUS "Using system-provided Boost ${Boost_VERSION}")
+    # System Boost should already have Boost::beast target or Beast headers via asio
   endif()
 
   if(NOT TARGET nlohmann_json::nlohmann_json)
-    cpmaddpackage("gh:nlohmann/json@3.12.0")
+    cpmaddpackage(
+      NAME nlohmann_json
+      GITHUB_REPOSITORY nlohmann/json
+      VERSION 3.12.0
+      SYSTEM YES
+    )
   endif()
 
 endfunction()
