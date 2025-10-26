@@ -1,6 +1,8 @@
 #pragma once
 
 #include <radix_relay/concepts/websocket_stream.hpp>
+#include <radix_relay/events/events.hpp>
+#include <radix_relay/uuid_generator.hpp>
 
 #include <boost/asio.hpp>
 #include <spdlog/spdlog.h>
@@ -12,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace radix_relay::nostr {
@@ -19,15 +22,17 @@ namespace radix_relay::nostr {
 template<concepts::websocket_stream WebSocketStream> class transport
 {
 public:
-  using send_bytes_to_session_fn_t = std::function<void(std::vector<std::byte>)>;
+  using send_event_fn_t = std::function<void(events::transport::event_variant_t)>;
 
 private:
   bool connected_{ false };
-  send_bytes_to_session_fn_t send_bytes_to_session_;
+  send_event_fn_t send_event_;
+  const boost::asio::io_context::strand *session_strand_;
   std::shared_ptr<WebSocketStream> ws_;
   boost::asio::io_context &io_context_;
   static constexpr size_t read_buffer_size = 8192;
   std::array<std::byte, read_buffer_size> read_buffer_{};
+  std::unordered_map<std::string, std::vector<std::byte>> pending_sends_;
 
   std::string host_;
   std::string port_;
@@ -78,11 +83,14 @@ private:
   auto handle_read(const boost::system::error_code &error, std::size_t bytes_transferred) -> void
   {
     if (!error and bytes_transferred > 0) {
-      if (send_bytes_to_session_) {
-        std::vector<std::byte> bytes(
-          read_buffer_.begin(), read_buffer_.begin() + static_cast<std::ptrdiff_t>(bytes_transferred));
-        send_bytes_to_session_(std::move(bytes));
-      }
+      std::vector<std::byte> bytes(
+        read_buffer_.begin(), read_buffer_.begin() + static_cast<std::ptrdiff_t>(bytes_transferred));
+
+      boost::asio::post(*session_strand_, [this, bytes]() {
+        events::transport::bytes_received evt{ .bytes = bytes };
+        send_event_(std::move(evt));
+      });
+
       start_read();
     } else {
       connected_ = false;
@@ -90,61 +98,116 @@ private:
   }
 
 public:
-  using connect_handler_t = std::function<void(const boost::system::error_code &)>;
-
   transport(std::shared_ptr<WebSocketStream> websocket_stream,
     boost::asio::io_context &io_context,
-    send_bytes_to_session_fn_t send_bytes_to_session)
-    : send_bytes_to_session_(std::move(send_bytes_to_session)), ws_(std::move(websocket_stream)),
+    const boost::asio::io_context::strand *session_strand,
+    send_event_fn_t send_event)
+    : send_event_(std::move(send_event)), session_strand_(session_strand), ws_(std::move(websocket_stream)),
       io_context_(io_context)
   {}
 
-  ~transport() { disconnect(); }
+  ~transport()
+  {
+    if (connected_) {
+      connected_ = false;
+      ws_->async_close([](const boost::system::error_code & /*error*/, std::size_t /*bytes*/) {});
+    }
+  }
 
   transport(const transport &) = delete;
   auto operator=(const transport &) -> transport & = delete;
   transport(transport &&) = delete;
   auto operator=(transport &&) -> transport & = delete;
 
-  auto async_connect(const std::string_view address, connect_handler_t handler) -> void
+  auto handle_command(const events::transport::connect &cmd) noexcept -> void
   {
-    parse_url(address);
+    // Parse URL - can throw std::runtime_error for invalid URLs
+    try {
+      parse_url(cmd.url);
+    } catch (const std::runtime_error &e) {
+      boost::asio::post(*session_strand_, [this, url = cmd.url, error_msg = std::string(e.what())]() {
+        events::transport::connect_failed evt{ .url = url, .error_message = error_msg };
+        send_event_(std::move(evt));
+      });
+      return;
+    }
 
-    ws_->async_connect(host_,
-      port_,
-      path_,
-      [this, handler = std::move(handler)](const boost::system::error_code &error_code, std::size_t /*bytes*/) {
+    // Initiate async connect
+    ws_->async_connect(
+      host_, port_, path_, [this, url = cmd.url](const boost::system::error_code &error_code, std::size_t /*bytes*/) {
         if (!error_code) {
           connected_ = true;
           start_read();
+          boost::asio::post(*session_strand_, [this, url]() {
+            events::transport::connected evt{ .url = url };
+            send_event_(std::move(evt));
+          });
+        } else {
+          boost::asio::post(*session_strand_, [this, url, error_msg = error_code.message()]() {
+            events::transport::connect_failed evt{ .url = url, .error_message = error_msg };
+            send_event_(std::move(evt));
+          });
         }
-        handler(error_code);
       });
   }
 
-  auto send(std::span<const std::byte> payload) -> void
+  auto handle_command(const events::transport::send &cmd) noexcept -> void
   {
-    if (!connected_) { throw std::runtime_error("Not connected"); }
+    if (!connected_) {
+      boost::asio::post(*session_strand_, [this, message_id = cmd.message_id]() {
+        events::transport::send_failed evt{ .message_id = message_id, .error_message = "Not connected" };
+        send_event_(std::move(evt));
+      });
+      return;
+    }
 
-    // Copy data to ensure it stays alive during async operation
-    auto data = std::make_shared<std::vector<std::byte>>(payload.begin(), payload.end());
+    // Allocate data buffer - can throw std::bad_alloc
+    std::shared_ptr<std::vector<std::byte>> data;
+    try {
+      data = std::make_shared<std::vector<std::byte>>(cmd.bytes);
+    } catch (const std::bad_alloc &e) {
+      boost::asio::post(*session_strand_, [this, message_id = cmd.message_id, error_msg = std::string(e.what())]() {
+        events::transport::send_failed evt{ .message_id = message_id, .error_message = error_msg };
+        send_event_(std::move(evt));
+      });
+      return;
+    }
 
-    ws_->async_write(
-      std::span<const std::byte>(*data), [data](const boost::system::error_code &error, std::size_t bytes_transferred) {
+    auto message_id = cmd.message_id;
+
+    ws_->async_write(std::span<const std::byte>(*data),
+      [this, data, message_id](const boost::system::error_code &error, std::size_t bytes_transferred) {
         if (error) {
           spdlog::error("[transport] Write failed: {} (attempted {} bytes)", error.message(), data->size());
+          boost::asio::post(*session_strand_, [this, message_id, error_msg = error.message()]() {
+            events::transport::send_failed evt{ .message_id = message_id, .error_message = error_msg };
+            send_event_(std::move(evt));
+          });
         } else {
           spdlog::trace("[transport] Wrote {} bytes", bytes_transferred);
+          boost::asio::post(*session_strand_, [this, message_id]() {
+            events::transport::sent evt{ .message_id = message_id };
+            send_event_(std::move(evt));
+          });
         }
-        // data kept alive by capture until completion
       });
   }
 
-  auto disconnect() -> void
+  auto handle_command(const events::transport::disconnect & /*cmd*/) noexcept -> void
   {
     if (connected_) {
       connected_ = false;
-      ws_->async_close([](const boost::system::error_code & /*error*/, std::size_t /*bytes*/) {});
+      ws_->async_close([this](const boost::system::error_code & /*error*/, std::size_t /*bytes*/) {
+        boost::asio::post(*session_strand_, [this]() {
+          events::transport::disconnected evt{};
+          send_event_(evt);
+        });
+      });
+    } else {
+      boost::asio::post(*session_strand_, [this]() {
+        events::transport::disconnected evt{};
+        send_event_(evt);
+      });
     }
   }
 };

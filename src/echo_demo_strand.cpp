@@ -67,6 +67,8 @@ auto main() -> int
 
       std::string alice_peer_rdx;
       std::string bob_peer_rdx;
+      bool alice_connected = false;
+      bool bob_connected = false;
 
       std::cout << "\nCreating SessionOrchestrators and Transports...\n";
 
@@ -77,14 +79,6 @@ auto main() -> int
       std::shared_ptr<
         radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
         bob_orch_ptr = nullptr;
-
-      auto alice_send_to_session = [&alice_orch_ptr](const std::vector<std::byte> &bytes) {
-        if (alice_orch_ptr) { alice_orch_ptr->handle_bytes_from_transport(bytes); }
-      };
-
-      auto bob_send_to_session = [&bob_orch_ptr](const std::vector<std::byte> &bytes) {
-        if (bob_orch_ptr) { bob_orch_ptr->handle_bytes_from_transport(bytes); }
-      };
 
       // Keep io_context alive until explicitly stopped
       auto work_guard = boost::asio::make_work_guard(io_context);
@@ -99,39 +93,95 @@ auto main() -> int
       auto alice_ws = std::make_shared<radix_relay::beast_websocket_stream>(io_context);
       auto bob_ws = std::make_shared<radix_relay::beast_websocket_stream>(io_context);
 
-      radix_relay::nostr::transport alice_transport(alice_ws, io_context, alice_send_to_session);
-      radix_relay::nostr::transport bob_transport(bob_ws, io_context, bob_send_to_session);
+      // Event-driven transport: sends events TO session_strand
+      auto alice_send_transport_event = [&alice_session_strand, &alice_orch_ptr, &alice_connected](
+                                          radix_relay::events::transport::event_variant_t evt) {
+        std::visit(
+          [&alice_session_strand, &alice_orch_ptr, &alice_connected](auto &&event) {
+            using event_t = std::decay_t<decltype(event)>;
+            if constexpr (std::is_same_v<event_t, radix_relay::events::transport::bytes_received>) {
+              boost::asio::post(alice_session_strand, [&alice_orch_ptr, event]() noexcept {
+                if (alice_orch_ptr) { alice_orch_ptr->handle_event(event); }
+              });
+            } else if constexpr (std::is_same_v<event_t, radix_relay::events::transport::connected>) {
+              alice_connected = true;
+              std::cout << "   Alice connected to relay\n";
+            } else if constexpr (std::is_same_v<event_t, radix_relay::events::transport::connect_failed>) {
+              std::cout << "   Alice connection failed: " << event.error_message << "\n";
+            }
+          },
+          evt);
+      };
+
+      auto bob_send_transport_event = [&bob_session_strand, &bob_orch_ptr, &bob_connected](
+                                        radix_relay::events::transport::event_variant_t evt) {
+        std::visit(
+          [&bob_session_strand, &bob_orch_ptr, &bob_connected](auto &&event) {
+            using event_t = std::decay_t<decltype(event)>;
+            if constexpr (std::is_same_v<event_t, radix_relay::events::transport::bytes_received>) {
+              boost::asio::post(bob_session_strand, [&bob_orch_ptr, event]() noexcept {
+                if (bob_orch_ptr) { bob_orch_ptr->handle_event(event); }
+              });
+            } else if constexpr (std::is_same_v<event_t, radix_relay::events::transport::connected>) {
+              bob_connected = true;
+              std::cout << "   Bob connected to relay\n";
+            } else if constexpr (std::is_same_v<event_t, radix_relay::events::transport::connect_failed>) {
+              std::cout << "   Bob connection failed: " << event.error_message << "\n";
+            }
+          },
+          evt);
+      };
+
+      radix_relay::nostr::transport alice_transport(
+        alice_ws, io_context, &alice_session_strand, alice_send_transport_event);
+      radix_relay::nostr::transport bob_transport(bob_ws, io_context, &bob_session_strand, bob_send_transport_event);
 
       std::cout << "Connecting to Nostr relay...\n";
 
-      bool alice_connected = false;
-      bool bob_connected = false;
-
-      alice_transport.async_connect("wss://relay.damus.io", [&alice_connected](const boost::system::error_code &error) {
-        if (!error) {
-          alice_connected = true;
-          std::cout << "   Alice connected to relay\n";
-        } else {
-          std::cout << "   Alice connection failed: " << error.message() << "\n";
-        }
+      // Post connect commands to transport_strand
+      boost::asio::post(alice_transport_strand, [&alice_transport]() noexcept {
+        alice_transport.handle_command(radix_relay::events::transport::connect{ .url = "wss://relay.damus.io" });
       });
 
-      bob_transport.async_connect("wss://relay.damus.io", [&bob_connected](const boost::system::error_code &error) {
-        if (!error) {
-          bob_connected = true;
-          std::cout << "   Bob connected to relay\n";
-        } else {
-          std::cout << "   Bob connection failed: " << error.message() << "\n";
-        }
+      boost::asio::post(bob_transport_strand, [&bob_transport]() noexcept {
+        bob_transport.handle_command(radix_relay::events::transport::connect{ .url = "wss://relay.damus.io" });
       });
 
-      // Wait for connections to complete
+      // TODO: Replace polling with proper event handling - for now keep polling for acceptance test
       constexpr auto connection_poll_interval = std::chrono::milliseconds(10);
-      while (!alice_connected || !bob_connected) { std::this_thread::sleep_for(connection_poll_interval); }
+      constexpr auto connection_timeout = std::chrono::seconds(5);
+      const auto start_time = std::chrono::steady_clock::now();
+      while (
+        (!alice_connected or !bob_connected) and (std::chrono::steady_clock::now() - start_time < connection_timeout)) {
+        std::this_thread::sleep_for(connection_poll_interval);
+        // Process io_context to allow connection events
+      }
 
-      auto alice_send_bytes_to_transport = [&alice_transport_strand, &alice_transport](std::vector<std::byte> bytes) {
-        boost::asio::post(alice_transport_strand, [&alice_transport, bytes = std::move(bytes)]() {
-          alice_transport.send(std::span<const std::byte>(bytes.data(), bytes.size()));
+      if (!alice_connected or !bob_connected) {
+        std::cout << "   Warning: Connection timeout - Alice: " << (alice_connected ? "connected" : "not connected")
+                  << ", Bob: " << (bob_connected ? "connected" : "not connected") << "\n";
+      }
+
+      // Event-driven command sender: orchestrator sends commands TO transport_strand
+      auto alice_send_transport_command = [&alice_transport_strand, &alice_transport](
+                                            const radix_relay::events::transport::command_variant_t &cmd) {
+        boost::asio::post(alice_transport_strand, [&alice_transport, cmd]() {// NOLINT(bugprone-exception-escape)
+          try {
+            std::visit([&alice_transport](auto &&command) { alice_transport.handle_command(command); }, cmd);
+          } catch (const std::exception &e) {
+            spdlog::error("[alice] Failed to process transport command: {}", e.what());
+          }
+        });
+      };
+
+      auto bob_send_transport_command = [&bob_transport_strand, &bob_transport](
+                                          const radix_relay::events::transport::command_variant_t &cmd) {
+        boost::asio::post(bob_transport_strand, [&bob_transport, cmd]() {// NOLINT(bugprone-exception-escape)
+          try {
+            std::visit([&bob_transport](auto &&command) { bob_transport.handle_command(command); }, cmd);
+          } catch (const std::exception &e) {
+            spdlog::error("[bob] Failed to process transport command: {}", e.what());
+          }
         });
       };
 
@@ -171,12 +221,6 @@ auto main() -> int
               spdlog::warn("[Alice] ✗ Subscription failed (timeout)");
             }
           }
-        });
-      };
-
-      auto bob_send_bytes_to_transport = [&bob_transport_strand, &bob_transport](std::vector<std::byte> bytes) {
-        boost::asio::post(bob_transport_strand, [&bob_transport, bytes = std::move(bytes)]() {
-          bob_transport.send(std::span<const std::byte>(bytes.data(), bytes.size()));
         });
       };
 
@@ -225,7 +269,7 @@ auto main() -> int
         alice_tracker,
         radix_relay::strands{
           .main = &main_strand, .session = &alice_session_strand, .transport = &alice_transport_strand },
-        alice_send_bytes_to_transport,
+        alice_send_transport_command,
         alice_send_event_to_main);
 
       auto bob_orchestrator = std::make_shared<
@@ -233,7 +277,7 @@ auto main() -> int
         bob_tracker,
         radix_relay::strands{
           .main = &main_strand, .session = &bob_session_strand, .transport = &bob_transport_strand },
-        bob_send_bytes_to_transport,
+        bob_send_transport_command,
         bob_send_event_to_main);
 
       // Wire up pointers for circular dependency

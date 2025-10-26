@@ -92,7 +92,7 @@ function(radix_relay_setup_dependencies)
     message(STATUS "  OpenSSL libraries: ${OPENSSL_LIBRARIES}")
   endif()
 
-  find_package(Boost 1.89.0 QUIET COMPONENTS asio beast date_time logic regex system)
+  find_package(Boost 1.89.0 QUIET COMPONENTS asio beast date_time logic regex system uuid)
 
   if(NOT Boost_FOUND)
     message(STATUS "System Boost not found, building from source via CPM...")
@@ -104,7 +104,7 @@ function(radix_relay_setup_dependencies)
         GIT_TAG boost-1.89.0
         GIT_SHALLOW TRUE
         OPTIONS
-          "BOOST_INCLUDE_LIBRARIES asio;beast;system;date_time;regex;logic"
+          "BOOST_INCLUDE_LIBRARIES asio;beast;system;date_time;regex;logic;uuid"
           "BOOST_ENABLE_CMAKE ON"
         SYSTEM YES
       )
@@ -122,9 +122,21 @@ function(radix_relay_setup_dependencies)
       )
       target_link_libraries(Boost::beast INTERFACE Boost::asio Boost::system)
     endif()
+
+    # UUID is header-only but doesn't create a CMake target with BOOST_INCLUDE_LIBRARIES
+    # Create our own interface library to provide the UUID headers
+    if(NOT TARGET Boost::uuid)
+      add_library(Boost::uuid INTERFACE IMPORTED GLOBAL)
+      target_include_directories(Boost::uuid SYSTEM INTERFACE
+        "${Boost_SOURCE_DIR}/libs/uuid/include"
+        "${Boost_SOURCE_DIR}/libs/random/include"
+        "${Boost_SOURCE_DIR}/libs/io/include"
+        "${Boost_SOURCE_DIR}/libs/serialization/include"
+      )
+    endif()
   else()
     message(STATUS "Using system-provided Boost ${Boost_VERSION}")
-    # System Boost should already have Boost::beast target or Beast headers via asio
+    # System Boost should already have Boost::beast and Boost::uuid targets
   endif()
 
   if(NOT TARGET nlohmann_json::nlohmann_json)
