@@ -2,6 +2,8 @@
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <memory>
+#include <radix_relay/beast_websocket_stream.hpp>
 #include <radix_relay/events/events.hpp>
 #include <radix_relay/nostr_request_tracker.hpp>
 #include <radix_relay/nostr_transport.hpp>
@@ -16,7 +18,7 @@
 namespace radix_relay {
 
 constexpr std::size_t event_id_preview_length = 8;
-constexpr auto bundle_wait_time = std::chrono::seconds(10);
+constexpr auto bundle_wait_time = std::chrono::seconds(20);
 constexpr auto message_wait_time = std::chrono::seconds(5);
 constexpr auto subscription_wait_time = std::chrono::seconds(2);
 
@@ -84,20 +86,48 @@ auto main() -> int
         if (bob_orch_ptr) { bob_orch_ptr->handle_bytes_from_transport(bytes); }
       };
 
-      radix_relay::nostr::transport alice_transport(&io_context, alice_send_to_session);
-      radix_relay::nostr::transport bob_transport(&io_context, bob_send_to_session);
+      // Keep io_context alive until explicitly stopped
+      auto work_guard = boost::asio::make_work_guard(io_context);
+
+      // Start io_context thread early to process async operations
+      std::thread io_thread([&io_context]() {
+        spdlog::debug("io_context thread started");
+        io_context.run();
+        spdlog::debug("io_context thread stopped");
+      });
+
+      auto alice_ws = std::make_shared<radix_relay::beast_websocket_stream>(io_context);
+      auto bob_ws = std::make_shared<radix_relay::beast_websocket_stream>(io_context);
+
+      radix_relay::nostr::transport alice_transport(alice_ws, io_context, alice_send_to_session);
+      radix_relay::nostr::transport bob_transport(bob_ws, io_context, bob_send_to_session);
 
       std::cout << "Connecting to Nostr relay...\n";
-      try {
-        alice_transport.connect("wss://relay.damus.io");
-        std::cout << "   Alice connected to relay\n";
 
-        bob_transport.connect("wss://relay.damus.io");
-        std::cout << "   Bob connected to relay\n";
-      } catch (const std::exception &e) {
-        std::cout << "   Warning: Could not connect: " << e.what() << "\n";
-        std::cout << "   Continuing with local demonstration...\n";
-      }
+      bool alice_connected = false;
+      bool bob_connected = false;
+
+      alice_transport.async_connect("wss://relay.damus.io", [&alice_connected](const boost::system::error_code &error) {
+        if (!error) {
+          alice_connected = true;
+          std::cout << "   Alice connected to relay\n";
+        } else {
+          std::cout << "   Alice connection failed: " << error.message() << "\n";
+        }
+      });
+
+      bob_transport.async_connect("wss://relay.damus.io", [&bob_connected](const boost::system::error_code &error) {
+        if (!error) {
+          bob_connected = true;
+          std::cout << "   Bob connected to relay\n";
+        } else {
+          std::cout << "   Bob connection failed: " << error.message() << "\n";
+        }
+      });
+
+      // Wait for connections to complete
+      constexpr auto connection_poll_interval = std::chrono::milliseconds(10);
+      while (!alice_connected || !bob_connected) { std::this_thread::sleep_for(connection_poll_interval); }
 
       auto alice_send_bytes_to_transport = [&alice_transport_strand, &alice_transport](std::vector<std::byte> bytes) {
         boost::asio::post(alice_transport_strand, [&alice_transport, bytes = std::move(bytes)]() {
@@ -210,12 +240,6 @@ auto main() -> int
       alice_orch_ptr = alice_orchestrator;
       bob_orch_ptr = bob_orchestrator;
 
-      std::thread io_thread([&io_context]() {
-        spdlog::debug("io_context thread started");
-        io_context.run();
-        spdlog::debug("io_context thread stopped");
-      });
-
       std::cout << "\n=== Phase 1: Subscribe to bundle announcements ===\n";
       const std::string alice_bundle_sub =
         R"(["REQ","alice_bundles",{"kinds":[30078],"#d":["radix_prekey_bundle_v1"]}])";
@@ -289,6 +313,7 @@ auto main() -> int
       }
 
       std::cout << "\nStopping io_context...\n";
+      work_guard.reset();
       io_context.stop();
       if (io_thread.joinable()) { io_thread.join(); }
 

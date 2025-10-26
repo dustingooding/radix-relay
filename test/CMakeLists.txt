@@ -69,6 +69,7 @@ add_catch_test(NAME event_handler_tests SOURCES event_handler_tests.cpp)
 add_catch_test(NAME event_system_tests SOURCES event_system_tests.cpp)
 add_catch_test(NAME node_identity_tests SOURCES node_identity_tests.cpp LIBS signal_bridge_cxx)
 add_catch_test(NAME nostr_protocol_tests SOURCES nostr_protocol_tests.cpp LIBS nlohmann_json::nlohmann_json)
+add_catch_test(NAME nostr_transport_tests SOURCES nostr_transport_tests.cpp LIBS Boost::asio)
 add_catch_test(NAME nostr_message_handler_tests SOURCES nostr_message_handler_tests.cpp LIBS signal_bridge_cxx Boost::asio nlohmann_json::nlohmann_json fmt::fmt)
 add_catch_test(NAME session_orchestrator_tests SOURCES session_orchestrator_tests.cpp LIBS signal_bridge_cxx Boost::asio nlohmann_json::nlohmann_json fmt::fmt)
 add_catch_test(NAME nostr_request_tracker_tests SOURCES nostr_request_tracker_tests.cpp LIBS nlohmann_json::nlohmann_json)
@@ -88,3 +89,15 @@ endif()
 set_target_properties(signal_bridge_tests PROPERTIES
   CXX_CLANG_TIDY ""
   CXX_CPPCHECK "")
+
+# Integration test for beast_websocket_stream (not in ALL target, requires network)
+# Build with: cmake --build <build-dir> --target beast_websocket_integration_test
+# Run with: ./test/beast_websocket_integration_test
+add_executable(beast_websocket_integration_test EXCLUDE_FROM_ALL beast_websocket_integration_test.cpp)
+target_link_libraries(
+  beast_websocket_integration_test
+  PRIVATE radix_relay::radix_relay_warnings
+          radix_relay::radix_relay_options
+          radix_relay::radix_relay_core
+          Catch2::Catch2WithMain
+          Boost::asio)

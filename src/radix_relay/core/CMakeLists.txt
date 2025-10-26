@@ -15,11 +15,14 @@ target_link_system_libraries(
           fmt::fmt
           nlohmann_json::nlohmann_json
           Boost::asio
+          Boost::beast
+          Boost::system
           OpenSSL::SSL
           OpenSSL::Crypto
           CLI11::CLI11
           spdlog::spdlog)
 
+# Project include directories (warnings enabled)
 target_include_directories(radix_relay_core ${WARNING_GUARD} INTERFACE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
                                                                      $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
                                                                      $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/configured_files/include>)
