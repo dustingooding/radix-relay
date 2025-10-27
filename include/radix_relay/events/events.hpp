@@ -1,9 +1,11 @@
 #pragma once
 
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace radix_relay::events {
 
@@ -101,6 +103,66 @@ struct subscription_established
 {
   std::string subscription_id;
 };
+
+namespace transport {
+
+  struct connect
+  {
+    std::string url;
+  };
+
+  struct connected
+  {
+    std::string url;
+  };
+
+  struct connect_failed
+  {
+    std::string url;
+    std::string error_message;
+  };
+
+  struct send
+  {
+    std::string message_id;
+    std::vector<std::byte> bytes;
+  };
+
+  struct sent
+  {
+    std::string message_id;
+  };
+
+  struct send_failed
+  {
+    std::string message_id;
+    std::string error_message;
+  };
+
+  struct bytes_received
+  {
+    std::vector<std::byte> bytes;
+  };
+
+  struct disconnect
+  {
+  };
+
+  struct disconnected
+  {
+  };
+
+  template<typename T>
+  concept Command = std::same_as<T, connect> || std::same_as<T, send> || std::same_as<T, disconnect>;
+
+  template<typename T>
+  concept Event = std::same_as<T, connected> || std::same_as<T, connect_failed> || std::same_as<T, sent>
+                  || std::same_as<T, send_failed> || std::same_as<T, bytes_received> || std::same_as<T, disconnected>;
+
+  using command_variant_t = std::variant<connect, send, disconnect>;
+  using event_variant_t = std::variant<connected, connect_failed, sent, send_failed, bytes_received, disconnected>;
+
+}// namespace transport
 
 template<typename T>
 concept Command =

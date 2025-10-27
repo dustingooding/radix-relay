@@ -17,6 +17,7 @@ target_link_system_libraries(
           Boost::asio
           Boost::beast
           Boost::system
+          Boost::uuid
           OpenSSL::SSL
           OpenSSL::Crypto
           CLI11::CLI11
