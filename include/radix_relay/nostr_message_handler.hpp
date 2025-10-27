@@ -12,6 +12,7 @@
 #include <radix_relay/events/events.hpp>
 #include <radix_relay/events/nostr_events.hpp>
 #include <radix_relay/nostr_protocol.hpp>
+#include <spdlog/spdlog.h>
 #include <string>
 #include <vector>
 
@@ -49,10 +50,12 @@ public:
     };
   }
 
-  auto handle(const nostr::events::incoming::bundle_announcement &event) -> std::optional<events::session_established>
+  static auto handle(const nostr::events::incoming::bundle_announcement &event)
+    -> std::optional<events::bundle_announcement_received>
   {
-    auto peer_rdx = bridge_->add_contact_and_establish_session_from_base64(event.content, "");
-    return events::session_established{ peer_rdx };
+    return events::bundle_announcement_received{
+      .pubkey = event.pubkey, .bundle_content = event.content, .event_id = event.id
+    };
   }
 
   // Command events (called by Session on session_strand)
@@ -132,6 +135,13 @@ public:
   // Local operation (no networking, just updates DB)
   auto handle(const events::trust &cmd) -> void { bridge_->assign_contact_alias(cmd.peer, cmd.alias); }
 
+  // Establish session from bundle data (returns session_established event)
+  auto handle(const events::establish_session &cmd) -> std::optional<events::session_established>
+  {
+    auto peer_rdx = bridge_->add_contact_and_establish_session_from_base64(cmd.bundle_data, "");
+    return events::session_established{ peer_rdx };
+  }
+
   // Subscription request returns subscription_id + bytes
   static auto handle(const events::subscribe &cmd) -> std::pair<std::string, std::vector<std::byte>>
   {
@@ -147,10 +157,29 @@ public:
   }
 
   // Stubs for events we don't handle yet (required by NostrHandler concept)
-  static auto handle(const nostr::events::incoming::ok & /*event*/) -> void {}
-  static auto handle(const nostr::events::incoming::eose & /*event*/) -> void {}
-  static auto handle(const nostr::events::incoming::unknown_message & /*event*/) -> void {}
-  static auto handle(const nostr::events::incoming::unknown_protocol & /*event*/) -> void {}
+  static auto handle(const nostr::events::incoming::ok &event) -> void
+  {
+    spdlog::debug("[nostr_handler] OK received: event_id={}, accepted={}, message={}",
+      event.event_id,
+      event.accepted,
+      event.message);
+  }
+
+  static auto handle(const nostr::events::incoming::eose &event) -> void
+  {
+    spdlog::debug("[nostr_handler] EOSE received: subscription_id={}", event.subscription_id);
+  }
+
+  static auto handle(const nostr::events::incoming::unknown_message &event) -> void
+  {
+    spdlog::warn("[nostr_handler] Unknown message kind: {}", static_cast<std::uint16_t>(event.kind));
+  }
+
+  static auto handle(const nostr::events::incoming::unknown_protocol &event) -> void
+  {
+    spdlog::warn("[nostr_handler] Unknown protocol message: {}", event.message);
+  }
+
   static auto handle(const nostr::events::incoming::identity_announcement & /*event*/) -> void {}
   static auto handle(const nostr::events::incoming::session_request & /*event*/) -> void {}
   static auto handle(const nostr::events::incoming::node_status & /*event*/) -> void {}

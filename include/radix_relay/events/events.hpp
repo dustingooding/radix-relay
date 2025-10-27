@@ -69,6 +69,11 @@ struct subscribe
   std::string subscription_json;
 };
 
+struct establish_session
+{
+  std::string bundle_data;
+};
+
 struct raw_command
 {
   std::string input;
@@ -84,6 +89,13 @@ struct message_received
 struct session_established
 {
   std::string peer_rdx;
+};
+
+struct bundle_announcement_received
+{
+  std::string pubkey;
+  std::string bundle_content;
+  std::string event_id;
 };
 
 struct message_sent
@@ -165,19 +177,23 @@ namespace transport {
 }// namespace transport
 
 template<typename T>
-concept Command =
-  std::same_as<T, help> || std::same_as<T, peers> || std::same_as<T, status> || std::same_as<T, sessions>
-  || std::same_as<T, scan> || std::same_as<T, version> || std::same_as<T, mode> || std::same_as<T, send>
-  || std::same_as<T, broadcast> || std::same_as<T, connect> || std::same_as<T, publish_identity>
-  || std::same_as<T, trust> || std::same_as<T, verify> || std::same_as<T, subscribe>;
+concept Command = std::same_as<T, help> || std::same_as<T, peers> || std::same_as<T, status>
+                  || std::same_as<T, sessions> || std::same_as<T, scan> || std::same_as<T, version>
+                  || std::same_as<T, mode> || std::same_as<T, send> || std::same_as<T, broadcast>
+                  || std::same_as<T, connect> || std::same_as<T, publish_identity> || std::same_as<T, trust>
+                  || std::same_as<T, verify> || std::same_as<T, subscribe> || std::same_as<T, establish_session>;
 
 template<typename T>
-concept TransportEvent =
-  std::same_as<T, message_received> || std::same_as<T, session_established> || std::same_as<T, message_sent>
-  || std::same_as<T, bundle_published> || std::same_as<T, subscription_established>;
+concept TransportEvent = std::same_as<T, message_received> || std::same_as<T, session_established>
+                         || std::same_as<T, bundle_announcement_received> || std::same_as<T, message_sent>
+                         || std::same_as<T, bundle_published> || std::same_as<T, subscription_established>;
 
-using transport_event_variant_t =
-  std::variant<message_received, session_established, message_sent, bundle_published, subscription_established>;
+using transport_event_variant_t = std::variant<message_received,
+  session_established,
+  bundle_announcement_received,
+  message_sent,
+  bundle_published,
+  subscription_established>;
 
 template<typename T>
 concept Event = Command<T> || TransportEvent<T> || std::same_as<T, raw_command>;

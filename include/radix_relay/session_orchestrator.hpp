@@ -97,7 +97,8 @@ public:
             boost::asio::post(*self->main_strand_, [self, event_id, accepted = ok_response.accepted]() {
               self->send_event_to_main_(events::bundle_published{ .event_id = event_id, .accepted = accepted });
             });
-          } catch (const std::exception &) {
+          } catch (const std::exception &e) {
+            spdlog::warn("[session_orchestrator] OK timeout for event: {} - {}", event_id, e.what());
             boost::asio::post(*self->main_strand_,
               [self]() { self->send_event_to_main_(events::bundle_published{ .event_id = "", .accepted = false }); });
           }
@@ -130,7 +131,8 @@ public:
             boost::asio::post(*self->main_strand_, [self, sub_id = eose.subscription_id]() {
               self->send_event_to_main_(events::subscription_established{ sub_id });
             });
-          } catch (const std::exception &) {
+          } catch (const std::exception &e) {
+            spdlog::warn("[session_orchestrator] EOSE timeout for subscription: {} - {}", subscription_id, e.what());
             boost::asio::post(
               *self->main_strand_, [self]() { self->send_event_to_main_(events::subscription_established{ "" }); });
           }
@@ -265,7 +267,8 @@ public:
             nostr::events::incoming::unknown_protocol evt_inner{ json_str };
             handler_.handle(evt_inner);
           }
-        } catch (const std::exception &) {
+        } catch (const std::exception &e) {
+          spdlog::warn("[session_orchestrator] Failed to parse message: {} - Raw: {}", e.what(), json_str);
           nostr::events::incoming::unknown_protocol evt_inner{ json_str };
           handler_.handle(evt_inner);
         }
@@ -277,7 +280,7 @@ public:
   }
 
 private:
-  static constexpr auto default_timeout = std::chrono::seconds(5);
+  static constexpr auto default_timeout = std::chrono::seconds(15);
 
   nostr_message_handler<Bridge> handler_;
   std::shared_ptr<Tracker> tracker_;
