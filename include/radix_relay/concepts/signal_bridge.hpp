@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <radix_relay/signal_types.hpp>
+#include <radix_relay/signal/signal_types.hpp>
 #include <string>
 #include <vector>
 

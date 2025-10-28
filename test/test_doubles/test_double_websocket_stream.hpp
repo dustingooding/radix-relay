@@ -1,6 +1,7 @@
 #pragma once
 
 #include <radix_relay/concepts/websocket_stream.hpp>
+#include <radix_relay/transport/websocket_stream.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/system/error_code.hpp>
@@ -102,12 +103,10 @@ public:
     should_fail_close_ = false;
   }
 
-  auto async_connect(std::string_view host,
-    std::string_view port,
-    std::string_view path,
+  auto async_connect(radix_relay::transport::websocket_connection_params params,
     std::function<void(const boost::system::error_code &, std::size_t)> handler) -> void
   {
-    connections_.push_back({ std::string(host), std::string(port), std::string(path) });
+    connections_.push_back({ std::string(params.host), std::string(params.port), std::string(params.path) });
 
     boost::asio::post(io_context_, [this, handler = std::move(handler)]() {
       if (should_fail_connect_) {
@@ -134,7 +133,7 @@ public:
     });
   }
 
-  auto async_read(boost::asio::mutable_buffer buffer,
+  auto async_read(const boost::asio::mutable_buffer &buffer,
     std::function<void(const boost::system::error_code &, std::size_t)> handler) -> void
   {
     if (should_fail_read_) {

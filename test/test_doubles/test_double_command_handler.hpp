@@ -2,66 +2,75 @@
 
 #include <algorithm>
 #include <radix_relay/concepts/command_handler.hpp>
-#include <radix_relay/events/events.hpp>
+#include <radix_relay/core/events.hpp>
 #include <string>
 #include <vector>
 
 namespace radix_relay_test {
 
-struct TestDoubleCommandHandler
+struct test_double_command_handler
 {
   mutable std::vector<std::string> called_commands;
 
-  template<radix_relay::events::Command T> auto handle(const T &command) const -> void { handle_impl(command); }
+  template<radix_relay::core::events::Command T> auto handle(const T &command) const -> void { handle_impl(command); }
 
 private:
-  auto handle_impl(const radix_relay::events::help & /*command*/) const -> void { called_commands.push_back("help"); }
+  auto handle_impl(const radix_relay::core::events::help & /*command*/) const -> void
+  {
+    called_commands.push_back("help");
+  }
 
-  auto handle_impl(const radix_relay::events::peers & /*command*/) const -> void { called_commands.push_back("peers"); }
+  auto handle_impl(const radix_relay::core::events::peers & /*command*/) const -> void
+  {
+    called_commands.push_back("peers");
+  }
 
-  auto handle_impl(const radix_relay::events::status & /*command*/) const -> void
+  auto handle_impl(const radix_relay::core::events::status & /*command*/) const -> void
   {
     called_commands.push_back("status");
   }
 
-  auto handle_impl(const radix_relay::events::sessions & /*command*/) const -> void
+  auto handle_impl(const radix_relay::core::events::sessions & /*command*/) const -> void
   {
     called_commands.push_back("sessions");
   }
 
-  auto handle_impl(const radix_relay::events::scan & /*command*/) const -> void { called_commands.push_back("scan"); }
+  auto handle_impl(const radix_relay::core::events::scan & /*command*/) const -> void
+  {
+    called_commands.push_back("scan");
+  }
 
-  auto handle_impl(const radix_relay::events::version & /*command*/) const -> void
+  auto handle_impl(const radix_relay::core::events::version & /*command*/) const -> void
   {
     called_commands.push_back("version");
   }
 
-  auto handle_impl(const radix_relay::events::mode &command) const -> void
+  auto handle_impl(const radix_relay::core::events::mode &command) const -> void
   {
     called_commands.push_back("mode:" + command.new_mode);
   }
 
-  auto handle_impl(const radix_relay::events::send &command) const -> void
+  auto handle_impl(const radix_relay::core::events::send &command) const -> void
   {
     called_commands.push_back("send:" + command.peer + ":" + command.message);
   }
 
-  auto handle_impl(const radix_relay::events::broadcast &command) const -> void
+  auto handle_impl(const radix_relay::core::events::broadcast &command) const -> void
   {
     called_commands.push_back("broadcast:" + command.message);
   }
 
-  auto handle_impl(const radix_relay::events::connect &command) const -> void
+  auto handle_impl(const radix_relay::core::events::connect &command) const -> void
   {
     called_commands.push_back("connect:" + command.relay);
   }
 
-  auto handle_impl(const radix_relay::events::trust &command) const -> void
+  auto handle_impl(const radix_relay::core::events::trust &command) const -> void
   {
     called_commands.push_back("trust:" + command.peer);
   }
 
-  auto handle_impl(const radix_relay::events::verify &command) const -> void
+  auto handle_impl(const radix_relay::core::events::verify &command) const -> void
   {
     called_commands.push_back("verify:" + command.peer);
   }
@@ -79,6 +88,6 @@ public:
   auto clear_calls() const -> void { called_commands.clear(); }
 };
 
-static_assert(radix_relay::concepts::command_handler<TestDoubleCommandHandler>);
+static_assert(radix_relay::concepts::command_handler<test_double_command_handler>);
 
 }// namespace radix_relay_test

@@ -2,7 +2,7 @@
 
 #include <fmt/core.h>
 
-namespace radix_relay {
+namespace radix_relay::core {
 
 class default_printer
 {
@@ -13,4 +13,4 @@ public:
   }
 };
 
-}// namespace radix_relay
+}// namespace radix_relay::core

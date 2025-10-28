@@ -19,7 +19,7 @@ TEST_CASE("CLI parsing basic flags", "[cli_utils][cli_parser][integration]")
     std::vector<std::string> args = { "radix-relay", "--version" };
     auto argv = create_argv(args);
 
-    auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
+    auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
     REQUIRE(parsed.show_version == true);
   }
@@ -29,7 +29,7 @@ TEST_CASE("CLI parsing basic flags", "[cli_utils][cli_parser][integration]")
     std::vector<std::string> args = { "radix-relay", "--verbose" };
     auto argv = create_argv(args);
 
-    auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
+    auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
     REQUIRE(parsed.verbose == true);
   }
@@ -39,7 +39,7 @@ TEST_CASE("CLI parsing basic flags", "[cli_utils][cli_parser][integration]")
     std::vector<std::string> args = { "radix-relay", "-v" };
     auto argv = create_argv(args);
 
-    auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
+    auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
     REQUIRE(parsed.verbose == true);
   }
@@ -52,7 +52,7 @@ TEST_CASE("CLI parsing options", "[cli_utils][cli_parser][integration]")
     std::vector<std::string> args = { "radix-relay", "--identity", "/custom/path.key" };
     auto argv = create_argv(args);
 
-    auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
+    auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
     REQUIRE(parsed.identity_path == "/custom/path.key");
   }
@@ -62,7 +62,7 @@ TEST_CASE("CLI parsing options", "[cli_utils][cli_parser][integration]")
     std::vector<std::string> args = { "radix-relay", "-i", "/short/path.key" };
     auto argv = create_argv(args);
 
-    auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
+    auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
     REQUIRE(parsed.identity_path == "/short/path.key");
   }
@@ -72,7 +72,7 @@ TEST_CASE("CLI parsing options", "[cli_utils][cli_parser][integration]")
     std::vector<std::string> args = { "radix-relay", "--mode", "internet" };
     auto argv = create_argv(args);
 
-    auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
+    auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
     REQUIRE(parsed.mode == "internet");
   }
@@ -82,7 +82,7 @@ TEST_CASE("CLI parsing options", "[cli_utils][cli_parser][integration]")
     std::vector<std::string> args = { "radix-relay", "-m", "mesh" };
     auto argv = create_argv(args);
 
-    auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
+    auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
     REQUIRE(parsed.mode == "mesh");
   }
@@ -95,7 +95,7 @@ TEST_CASE("CLI parsing send subcommand", "[cli_utils][cli_parser][integration]")
     std::vector<std::string> args = { "radix-relay", "send", "alice", "hello world" };
     auto argv = create_argv(args);
 
-    auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
+    auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
     REQUIRE(parsed.send_parsed == true);
     REQUIRE(parsed.send_recipient == "alice");
@@ -107,7 +107,7 @@ TEST_CASE("CLI parsing send subcommand", "[cli_utils][cli_parser][integration]")
     std::vector<std::string> args = { "radix-relay", "-v", "--identity", "/test.key", "send", "bob", "test message" };
     auto argv = create_argv(args);
 
-    auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
+    auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
     REQUIRE(parsed.verbose == true);
     REQUIRE(parsed.identity_path == "/test.key");
@@ -124,7 +124,7 @@ TEST_CASE("CLI parsing other subcommands", "[cli_utils][cli_parser][integration]
     std::vector<std::string> args = { "radix-relay", "peers" };
     auto argv = create_argv(args);
 
-    auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
+    auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
     REQUIRE(parsed.peers_parsed == true);
   }
@@ -134,7 +134,7 @@ TEST_CASE("CLI parsing other subcommands", "[cli_utils][cli_parser][integration]
     std::vector<std::string> args = { "radix-relay", "status" };
     auto argv = create_argv(args);
 
-    auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
+    auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
     REQUIRE(parsed.status_parsed == true);
   }
@@ -144,7 +144,7 @@ TEST_CASE("CLI parsing other subcommands", "[cli_utils][cli_parser][integration]
     std::vector<std::string> args = { "radix-relay", "-v", "status" };
     auto argv = create_argv(args);
 
-    auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
+    auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
     REQUIRE(parsed.verbose == true);
     REQUIRE(parsed.status_parsed == true);
@@ -158,7 +158,7 @@ TEST_CASE("CLI parsing defaults", "[cli_utils][cli_parser][integration]")
     std::vector<std::string> args = { "radix-relay" };
     auto argv = create_argv(args);
 
-    auto parsed = radix_relay::parse_cli_args(static_cast<int>(args.size()), argv.data());
+    auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
     REQUIRE(parsed.identity_path.ends_with("/.radix/identity.db"));
     REQUIRE(parsed.mode == "hybrid");

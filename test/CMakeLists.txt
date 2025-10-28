@@ -23,7 +23,7 @@ function(add_catch_test)
     ${TEST_ARG_NAME}
     PRIVATE radix_relay::radix_relay_warnings
             radix_relay::radix_relay_options
-            radix_relay::radix_relay_core
+            radix_relay::core
             Catch2::Catch2WithMain
             ${TEST_ARG_LIBS})
 
@@ -98,6 +98,6 @@ target_link_libraries(
   beast_websocket_integration_test
   PRIVATE radix_relay::radix_relay_warnings
           radix_relay::radix_relay_options
-          radix_relay::radix_relay_core
+          radix_relay::core
           Catch2::Catch2WithMain
           Boost::asio)

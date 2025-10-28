@@ -15,15 +15,15 @@
 #include <optional>
 #include <radix_relay/concepts/request_tracker.hpp>
 #include <radix_relay/concepts/signal_bridge.hpp>
-#include <radix_relay/events/events.hpp>
-#include <radix_relay/events/nostr_events.hpp>
-#include <radix_relay/nostr_message_handler.hpp>
-#include <radix_relay/nostr_protocol.hpp>
-#include <radix_relay/uuid_generator.hpp>
+#include <radix_relay/core/events.hpp>
+#include <radix_relay/nostr/events.hpp>
+#include <radix_relay/nostr/message_handler.hpp>
+#include <radix_relay/nostr/protocol.hpp>
+#include <radix_relay/transport/uuid_generator.hpp>
 #include <spdlog/spdlog.h>
 #include <vector>
 
-namespace radix_relay {
+namespace radix_relay::core {
 
 struct strands
 {
@@ -58,7 +58,8 @@ public:
         [self, cmd]() -> boost::asio::awaitable<void> {
           auto [event_id, bytes] = self->handler_.handle(cmd);
 
-          events::transport::send transport_cmd{ .message_id = uuid_generator::generate(), .bytes = std::move(bytes) };
+          events::transport::send transport_cmd{ .message_id = transport::uuid_generator::generate(),
+            .bytes = std::move(bytes) };
           boost::asio::post(
             *self->transport_strand_, [self, transport_cmd]() { self->send_transport_command_(transport_cmd); });
 
@@ -87,7 +88,8 @@ public:
         [self, cmd]() -> boost::asio::awaitable<void> {
           auto [event_id, bytes] = self->handler_.handle(cmd);
 
-          events::transport::send transport_cmd{ .message_id = uuid_generator::generate(), .bytes = std::move(bytes) };
+          events::transport::send transport_cmd{ .message_id = transport::uuid_generator::generate(),
+            .bytes = std::move(bytes) };
           boost::asio::post(
             *self->transport_strand_, [self, transport_cmd]() { self->send_transport_command_(transport_cmd); });
 
@@ -121,7 +123,8 @@ public:
         [self, cmd]() -> boost::asio::awaitable<void> {
           auto [subscription_id, bytes] = self->handler_.handle(cmd);
 
-          events::transport::send transport_cmd{ .message_id = uuid_generator::generate(), .bytes = std::move(bytes) };
+          events::transport::send transport_cmd{ .message_id = transport::uuid_generator::generate(),
+            .bytes = std::move(bytes) };
           boost::asio::post(
             *self->transport_strand_, [self, transport_cmd]() { self->send_transport_command_(transport_cmd); });
 
@@ -282,7 +285,7 @@ public:
 private:
   static constexpr auto default_timeout = std::chrono::seconds(15);
 
-  nostr_message_handler<Bridge> handler_;
+  nostr::message_handler<Bridge> handler_;
   std::shared_ptr<Tracker> tracker_;
   const boost::asio::io_context::strand *main_strand_;
   const boost::asio::io_context::strand *session_strand_;
@@ -291,4 +294,4 @@ private:
   send_event_to_main_fn_t send_event_to_main_;
 };
 
-}// namespace radix_relay
+}// namespace radix_relay::core

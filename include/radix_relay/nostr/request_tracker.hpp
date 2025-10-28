@@ -5,7 +5,7 @@
 #include <chrono>
 #include <functional>
 #include <memory>
-#include <radix_relay/nostr_protocol.hpp>
+#include <radix_relay/nostr/protocol.hpp>
 #include <string>
 #include <unordered_map>
 
@@ -53,7 +53,8 @@ public:
   }
 
   template<typename ResponseType = protocol::ok>
-  auto async_track(std::string event_id, std::chrono::milliseconds timeout) -> boost::asio::awaitable<ResponseType>
+  [[nodiscard]] auto async_track(std::string event_id, std::chrono::milliseconds timeout)
+    -> boost::asio::awaitable<ResponseType>
   {
     auto executor = co_await boost::asio::this_coro::executor;
     boost::asio::cancellation_signal cancel_signal;

@@ -4,7 +4,7 @@
 #include <chrono>
 #include <concepts>
 #include <functional>
-#include <radix_relay/nostr_protocol.hpp>
+#include <radix_relay/nostr/protocol.hpp>
 #include <string>
 
 namespace radix_relay::concepts {

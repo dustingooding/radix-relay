@@ -2,17 +2,17 @@
 
 #include <algorithm>
 #include <radix_relay/concepts/event_handler.hpp>
-#include <radix_relay/events/events.hpp>
+#include <radix_relay/core/events.hpp>
 #include <string>
 #include <vector>
 
 namespace radix_relay_test {
 
-struct TestDoubleEventHandler
+struct test_double_event_handler
 {
   mutable std::vector<std::string> handled_raw_commands;
 
-  auto handle(const radix_relay::events::raw_command &event) const -> void
+  auto handle(const radix_relay::core::events::raw_command &event) const -> void
   {
     handled_raw_commands.push_back(event.input);
   }
@@ -34,6 +34,6 @@ struct TestDoubleEventHandler
   }
 };
 
-static_assert(radix_relay::concepts::event_handler<TestDoubleEventHandler>);
+static_assert(radix_relay::concepts::event_handler<test_double_event_handler>);
 
 }// namespace radix_relay_test

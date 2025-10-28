@@ -1,8 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
-#include <radix_relay/nostr_protocol.hpp>
+#include <radix_relay/nostr/protocol.hpp>
 #include <radix_relay/platform/env_utils.hpp>
-#include <radix_relay/signal_bridge.hpp>
+#include <radix_relay/signal/signal_bridge.hpp>
 #include <ranges>
 
 // Helper function to convert string literals to byte spans for testing

@@ -3,10 +3,10 @@
 #include <filesystem>
 #include <nlohmann/json.hpp>
 #include <optional>
-#include <radix_relay/node_identity.hpp>
-#include <radix_relay/nostr_request_tracker.hpp>
-#include <radix_relay/session_orchestrator.hpp>
-#include <radix_relay/signal_bridge.hpp>
+#include <radix_relay/core/session_orchestrator.hpp>
+#include <radix_relay/nostr/request_tracker.hpp>
+#include <radix_relay/signal/node_identity.hpp>
+#include <radix_relay/signal/signal_bridge.hpp>
 #include <ranges>
 #include <signal_bridge_cxx/lib.h>
 #include <spdlog/spdlog.h>
@@ -21,11 +21,11 @@ struct orchestrator_test_fixture
   boost::asio::io_context::strand transport_strand{ io_context };
   std::shared_ptr<radix_relay::nostr::request_tracker> tracker{ std::make_shared<radix_relay::nostr::request_tracker>(
     &io_context) };
-  mutable std::vector<radix_relay::events::transport_event_variant_t> main_events;
+  mutable std::vector<radix_relay::core::events::transport_event_variant_t> main_events;
 
-  auto make_send_event_to_main() const -> std::function<void(radix_relay::events::transport_event_variant_t)>
+  auto make_send_event_to_main() const -> std::function<void(radix_relay::core::events::transport_event_variant_t)>
   {
-    return [this](radix_relay::events::transport_event_variant_t evt) { main_events.push_back(std::move(evt)); };
+    return [this](radix_relay::core::events::transport_event_variant_t evt) { main_events.push_back(std::move(evt)); };
   }
 };
 
@@ -96,7 +96,7 @@ struct event_driven_fixture : orchestrator_test_fixture
 {
   std::string db_path;
   std::shared_ptr<radix_relay::signal::bridge> bridge;
-  mutable std::vector<radix_relay::events::transport::command_variant_t> transport_commands;
+  mutable std::vector<radix_relay::core::events::transport::command_variant_t> transport_commands;
 
   explicit event_driven_fixture(std::string path) : db_path(std::move(path))
   {
@@ -115,20 +115,22 @@ struct event_driven_fixture : orchestrator_test_fixture
   event_driven_fixture(event_driven_fixture &&) = delete;
   auto operator=(event_driven_fixture &&) -> event_driven_fixture & = delete;
 
-  auto make_send_transport_command() const -> std::function<void(radix_relay::events::transport::command_variant_t)>
+  auto make_send_transport_command() const
+    -> std::function<void(radix_relay::core::events::transport::command_variant_t)>
   {
-    return
-      [this](radix_relay::events::transport::command_variant_t cmd) { transport_commands.push_back(std::move(cmd)); };
+    return [this](radix_relay::core::events::transport::command_variant_t cmd) {
+      transport_commands.push_back(std::move(cmd));
+    };
   }
 
   auto make_orchestrator() const -> std::shared_ptr<
-    radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
+    radix_relay::core::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
   {
     if (!bridge) { throw std::runtime_error("Bridge not initialized"); }
     return std::make_shared<
-      radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(bridge,
+      radix_relay::core::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(bridge,
       tracker,
-      radix_relay::strands{ .main = &main_strand, .session = &session_strand, .transport = &transport_strand },
+      radix_relay::core::strands{ .main = &main_strand, .session = &session_strand, .transport = &transport_strand },
       make_send_transport_command(),
       make_send_event_to_main());
   }
@@ -145,13 +147,14 @@ TEST_CASE("session_orchestrator event-driven sends transport::send command", "[s
 
   auto orchestrator = event_fixture.make_orchestrator();
 
-  orchestrator->handle_command(radix_relay::events::send{ .peer = fixture.bob_rdx, .message = "Hello via events!" });
+  orchestrator->handle_command(
+    radix_relay::core::events::send{ .peer = fixture.bob_rdx, .message = "Hello via events!" });
   event_fixture.io_context.poll();
 
   REQUIRE(event_fixture.transport_commands.size() == 1);
-  REQUIRE(std::holds_alternative<radix_relay::events::transport::send>(event_fixture.transport_commands[0]));
+  REQUIRE(std::holds_alternative<radix_relay::core::events::transport::send>(event_fixture.transport_commands[0]));
 
-  const auto &send_cmd = std::get<radix_relay::events::transport::send>(event_fixture.transport_commands[0]);
+  const auto &send_cmd = std::get<radix_relay::core::events::transport::send>(event_fixture.transport_commands[0]);
   CHECK_FALSE(send_cmd.message_id.empty());
   CHECK_FALSE(send_cmd.bytes.empty());
 
@@ -169,17 +172,18 @@ TEST_CASE("session_orchestrator event-driven receives bytes via transport::bytes
 
   auto orchestrator = event_fixture.make_orchestrator();
 
-  orchestrator->handle_command(radix_relay::events::send{ .peer = fixture.bob_rdx, .message = "Request session" });
+  orchestrator->handle_command(
+    radix_relay::core::events::send{ .peer = fixture.bob_rdx, .message = "Request session" });
   event_fixture.io_context.poll();
 
   REQUIRE(event_fixture.transport_commands.size() == 1);
 
   auto parsed = nlohmann::json::parse(
-    bytes_to_string(std::get<radix_relay::events::transport::send>(event_fixture.transport_commands[0]).bytes));
+    bytes_to_string(std::get<radix_relay::core::events::transport::send>(event_fixture.transport_commands[0]).bytes));
   const std::string event_id = parsed[1]["id"].get<std::string>();
 
   const std::string ok_message = R"(["OK",")" + event_id + R"(",true,""])";
-  const radix_relay::events::transport::bytes_received recv_evt{ .bytes = string_to_bytes(ok_message) };
+  const radix_relay::core::events::transport::bytes_received recv_evt{ .bytes = string_to_bytes(ok_message) };
 
   boost::asio::post(event_fixture.session_strand, [orchestrator, recv_evt]() {// NOLINT(bugprone-exception-escape)
     try {
@@ -192,8 +196,8 @@ TEST_CASE("session_orchestrator event-driven receives bytes via transport::bytes
   event_fixture.io_context.run();
 
   REQUIRE(event_fixture.main_events.size() == 1);
-  CHECK(std::holds_alternative<radix_relay::events::message_sent>(event_fixture.main_events[0]));
-  const auto &msg_sent = std::get<radix_relay::events::message_sent>(event_fixture.main_events[0]);
+  CHECK(std::holds_alternative<radix_relay::core::events::message_sent>(event_fixture.main_events[0]));
+  const auto &msg_sent = std::get<radix_relay::core::events::message_sent>(event_fixture.main_events[0]);
   CHECK(msg_sent.event_id == event_id);
   CHECK(msg_sent.accepted);
 }
@@ -204,13 +208,13 @@ TEST_CASE("session_orchestrator event-driven publish_identity sends transport co
   event_driven_fixture fixture("/tmp/session_orch_event_publish.db");
   auto orchestrator = fixture.make_orchestrator();
 
-  orchestrator->handle_command(radix_relay::events::publish_identity{});
+  orchestrator->handle_command(radix_relay::core::events::publish_identity{});
   fixture.io_context.poll();
 
   REQUIRE(fixture.transport_commands.size() == 1);
-  REQUIRE(std::holds_alternative<radix_relay::events::transport::send>(fixture.transport_commands[0]));
+  REQUIRE(std::holds_alternative<radix_relay::core::events::transport::send>(fixture.transport_commands[0]));
 
-  const auto &send_cmd = std::get<radix_relay::events::transport::send>(fixture.transport_commands[0]);
+  const auto &send_cmd = std::get<radix_relay::core::events::transport::send>(fixture.transport_commands[0]);
   CHECK_FALSE(send_cmd.message_id.empty());
   CHECK_FALSE(send_cmd.bytes.empty());
 }
@@ -221,14 +225,14 @@ TEST_CASE("session_orchestrator event-driven subscribe sends transport command",
   auto orchestrator = fixture.make_orchestrator();
 
   const std::string subscription_json = R"(["REQ","test_sub_789",{"kinds":[40001]}])";
-  orchestrator->handle_command(radix_relay::events::subscribe{ .subscription_json = subscription_json });
+  orchestrator->handle_command(radix_relay::core::events::subscribe{ .subscription_json = subscription_json });
 
   fixture.io_context.poll();
 
   REQUIRE(fixture.transport_commands.size() == 1);
-  REQUIRE(std::holds_alternative<radix_relay::events::transport::send>(fixture.transport_commands[0]));
+  REQUIRE(std::holds_alternative<radix_relay::core::events::transport::send>(fixture.transport_commands[0]));
 
-  const auto &send_cmd = std::get<radix_relay::events::transport::send>(fixture.transport_commands[0]);
+  const auto &send_cmd = std::get<radix_relay::core::events::transport::send>(fixture.transport_commands[0]);
   CHECK_FALSE(send_cmd.message_id.empty());
   CHECK(bytes_to_string(send_cmd.bytes) == subscription_json);
 }
@@ -262,7 +266,7 @@ TEST_CASE("session_orchestrator event-driven handles incoming encrypted_message"
     { "tags", nlohmann::json::array({ nlohmann::json::array({ "p", fixture.alice_rdx }) }) } };
 
   const std::string nostr_message_json = nlohmann::json::array({ "EVENT", "sub_id", event_json }).dump();
-  const radix_relay::events::transport::bytes_received recv_evt{ .bytes = string_to_bytes(nostr_message_json) };
+  const radix_relay::core::events::transport::bytes_received recv_evt{ .bytes = string_to_bytes(nostr_message_json) };
 
   boost::asio::post(event_fixture.session_strand, [orchestrator, recv_evt]() {// NOLINT(bugprone-exception-escape)
     try {
@@ -275,9 +279,9 @@ TEST_CASE("session_orchestrator event-driven handles incoming encrypted_message"
   event_fixture.io_context.run();
 
   REQUIRE(event_fixture.main_events.size() == 1);
-  CHECK(std::holds_alternative<radix_relay::events::message_received>(event_fixture.main_events[0]));
+  CHECK(std::holds_alternative<radix_relay::core::events::message_received>(event_fixture.main_events[0]));
 
-  const auto &msg = std::get<radix_relay::events::message_received>(event_fixture.main_events[0]);
+  const auto &msg = std::get<radix_relay::core::events::message_received>(event_fixture.main_events[0]);
   CHECK(msg.sender_rdx == fixture.alice_rdx);
   CHECK(msg.content == plaintext);
 }
@@ -309,7 +313,7 @@ TEST_CASE("session_orchestrator event-driven handles incoming bundle_announcemen
         nlohmann::json::array({ "rdx", alice_rdx_tag }) }) } };
 
   const std::string nostr_message_json = nlohmann::json::array({ "EVENT", "bundle_sub", event_json }).dump();
-  const radix_relay::events::transport::bytes_received recv_evt{ .bytes = string_to_bytes(nostr_message_json) };
+  const radix_relay::core::events::transport::bytes_received recv_evt{ .bytes = string_to_bytes(nostr_message_json) };
 
   boost::asio::post(bob_fixture.session_strand, [bob_orchestrator, recv_evt]() {// NOLINT(bugprone-exception-escape)
     try {
@@ -322,9 +326,9 @@ TEST_CASE("session_orchestrator event-driven handles incoming bundle_announcemen
   bob_fixture.io_context.run();
 
   REQUIRE(bob_fixture.main_events.size() == 1);
-  CHECK(std::holds_alternative<radix_relay::events::bundle_announcement_received>(bob_fixture.main_events[0]));
+  CHECK(std::holds_alternative<radix_relay::core::events::bundle_announcement_received>(bob_fixture.main_events[0]));
 
-  const auto &bundle = std::get<radix_relay::events::bundle_announcement_received>(bob_fixture.main_events[0]);
+  const auto &bundle = std::get<radix_relay::core::events::bundle_announcement_received>(bob_fixture.main_events[0]);
   CHECK(bundle.pubkey == "alice_nostr_pubkey");
   CHECK(bundle.bundle_content == alice_bundle_base64);
   CHECK(bundle.event_id == "test_bundle_event_id");
@@ -336,7 +340,7 @@ TEST_CASE("session_orchestrator event-driven handles malformed JSON", "[session_
   auto orchestrator = fixture.make_orchestrator();
 
   const std::string malformed_json = "{ this is not valid json }";
-  const radix_relay::events::transport::bytes_received recv_evt{ .bytes = string_to_bytes(malformed_json) };
+  const radix_relay::core::events::transport::bytes_received recv_evt{ .bytes = string_to_bytes(malformed_json) };
 
   boost::asio::post(fixture.session_strand, [orchestrator, recv_evt]() {// NOLINT(bugprone-exception-escape)
     try {
@@ -357,7 +361,8 @@ TEST_CASE("session_orchestrator event-driven handles unknown protocol", "[sessio
   auto orchestrator = fixture.make_orchestrator();
 
   const std::string unknown_protocol_message = R"(["UNKNOWN_MESSAGE_TYPE","param1","param2"])";
-  const radix_relay::events::transport::bytes_received recv_evt{ .bytes = string_to_bytes(unknown_protocol_message) };
+  const radix_relay::core::events::transport::bytes_received recv_evt{ .bytes =
+                                                                         string_to_bytes(unknown_protocol_message) };
 
   boost::asio::post(fixture.session_strand, [orchestrator, recv_evt]() {// NOLINT(bugprone-exception-escape)
     try {
@@ -378,7 +383,7 @@ TEST_CASE("session_orchestrator event-driven async tracking timeout for publish_
   event_driven_fixture fixture("/tmp/session_orch_event_publish_timeout.db");
   auto orchestrator = fixture.make_orchestrator();
 
-  orchestrator->handle_command(radix_relay::events::publish_identity{});
+  orchestrator->handle_command(radix_relay::core::events::publish_identity{});
   fixture.io_context.poll();
 
   REQUIRE(fixture.transport_commands.size() == 1);
@@ -386,9 +391,9 @@ TEST_CASE("session_orchestrator event-driven async tracking timeout for publish_
   fixture.io_context.run();
 
   REQUIRE(fixture.main_events.size() == 1);
-  CHECK(std::holds_alternative<radix_relay::events::bundle_published>(fixture.main_events[0]));
+  CHECK(std::holds_alternative<radix_relay::core::events::bundle_published>(fixture.main_events[0]));
 
-  const auto &pub = std::get<radix_relay::events::bundle_published>(fixture.main_events[0]);
+  const auto &pub = std::get<radix_relay::core::events::bundle_published>(fixture.main_events[0]);
   CHECK(pub.event_id.empty());
   CHECK_FALSE(pub.accepted);
 }
@@ -400,7 +405,7 @@ TEST_CASE("session_orchestrator event-driven async tracking timeout for subscrib
   auto orchestrator = fixture.make_orchestrator();
 
   const std::string subscription_json = R"(["REQ","timeout_sub",{"kinds":[40001]}])";
-  orchestrator->handle_command(radix_relay::events::subscribe{ .subscription_json = subscription_json });
+  orchestrator->handle_command(radix_relay::core::events::subscribe{ .subscription_json = subscription_json });
 
   fixture.io_context.poll();
 
@@ -409,8 +414,8 @@ TEST_CASE("session_orchestrator event-driven async tracking timeout for subscrib
   fixture.io_context.run();
 
   REQUIRE(fixture.main_events.size() == 1);
-  CHECK(std::holds_alternative<radix_relay::events::subscription_established>(fixture.main_events[0]));
+  CHECK(std::holds_alternative<radix_relay::core::events::subscription_established>(fixture.main_events[0]));
 
-  const auto &sub = std::get<radix_relay::events::subscription_established>(fixture.main_events[0]);
+  const auto &sub = std::get<radix_relay::core::events::subscription_established>(fixture.main_events[0]);
   CHECK(sub.subscription_id.empty());
 }
