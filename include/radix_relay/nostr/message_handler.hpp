@@ -9,23 +9,24 @@
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <radix_relay/concepts/signal_bridge.hpp>
-#include <radix_relay/events/events.hpp>
-#include <radix_relay/events/nostr_events.hpp>
-#include <radix_relay/nostr_protocol.hpp>
+#include <radix_relay/core/events.hpp>
+#include <radix_relay/nostr/events.hpp>
+#include <radix_relay/nostr/protocol.hpp>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <vector>
 
-namespace radix_relay {
+namespace radix_relay::nostr {
 
-template<concepts::signal_bridge Bridge> class nostr_message_handler
+template<concepts::signal_bridge Bridge> class message_handler
 {
 public:
-  explicit nostr_message_handler(std::shared_ptr<Bridge> bridge) : bridge_(bridge) {}
+  explicit message_handler(std::shared_ptr<Bridge> bridge) : bridge_(bridge) {}
 
   // Incoming Nostr events (called by Session on session_strand)
   // Returns optional event to post to main_strand
-  auto handle(const nostr::events::incoming::encrypted_message &event) -> std::optional<events::message_received>
+  [[nodiscard]] auto handle(const nostr::events::incoming::encrypted_message &event)
+    -> std::optional<core::events::message_received>
   {
     auto p_tag = std::ranges::find_if(event.tags, [](const auto &tag) { return tag.size() >= 2 && tag[0] == "p"; });
 
@@ -45,22 +46,22 @@ public:
 
     const std::string decrypted_content(decrypted_bytes.begin(), decrypted_bytes.end());
 
-    return events::message_received{
+    return core::events::message_received{
       .sender_rdx = sender_rdx, .content = decrypted_content, .timestamp = event.created_at
     };
   }
 
-  static auto handle(const nostr::events::incoming::bundle_announcement &event)
-    -> std::optional<events::bundle_announcement_received>
+  [[nodiscard]] static auto handle(const nostr::events::incoming::bundle_announcement &event)
+    -> std::optional<core::events::bundle_announcement_received>
   {
-    return events::bundle_announcement_received{
+    return core::events::bundle_announcement_received{
       .pubkey = event.pubkey, .bundle_content = event.content, .event_id = event.id
     };
   }
 
   // Command events (called by Session on session_strand)
   // Returns pair of <event_id, bytes> to track and send
-  auto handle(const events::send &cmd) -> std::pair<std::string, std::vector<std::byte>>
+  [[nodiscard]] auto handle(const core::events::send &cmd) -> std::pair<std::string, std::vector<std::byte>>
   {
     std::vector<uint8_t> plaintext_bytes(cmd.message.begin(), cmd.message.end());
     auto encrypted_bytes = bridge_->encrypt_message(cmd.peer, plaintext_bytes);
@@ -99,7 +100,8 @@ public:
     return { event_id, bytes };
   }
 
-  auto handle(const events::publish_identity & /*command*/) -> std::pair<std::string, std::vector<std::byte>>
+  [[nodiscard]] auto handle(const core::events::publish_identity & /*command*/)
+    -> std::pair<std::string, std::vector<std::byte>>
   {
     const std::string version_str = "0.1.0";
     auto bundle_json = bridge_->generate_prekey_bundle_announcement(version_str);
@@ -133,17 +135,18 @@ public:
   }
 
   // Local operation (no networking, just updates DB)
-  auto handle(const events::trust &cmd) -> void { bridge_->assign_contact_alias(cmd.peer, cmd.alias); }
+  auto handle(const core::events::trust &cmd) -> void { bridge_->assign_contact_alias(cmd.peer, cmd.alias); }
 
   // Establish session from bundle data (returns session_established event)
-  auto handle(const events::establish_session &cmd) -> std::optional<events::session_established>
+  [[nodiscard]] auto handle(const core::events::establish_session &cmd)
+    -> std::optional<core::events::session_established>
   {
     auto peer_rdx = bridge_->add_contact_and_establish_session_from_base64(cmd.bundle_data, "");
-    return events::session_established{ peer_rdx };
+    return core::events::session_established{ peer_rdx };
   }
 
   // Subscription request returns subscription_id + bytes
-  static auto handle(const events::subscribe &cmd) -> std::pair<std::string, std::vector<std::byte>>
+  [[nodiscard]] static auto handle(const core::events::subscribe &cmd) -> std::pair<std::string, std::vector<std::byte>>
   {
     std::vector<std::byte> bytes;
     bytes.resize(cmd.subscription_json.size());
@@ -156,7 +159,6 @@ public:
     return { subscription_id, bytes };
   }
 
-  // Stubs for events we don't handle yet (required by NostrHandler concept)
   static auto handle(const nostr::events::incoming::ok &event) -> void
   {
     spdlog::debug("[nostr_handler] OK received: event_id={}, accepted={}, message={}",
@@ -188,4 +190,4 @@ private:
   std::shared_ptr<Bridge> bridge_;
 };
 
-}// namespace radix_relay
+}// namespace radix_relay::nostr

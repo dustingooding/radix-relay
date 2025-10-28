@@ -5,7 +5,7 @@
 #include <spdlog/spdlog.h>
 #include <string>
 
-namespace radix_relay {
+namespace radix_relay::cli_utils {
 
 struct cli_args
 {
@@ -24,7 +24,7 @@ struct cli_args
 
 inline auto setup_cli_app(CLI::App &app, cli_args &args) -> void;
 
-inline auto parse_cli_args(int argc, char **argv) -> cli_args
+[[nodiscard]] inline auto parse_cli_args(int argc, char **argv) -> cli_args
 {
   cli_args args;
   CLI::App app{ "Radix Relay - Hybrid Mesh Communications", "radix-relay" };
@@ -63,7 +63,7 @@ inline auto setup_cli_app(CLI::App &app, cli_args &args) -> void
   status_cmd->callback([&args]() { args.status_parsed = true; });
 }
 
-inline auto validate_cli_args(const cli_args &args) -> bool
+[[nodiscard]] inline auto validate_cli_args(const cli_args &args) -> bool
 {
   if (args.mode != "internet" and args.mode != "mesh" and args.mode != "hybrid") {
     spdlog::error("Invalid mode: {}", args.mode);
@@ -84,4 +84,4 @@ inline auto validate_cli_args(const cli_args &args) -> bool
   return true;
 }
 
-}// namespace radix_relay
+}// namespace radix_relay::cli_utils

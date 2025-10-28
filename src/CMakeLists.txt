@@ -1,5 +1,4 @@
 add_subdirectory(radix_relay)
-add_subdirectory(radix_relay/core)
 
 # Echo demonstration executable (strand-based architecture)
 add_executable(echo_demo_strand echo_demo_strand.cpp)
@@ -8,7 +7,7 @@ target_link_libraries(
   echo_demo_strand
   PRIVATE radix_relay::radix_relay_options
           radix_relay::radix_relay_warnings
-          radix_relay::radix_relay_core)
+          radix_relay::core)
 
 target_link_system_libraries(
   echo_demo_strand

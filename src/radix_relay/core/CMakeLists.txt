@@ -1,31 +1,30 @@
+# Core is now an INTERFACE library that aggregates everything
 add_library(radix_relay_core INTERFACE)
 
-add_library(radix_relay::radix_relay_core ALIAS radix_relay_core)
+add_library(radix_relay::core ALIAS radix_relay_core)
 
 include(${PROJECT_SOURCE_DIR}/cmake/SystemLink.cmake)
 
+# Link all compiled sub-libraries
 target_link_libraries(
   radix_relay_core
   INTERFACE
-          signal_bridge_cxx)
+          radix_relay::nostr_protocol
+          radix_relay::signal
+          radix_relay::transport
+          radix_relay::platform)
 
+# Add remaining dependencies needed by header-only templates
 target_link_system_libraries(
   radix_relay_core
   INTERFACE
           fmt::fmt
-          nlohmann_json::nlohmann_json
-          Boost::asio
-          Boost::beast
-          Boost::system
-          Boost::uuid
-          OpenSSL::SSL
-          OpenSSL::Crypto
           CLI11::CLI11
           spdlog::spdlog)
 
-# Project include directories (warnings enabled)
-target_include_directories(radix_relay_core ${WARNING_GUARD} INTERFACE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-                                                                     $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
-                                                                     $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/configured_files/include>)
+target_include_directories(radix_relay_core ${WARNING_GUARD} INTERFACE
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+  $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
+  $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/configured_files/include>)
 
 target_compile_features(radix_relay_core INTERFACE cxx_std_20)

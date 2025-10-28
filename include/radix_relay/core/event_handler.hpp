@@ -2,11 +2,11 @@
 
 #include <memory>
 #include <radix_relay/concepts/command_handler.hpp>
-#include <radix_relay/events/events.hpp>
+#include <radix_relay/core/events.hpp>
 #include <string>
 #include <string_view>
 
-namespace radix_relay {
+namespace radix_relay::core {
 
 template<concepts::command_handler CmdHandler> struct event_handler
 {
@@ -92,4 +92,4 @@ private:
   std::shared_ptr<CmdHandler> command_handler_;
 };
 
-}// namespace radix_relay
+}// namespace radix_relay::core

@@ -4,12 +4,12 @@
 #include <memory>
 #include <radix_relay/cli_utils/cli_parser.hpp>
 #include <radix_relay/concepts/command_handler.hpp>
-#include <radix_relay/node_identity.hpp>
-#include <radix_relay/standard_event_handler.hpp>
+#include <radix_relay/core/standard_event_handler.hpp>
+#include <radix_relay/signal/node_identity.hpp>
 #include <spdlog/spdlog.h>
 #include <string>
 
-namespace radix_relay {
+namespace radix_relay::cli_utils {
 
 struct app_state
 {
@@ -40,30 +40,31 @@ inline auto print_available_commands() -> void
 }
 
 template<concepts::command_handler CmdHandler>
-inline auto execute_cli_command(const cli_args &args, std::shared_ptr<CmdHandler> command_handler) -> bool
+[[nodiscard]] inline auto execute_cli_command(const cli_args &args, std::shared_ptr<CmdHandler> command_handler) -> bool
 {
 
   if (args.show_version) {
-    command_handler->handle(radix_relay::events::version{});
+    command_handler->handle(radix_relay::core::events::version{});
     return true;
   }
 
   if (args.send_parsed) {
-    command_handler->handle(radix_relay::events::send{ .peer = args.send_recipient, .message = args.send_message });
+    command_handler->handle(
+      radix_relay::core::events::send{ .peer = args.send_recipient, .message = args.send_message });
     return true;
   }
 
   if (args.peers_parsed) {
-    command_handler->handle(radix_relay::events::peers{});
+    command_handler->handle(radix_relay::core::events::peers{});
     return true;
   }
 
   if (args.status_parsed) {
-    command_handler->handle(radix_relay::events::status{});
+    command_handler->handle(radix_relay::core::events::status{});
     return true;
   }
 
   return false;
 }
 
-}// namespace radix_relay
+}// namespace radix_relay::cli_utils

@@ -1,10 +1,17 @@
+# Add library subdirectories
+add_subdirectory(nostr)
+add_subdirectory(signal)
+add_subdirectory(transport)
+add_subdirectory(platform)
+add_subdirectory(core)
+
 add_executable(radix-relay main.cpp)
 
 target_link_libraries(
   radix-relay
   PRIVATE radix_relay::radix_relay_options
           radix_relay::radix_relay_warnings
-          radix_relay::radix_relay_core)
+          radix_relay::core)
 
 target_link_system_libraries(
   radix-relay

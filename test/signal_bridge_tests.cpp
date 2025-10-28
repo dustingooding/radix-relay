@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <nlohmann/json.hpp>
 #include <radix_relay/platform/env_utils.hpp>
-#include <radix_relay/signal_bridge.hpp>
+#include <radix_relay/signal/signal_bridge.hpp>
 
 TEST_CASE("signal::bridge basic functionality", "[signal][wrapper]")
 {

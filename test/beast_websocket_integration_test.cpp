@@ -1,4 +1,4 @@
-// Integration test for beast_websocket_stream with real network connections
+// Integration test for websocket_stream with real network connections
 // Not included in default test suite - build manually when needed
 //
 // Usage:
@@ -7,7 +7,7 @@
 //
 // This test connects to wss://echo.websocket.org which echoes back any message sent
 
-#include <radix_relay/beast_websocket_stream.hpp>
+#include <radix_relay/transport/websocket_stream.hpp>
 
 #include <boost/asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -52,7 +52,7 @@ TEST_CASE("Beast WebSocket can connect to echo server", "[integration][network]"
   };
   const cleanup_guard guard{ work_guard, io_context, io_thread };
 
-  auto websocket = std::make_shared<radix_relay::beast_websocket_stream>(io_context);
+  auto websocket = std::make_shared<radix_relay::transport::websocket_stream>(io_context);
 
   SECTION("Connect to wss://echo.websocket.org")
   {
@@ -60,9 +60,7 @@ TEST_CASE("Beast WebSocket can connect to echo server", "[integration][network]"
     bool has_error = false;
 
     std::string error_message;
-    websocket->async_connect("echo.websocket.org",
-      "443",
-      "/",
+    websocket->async_connect({ .host = "echo.websocket.org", .port = "443", .path = "/" },
       [&connected, &has_error, &error_message](const boost::system::error_code &error, std::size_t /*bytes*/) {
         connected = !error;
         has_error = static_cast<bool>(error);

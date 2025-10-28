@@ -6,7 +6,7 @@
 
 namespace radix_relay_test {
 
-class TestDoublePrinter
+class test_double_printer
 {
 public:
   template<typename... Args> auto print(fmt::format_string<Args...> format_string, Args &&...args) -> void

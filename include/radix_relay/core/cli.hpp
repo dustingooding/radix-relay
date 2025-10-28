@@ -4,11 +4,11 @@
 #include <iostream>
 #include <memory>
 #include <radix_relay/concepts/event_handler.hpp>
-#include <radix_relay/events/events.hpp>
+#include <radix_relay/core/events.hpp>
 #include <string>
 #include <string_view>
 
-namespace radix_relay {
+namespace radix_relay::core {
 
 template<concepts::event_handler EvtHandler> struct interactive_cli
 {
@@ -36,7 +36,7 @@ template<concepts::event_handler EvtHandler> struct interactive_cli
     }
   }
 
-  static auto should_quit(const std::string &input) -> bool
+  [[nodiscard]] static auto should_quit(const std::string &input) -> bool
   {
     if (input == "quit" || input == "exit" || input == "q") {
       fmt::print("Goodbye!\n");
@@ -45,7 +45,7 @@ template<concepts::event_handler EvtHandler> struct interactive_cli
     return false;
   }
 
-  auto handle_command(const std::string &input) -> bool
+  [[nodiscard]] auto handle_command(const std::string &input) -> bool
   {
     constexpr auto mode_cmd = "mode ";
     if (input.starts_with(mode_cmd)) {
@@ -71,4 +71,4 @@ private:
   std::shared_ptr<EvtHandler> event_handler_;
 };
 
-}// namespace radix_relay
+}// namespace radix_relay::core

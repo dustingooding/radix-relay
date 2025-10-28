@@ -5,12 +5,12 @@
 #include <radix_relay/concepts/command_handler.hpp>
 #include <radix_relay/concepts/printer.hpp>
 #include <radix_relay/concepts/signal_bridge.hpp>
-#include <radix_relay/default_printer.hpp>
-#include <radix_relay/events/events.hpp>
+#include <radix_relay/core/default_printer.hpp>
+#include <radix_relay/core/events.hpp>
 
 #include "internal_use_only/config.hpp"
 
-namespace radix_relay {
+namespace radix_relay::core {
 
 template<concepts::signal_bridge Bridge, concepts::printer Printer = default_printer> struct command_handler
 {
@@ -21,7 +21,7 @@ template<concepts::signal_bridge Bridge, concepts::printer Printer = default_pri
 
   template<events::Command T> auto handle(const T &command) const -> void { handle_impl(command); }
 
-  auto get_bridge() -> std::shared_ptr<Bridge> { return bridge_; }
+  [[nodiscard]] auto get_bridge() -> std::shared_ptr<Bridge> { return bridge_; }
 
 private:
   auto handle_impl(const events::help & /*command*/) const -> void
@@ -160,4 +160,4 @@ private:
   bool initialized_ = true;
 };
 
-}// namespace radix_relay
+}// namespace radix_relay::core

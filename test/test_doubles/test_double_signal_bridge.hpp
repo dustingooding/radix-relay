@@ -1,13 +1,13 @@
 #pragma once
 
 #include <radix_relay/concepts/signal_bridge.hpp>
-#include <radix_relay/signal_types.hpp>
+#include <radix_relay/signal/signal_types.hpp>
 #include <string>
 #include <vector>
 
 namespace radix_relay_test {
 
-struct TestDoubleSignalBridge
+struct test_double_signal_bridge
 {
   mutable std::vector<std::string> called_methods;
   std::string fingerprint_to_return = "RDX:test_fingerprint";
@@ -94,6 +94,6 @@ struct TestDoubleSignalBridge
   }
 };
 
-static_assert(radix_relay::concepts::signal_bridge<TestDoubleSignalBridge>);
+static_assert(radix_relay::concepts::signal_bridge<test_double_signal_bridge>);
 
 }// namespace radix_relay_test

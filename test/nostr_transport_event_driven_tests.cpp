@@ -1,6 +1,6 @@
 #include "test_doubles/test_double_websocket_stream.hpp"
-#include <radix_relay/events/events.hpp>
-#include <radix_relay/nostr_transport.hpp>
+#include <radix_relay/core/events.hpp>
+#include <radix_relay/nostr/transport.hpp>
 
 #include <boost/asio.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -23,15 +23,15 @@ SCENARIO("Event-driven transport handles connect command", "[nostr][transport][e
 
     WHEN("Transport receives connect command on transport strand")
     {
-      std::vector<events::transport::event_variant_t> received_events;
+      std::vector<core::events::transport::event_variant_t> received_events;
 
       auto send_event = [&received_events](
-                          events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
+                          core::events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
 
       transport<radix_relay::test::test_double_websocket_stream> transport(
         fake, io_context, &session_strand, send_event);
 
-      const events::transport::connect cmd{ .url = "wss://relay.damus.io" };
+      const core::events::transport::connect cmd{ .url = "wss://relay.damus.io" };
       boost::asio::post(transport_strand, [&transport, cmd]() {// NOLINT(bugprone-exception-escape)
         try {
           transport.handle_command(cmd);
@@ -54,8 +54,8 @@ SCENARIO("Event-driven transport handles connect command", "[nostr][transport][e
       AND_THEN("Transport emits connected event")
       {
         REQUIRE(received_events.size() == 1);
-        REQUIRE(std::holds_alternative<events::transport::connected>(received_events[0]));
-        const auto &connected_evt = std::get<events::transport::connected>(received_events[0]);
+        REQUIRE(std::holds_alternative<core::events::transport::connected>(received_events[0]));
+        const auto &connected_evt = std::get<core::events::transport::connected>(received_events[0]);
         REQUIRE(connected_evt.url == "wss://relay.damus.io");
       }
     }
@@ -71,14 +71,14 @@ SCENARIO("Event-driven transport handles send command", "[nostr][transport][even
     const boost::asio::io_context::strand session_strand{ io_context };
     auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
 
-    std::vector<events::transport::event_variant_t> received_events;
+    std::vector<core::events::transport::event_variant_t> received_events;
 
     auto send_event = [&received_events](
-                        events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
+                        core::events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
 
     transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, &session_strand, send_event);
 
-    const events::transport::connect connect_cmd{ .url = "wss://relay.damus.io" };
+    const core::events::transport::connect connect_cmd{ .url = "wss://relay.damus.io" };
     boost::asio::post(transport_strand, [&transport, connect_cmd]() {// NOLINT(bugprone-exception-escape)
       try {
         transport.handle_command(connect_cmd);
@@ -94,7 +94,7 @@ SCENARIO("Event-driven transport handles send command", "[nostr][transport][even
       received_events.clear();
 
       std::vector<std::byte> data{ std::byte{ 0x01 }, std::byte{ 0x02 }, std::byte{ 0x03 } };
-      const events::transport::send send_cmd{ .message_id = "test-msg-id", .bytes = data };
+      const core::events::transport::send send_cmd{ .message_id = "test-msg-id", .bytes = data };
       boost::asio::post(transport_strand, [&transport, send_cmd]() {// NOLINT(bugprone-exception-escape)
         try {
           transport.handle_command(send_cmd);
@@ -116,8 +116,8 @@ SCENARIO("Event-driven transport handles send command", "[nostr][transport][even
       AND_THEN("Transport emits sent event with message ID")
       {
         REQUIRE(received_events.size() == 1);
-        REQUIRE(std::holds_alternative<events::transport::sent>(received_events[0]));
-        const auto &sent_evt = std::get<events::transport::sent>(received_events[0]);
+        REQUIRE(std::holds_alternative<core::events::transport::sent>(received_events[0]));
+        const auto &sent_evt = std::get<core::events::transport::sent>(received_events[0]);
         REQUIRE(sent_evt.message_id == "test-msg-id");
       }
     }
@@ -133,14 +133,14 @@ SCENARIO("Event-driven transport emits bytes_received event", "[nostr][transport
     const boost::asio::io_context::strand session_strand{ io_context };
     auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
 
-    std::vector<events::transport::event_variant_t> received_events;
+    std::vector<core::events::transport::event_variant_t> received_events;
 
     auto send_event = [&received_events](
-                        events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
+                        core::events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
 
     transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, &session_strand, send_event);
 
-    const events::transport::connect connect_cmd{ .url = "wss://relay.damus.io" };
+    const core::events::transport::connect connect_cmd{ .url = "wss://relay.damus.io" };
     boost::asio::post(transport_strand, [&transport, connect_cmd]() {// NOLINT(bugprone-exception-escape)
       try {
         transport.handle_command(connect_cmd);
@@ -167,8 +167,8 @@ SCENARIO("Event-driven transport emits bytes_received event", "[nostr][transport
       THEN("Transport emits bytes_received event")
       {
         REQUIRE(received_events.size() == 1);
-        REQUIRE(std::holds_alternative<events::transport::bytes_received>(received_events[0]));
-        const auto &received_evt = std::get<events::transport::bytes_received>(received_events[0]);
+        REQUIRE(std::holds_alternative<core::events::transport::bytes_received>(received_events[0]));
+        const auto &received_evt = std::get<core::events::transport::bytes_received>(received_events[0]);
         REQUIRE(received_evt.bytes == incoming_data);
       }
     }
@@ -184,14 +184,14 @@ SCENARIO("Event-driven transport handles disconnect command", "[nostr][transport
     const boost::asio::io_context::strand session_strand{ io_context };
     auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
 
-    std::vector<events::transport::event_variant_t> received_events;
+    std::vector<core::events::transport::event_variant_t> received_events;
 
     auto send_event = [&received_events](
-                        events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
+                        core::events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
 
     transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, &session_strand, send_event);
 
-    const events::transport::connect connect_cmd{ .url = "wss://relay.damus.io" };
+    const core::events::transport::connect connect_cmd{ .url = "wss://relay.damus.io" };
     boost::asio::post(transport_strand, [&transport, connect_cmd]() {// NOLINT(bugprone-exception-escape)
       try {
         transport.handle_command(connect_cmd);
@@ -206,7 +206,7 @@ SCENARIO("Event-driven transport handles disconnect command", "[nostr][transport
     {
       received_events.clear();
 
-      const events::transport::disconnect disconnect_cmd{};
+      const core::events::transport::disconnect disconnect_cmd{};
       boost::asio::post(transport_strand, [&transport, disconnect_cmd]() {// NOLINT(bugprone-exception-escape)
         try {
           transport.handle_command(disconnect_cmd);
@@ -221,7 +221,7 @@ SCENARIO("Event-driven transport handles disconnect command", "[nostr][transport
       THEN("Transport emits disconnected event")
       {
         REQUIRE(received_events.size() == 1);
-        REQUIRE(std::holds_alternative<events::transport::disconnected>(received_events[0]));
+        REQUIRE(std::holds_alternative<core::events::transport::disconnected>(received_events[0]));
       }
     }
   }
@@ -238,17 +238,17 @@ SCENARIO("Event-driven transport emits connect_failed event", "[nostr][transport
 
     WHEN("Transport receives connect command and connection fails")
     {
-      std::vector<events::transport::event_variant_t> received_events;
+      std::vector<core::events::transport::event_variant_t> received_events;
 
       auto send_event = [&received_events](
-                          events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
+                          core::events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
 
       transport<radix_relay::test::test_double_websocket_stream> transport(
         fake, io_context, &session_strand, send_event);
 
       fake->set_connect_failure(true);
 
-      const events::transport::connect cmd{ .url = "wss://relay.damus.io" };
+      const core::events::transport::connect cmd{ .url = "wss://relay.damus.io" };
       boost::asio::post(transport_strand, [&transport, cmd]() {// NOLINT(bugprone-exception-escape)
         try {
           transport.handle_command(cmd);
@@ -262,8 +262,8 @@ SCENARIO("Event-driven transport emits connect_failed event", "[nostr][transport
       THEN("Transport emits connect_failed event")
       {
         REQUIRE(received_events.size() == 1);
-        REQUIRE(std::holds_alternative<events::transport::connect_failed>(received_events[0]));
-        const auto &failed_evt = std::get<events::transport::connect_failed>(received_events[0]);
+        REQUIRE(std::holds_alternative<core::events::transport::connect_failed>(received_events[0]));
+        const auto &failed_evt = std::get<core::events::transport::connect_failed>(received_events[0]);
         REQUIRE(failed_evt.url == "wss://relay.damus.io");
         REQUIRE(!failed_evt.error_message.empty());
       }
@@ -280,14 +280,14 @@ SCENARIO("Event-driven transport emits send_failed event on write failure", "[no
     const boost::asio::io_context::strand session_strand{ io_context };
     auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
 
-    std::vector<events::transport::event_variant_t> received_events;
+    std::vector<core::events::transport::event_variant_t> received_events;
 
     auto send_event = [&received_events](
-                        events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
+                        core::events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
 
     transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, &session_strand, send_event);
 
-    const events::transport::connect connect_cmd{ .url = "wss://relay.damus.io" };
+    const core::events::transport::connect connect_cmd{ .url = "wss://relay.damus.io" };
     boost::asio::post(transport_strand, [&transport, connect_cmd]() {// NOLINT(bugprone-exception-escape)
       try {
         transport.handle_command(connect_cmd);
@@ -305,7 +305,7 @@ SCENARIO("Event-driven transport emits send_failed event on write failure", "[no
       fake->set_write_failure(true);
 
       const std::vector<std::byte> data{ std::byte{ 0x01 }, std::byte{ 0x02 }, std::byte{ 0x03 } };
-      const events::transport::send send_cmd{ .message_id = "test-msg-id", .bytes = data };
+      const core::events::transport::send send_cmd{ .message_id = "test-msg-id", .bytes = data };
       boost::asio::post(transport_strand, [&transport, send_cmd]() {// NOLINT(bugprone-exception-escape)
         try {
           transport.handle_command(send_cmd);
@@ -320,8 +320,8 @@ SCENARIO("Event-driven transport emits send_failed event on write failure", "[no
       THEN("Transport emits send_failed event with message ID")
       {
         REQUIRE(received_events.size() == 1);
-        REQUIRE(std::holds_alternative<events::transport::send_failed>(received_events[0]));
-        const auto &failed_evt = std::get<events::transport::send_failed>(received_events[0]);
+        REQUIRE(std::holds_alternative<core::events::transport::send_failed>(received_events[0]));
+        const auto &failed_evt = std::get<core::events::transport::send_failed>(received_events[0]);
         REQUIRE(failed_evt.message_id == "test-msg-id");
         REQUIRE(!failed_evt.error_message.empty());
       }
@@ -338,17 +338,17 @@ SCENARIO("Event-driven transport emits send_failed event when not connected", "[
     const boost::asio::io_context::strand session_strand{ io_context };
     auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
 
-    std::vector<events::transport::event_variant_t> received_events;
+    std::vector<core::events::transport::event_variant_t> received_events;
 
     auto send_event = [&received_events](
-                        events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
+                        core::events::transport::event_variant_t evt) { received_events.push_back(std::move(evt)); };
 
     transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, &session_strand, send_event);
 
     WHEN("Transport receives send command without being connected")
     {
       const std::vector<std::byte> data{ std::byte{ 0x01 }, std::byte{ 0x02 }, std::byte{ 0x03 } };
-      const events::transport::send send_cmd{ .message_id = "test-msg-id", .bytes = data };
+      const core::events::transport::send send_cmd{ .message_id = "test-msg-id", .bytes = data };
       boost::asio::post(transport_strand, [&transport, send_cmd]() {// NOLINT(bugprone-exception-escape)
         try {
           transport.handle_command(send_cmd);
@@ -362,8 +362,8 @@ SCENARIO("Event-driven transport emits send_failed event when not connected", "[
       THEN("Transport emits send_failed event with 'Not connected' error")
       {
         REQUIRE(received_events.size() == 1);
-        REQUIRE(std::holds_alternative<events::transport::send_failed>(received_events[0]));
-        const auto &failed_evt = std::get<events::transport::send_failed>(received_events[0]);
+        REQUIRE(std::holds_alternative<core::events::transport::send_failed>(received_events[0]));
+        const auto &failed_evt = std::get<core::events::transport::send_failed>(received_events[0]);
         REQUIRE(failed_evt.message_id == "test-msg-id");
         REQUIRE(failed_evt.error_message == "Not connected");
       }

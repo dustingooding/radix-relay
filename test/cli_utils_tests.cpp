@@ -1,19 +1,19 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdio>
 #include <filesystem>
-#include <radix_relay/signal_bridge.hpp>
+#include <radix_relay/signal/signal_bridge.hpp>
 #include <sstream>
 #include <tuple>
 #include <vector>
 
 #include <radix_relay/cli_utils/app_init.hpp>
 #include <radix_relay/cli_utils/cli_parser.hpp>
-#include <radix_relay/node_identity.hpp>
 #include <radix_relay/platform/env_utils.hpp>
+#include <radix_relay/signal/node_identity.hpp>
 
 TEST_CASE("cli_args default values", "[cli_utils][cli_parser]")
 {
-  radix_relay::cli_args args;
+  radix_relay::cli_utils::cli_args args;
 
   REQUIRE(args.identity_path == "~/.radix/identity.db");
   REQUIRE(args.mode == "hybrid");
@@ -30,36 +30,36 @@ TEST_CASE("validate_cli_args validates mode", "[cli_utils][cli_parser]")
 {
   SECTION("valid modes pass validation")
   {
-    radix_relay::cli_args args;
+    radix_relay::cli_utils::cli_args args;
 
     args.mode = "internet";
-    REQUIRE(radix_relay::validate_cli_args(args) == true);
+    REQUIRE(radix_relay::cli_utils::validate_cli_args(args) == true);
 
     args.mode = "mesh";
-    REQUIRE(radix_relay::validate_cli_args(args) == true);
+    REQUIRE(radix_relay::cli_utils::validate_cli_args(args) == true);
 
     args.mode = "hybrid";
-    REQUIRE(radix_relay::validate_cli_args(args) == true);
+    REQUIRE(radix_relay::cli_utils::validate_cli_args(args) == true);
   }
 
   SECTION("invalid modes fail validation")
   {
-    radix_relay::cli_args args;
+    radix_relay::cli_utils::cli_args args;
 
     args.mode = "invalid";
-    REQUIRE(radix_relay::validate_cli_args(args) == false);
+    REQUIRE(radix_relay::cli_utils::validate_cli_args(args) == false);
 
     args.mode = "";
-    REQUIRE(radix_relay::validate_cli_args(args) == false);
+    REQUIRE(radix_relay::cli_utils::validate_cli_args(args) == false);
 
     args.mode = "HYBRID";
-    REQUIRE(radix_relay::validate_cli_args(args) == false);
+    REQUIRE(radix_relay::cli_utils::validate_cli_args(args) == false);
   }
 }
 
 TEST_CASE("validate_cli_args validates send command", "[cli_utils][cli_parser]")
 {
-  radix_relay::cli_args args;
+  radix_relay::cli_utils::cli_args args;
 
   SECTION("send command with valid args passes")
   {
@@ -67,7 +67,7 @@ TEST_CASE("validate_cli_args validates send command", "[cli_utils][cli_parser]")
     args.send_recipient = "alice";
     args.send_message = "hello";
 
-    REQUIRE(radix_relay::validate_cli_args(args) == true);
+    REQUIRE(radix_relay::cli_utils::validate_cli_args(args) == true);
   }
 
   SECTION("send command with empty recipient fails")
@@ -76,7 +76,7 @@ TEST_CASE("validate_cli_args validates send command", "[cli_utils][cli_parser]")
     args.send_recipient = "";
     args.send_message = "hello";
 
-    REQUIRE(radix_relay::validate_cli_args(args) == false);
+    REQUIRE(radix_relay::cli_utils::validate_cli_args(args) == false);
   }
 
   SECTION("send command with empty message fails")
@@ -85,7 +85,7 @@ TEST_CASE("validate_cli_args validates send command", "[cli_utils][cli_parser]")
     args.send_recipient = "alice";
     args.send_message = "";
 
-    REQUIRE(radix_relay::validate_cli_args(args) == false);
+    REQUIRE(radix_relay::cli_utils::validate_cli_args(args) == false);
   }
 
   SECTION("non-send commands ignore send validation")
@@ -94,7 +94,7 @@ TEST_CASE("validate_cli_args validates send command", "[cli_utils][cli_parser]")
     args.send_recipient = "";
     args.send_message = "";
 
-    REQUIRE(radix_relay::validate_cli_args(args) == true);
+    REQUIRE(radix_relay::cli_utils::validate_cli_args(args) == true);
   }
 }
 
@@ -104,11 +104,12 @@ TEST_CASE("execute_cli_command handles version flag", "[cli_utils][app_init]")
     std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_version.db";
   {
     auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-    auto command_handler = std::make_shared<radix_relay::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
-    radix_relay::cli_args args;
+    auto command_handler =
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+    radix_relay::cli_utils::cli_args args;
     args.show_version = true;
 
-    REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
+    REQUIRE(radix_relay::cli_utils::execute_cli_command(args, command_handler) == true);
   }
   std::ignore = std::filesystem::remove(db_path);
 }
@@ -118,13 +119,14 @@ TEST_CASE("execute_cli_command handles send command", "[cli_utils][app_init]")
   const auto db_path = std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_send.db";
   {
     auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-    auto command_handler = std::make_shared<radix_relay::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
-    radix_relay::cli_args args;
+    auto command_handler =
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+    radix_relay::cli_utils::cli_args args;
     args.send_parsed = true;
     args.send_recipient = "alice";
     args.send_message = "test message";
 
-    REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
+    REQUIRE(radix_relay::cli_utils::execute_cli_command(args, command_handler) == true);
   }
   std::ignore = std::filesystem::remove(db_path);
 }
@@ -134,11 +136,12 @@ TEST_CASE("execute_cli_command handles peers command", "[cli_utils][app_init]")
   const auto db_path = std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_peers.db";
   {
     auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-    auto command_handler = std::make_shared<radix_relay::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
-    radix_relay::cli_args args;
+    auto command_handler =
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+    radix_relay::cli_utils::cli_args args;
     args.peers_parsed = true;
 
-    REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
+    REQUIRE(radix_relay::cli_utils::execute_cli_command(args, command_handler) == true);
   }
   std::ignore = std::filesystem::remove(db_path);
 }
@@ -149,11 +152,12 @@ TEST_CASE("execute_cli_command handles status command", "[cli_utils][app_init]")
     std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_status.db";
   {
     auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-    auto command_handler = std::make_shared<radix_relay::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
-    radix_relay::cli_args args;
+    auto command_handler =
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+    radix_relay::cli_utils::cli_args args;
     args.status_parsed = true;
 
-    REQUIRE(radix_relay::execute_cli_command(args, command_handler) == true);
+    REQUIRE(radix_relay::cli_utils::execute_cli_command(args, command_handler) == true);
   }
   std::ignore = std::filesystem::remove(db_path);
 }
@@ -163,10 +167,11 @@ TEST_CASE("execute_cli_command returns false for no commands", "[cli_utils][app_
   const auto db_path = std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_false.db";
   {
     auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
-    auto command_handler = std::make_shared<radix_relay::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
-    const radix_relay::cli_args args;
+    auto command_handler =
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+    const radix_relay::cli_utils::cli_args args;
 
-    REQUIRE(radix_relay::execute_cli_command(args, command_handler) == false);
+    REQUIRE(radix_relay::cli_utils::execute_cli_command(args, command_handler) == false);
   }
   std::ignore = std::filesystem::remove(db_path);
 }
@@ -175,16 +180,16 @@ TEST_CASE("configure_logging sets debug level when verbose", "[cli_utils][app_in
 {
   SECTION("verbose flag enables debug logging")
   {
-    radix_relay::cli_args args;
+    radix_relay::cli_utils::cli_args args;
     args.verbose = true;
-    REQUIRE_NOTHROW(radix_relay::configure_logging(args));
+    REQUIRE_NOTHROW(radix_relay::cli_utils::configure_logging(args));
   }
 
   SECTION("non-verbose flag does nothing")
   {
-    radix_relay::cli_args args;
+    radix_relay::cli_utils::cli_args args;
     args.verbose = false;
-    REQUIRE_NOTHROW(radix_relay::configure_logging(args));
+    REQUIRE_NOTHROW(radix_relay::cli_utils::configure_logging(args));
   }
 }
 
@@ -205,7 +210,7 @@ TEST_CASE("get_node_fingerprint returns valid fingerprint", "[cli_utils][app_ini
 
 TEST_CASE("app_state construction", "[cli_utils][app_init]")
 {
-  radix_relay::app_state state{
+  radix_relay::cli_utils::app_state state{
     .node_fingerprint = "RDX:test123", .mode = "hybrid", .identity_path = "~/.radix/test.key"
   };
 
@@ -216,11 +221,14 @@ TEST_CASE("app_state construction", "[cli_utils][app_init]")
 
 TEST_CASE("print functions execute without throwing", "[cli_utils][app_init]")
 {
-  const radix_relay::app_state state{
+  const radix_relay::cli_utils::app_state state{
     .node_fingerprint = "RDX:test123", .mode = "hybrid", .identity_path = "~/.radix/test.key"
   };
 
-  SECTION("print_app_banner executes safely") { REQUIRE_NOTHROW(radix_relay::print_app_banner(state)); }
+  SECTION("print_app_banner executes safely") { REQUIRE_NOTHROW(radix_relay::cli_utils::print_app_banner(state)); }
 
-  SECTION("print_available_commands executes safely") { REQUIRE_NOTHROW(radix_relay::print_available_commands()); }
+  SECTION("print_available_commands executes safely")
+  {
+    REQUIRE_NOTHROW(radix_relay::cli_utils::print_available_commands());
+  }
 }

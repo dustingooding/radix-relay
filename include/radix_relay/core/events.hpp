@@ -7,7 +7,7 @@
 #include <variant>
 #include <vector>
 
-namespace radix_relay::events {
+namespace radix_relay::core::events {
 
 struct help
 {
@@ -198,4 +198,4 @@ using transport_event_variant_t = std::variant<message_received,
 template<typename T>
 concept Event = Command<T> || TransportEvent<T> || std::same_as<T, raw_command>;
 
-}// namespace radix_relay::events
+}// namespace radix_relay::core::events

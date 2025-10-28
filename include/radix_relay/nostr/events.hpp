@@ -1,6 +1,6 @@
 #pragma once
 
-#include <radix_relay/nostr_protocol.hpp>
+#include <radix_relay/nostr/protocol.hpp>
 
 namespace radix_relay::nostr::events {
 
@@ -92,14 +92,7 @@ namespace outgoing {
 
     explicit subscription_request(std::string sub_json) : subscription_json(std::move(sub_json)) {}
 
-    [[nodiscard]] auto get_subscription_id() const -> std::string
-    {
-      auto json_obj = nlohmann::json::parse(subscription_json);
-      if (!json_obj.is_array() || json_obj.size() < 2 || !json_obj[1].is_string()) {
-        throw std::runtime_error("Invalid subscription JSON format");
-      }
-      return json_obj[1].get<std::string>();
-    }
+    [[nodiscard]] auto get_subscription_id() const -> std::string;
   };
 
 }// namespace outgoing
