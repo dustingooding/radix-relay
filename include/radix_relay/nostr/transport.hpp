@@ -53,7 +53,7 @@ private:
     if (addr_str.starts_with("wss://")) {
       addr_str = addr_str.substr(wss_prefix_length);
       port_ = "443";
-    } else if (!addr_str.starts_with("http")) {
+    } else if (not addr_str.starts_with("http")) {
       port_ = "443";
     }
 
@@ -82,7 +82,7 @@ private:
 
   auto handle_read(const boost::system::error_code &error, std::size_t bytes_transferred) -> void
   {
-    if (!error and bytes_transferred > 0) {
+    if (not error and bytes_transferred > 0) {
       std::vector<std::byte> bytes(
         read_buffer_.begin(), read_buffer_.begin() + static_cast<std::ptrdiff_t>(bytes_transferred));
 
@@ -135,7 +135,7 @@ public:
     // Initiate async connect
     ws_->async_connect({ .host = host_, .port = port_, .path = path_ },
       [this, url = cmd.url](const boost::system::error_code &error_code, std::size_t /*bytes*/) {
-        if (!error_code) {
+        if (not error_code) {
           connected_ = true;
           start_read();
           boost::asio::post(*session_strand_, [this, url]() {
@@ -153,7 +153,7 @@ public:
 
   auto handle_command(const core::events::transport::send &cmd) noexcept -> void
   {
-    if (!connected_) {
+    if (not connected_) {
       boost::asio::post(*session_strand_, [this, message_id = cmd.message_id]() {
         core::events::transport::send_failed evt{ .message_id = message_id, .error_message = "Not connected" };
         send_event_(std::move(evt));

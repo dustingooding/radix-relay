@@ -62,7 +62,7 @@ TEST_CASE("Beast WebSocket can connect to echo server", "[integration][network]"
     std::string error_message;
     websocket->async_connect({ .host = "echo.websocket.org", .port = "443", .path = "/" },
       [&connected, &has_error, &error_message](const boost::system::error_code &error, std::size_t /*bytes*/) {
-        connected = !error;
+        connected = not error;
         has_error = static_cast<bool>(error);
         if (error) { error_message = error.message(); }
       });
@@ -71,7 +71,7 @@ TEST_CASE("Beast WebSocket can connect to echo server", "[integration][network]"
     constexpr auto wait_interval = std::chrono::milliseconds(10);
     constexpr int max_wait = 500;// 5 seconds
     int wait_count = 0;
-    while (!connected && !has_error && wait_count < max_wait) {
+    while (not connected and not has_error and wait_count < max_wait) {
       std::this_thread::sleep_for(wait_interval);
       ++wait_count;
     }
@@ -92,10 +92,10 @@ TEST_CASE("Beast WebSocket can connect to echo server", "[integration][network]"
       bool write_done = false;
       auto send_span = std::span<const std::byte>(send_data);
       websocket->async_write(send_span,
-        [&write_done](const boost::system::error_code &error, std::size_t /*bytes*/) { write_done = !error; });
+        [&write_done](const boost::system::error_code &error, std::size_t /*bytes*/) { write_done = not error; });
 
       wait_count = 0;
-      while (!write_done && wait_count < max_wait) {
+      while (not write_done and wait_count < max_wait) {
         std::this_thread::sleep_for(wait_interval);
         ++wait_count;
       }
@@ -111,14 +111,14 @@ TEST_CASE("Beast WebSocket can connect to echo server", "[integration][network]"
 
       websocket->async_read(boost::asio::buffer(read_buffer),
         [&first_read_done, &first_bytes_read](const boost::system::error_code &error, std::size_t bytes) {
-          if (!error) {
+          if (not error) {
             first_read_done = true;
             first_bytes_read = bytes;
           }
         });
 
       wait_count = 0;
-      while (!first_read_done && wait_count < max_wait) {
+      while (not first_read_done and wait_count < max_wait) {
         std::this_thread::sleep_for(wait_interval);
         ++wait_count;
       }
@@ -137,14 +137,14 @@ TEST_CASE("Beast WebSocket can connect to echo server", "[integration][network]"
 
       websocket->async_read(boost::asio::buffer(read_buffer),
         [&second_read_done, &second_bytes_read](const boost::system::error_code &error, std::size_t bytes) {
-          if (!error) {
+          if (not error) {
             second_read_done = true;
             second_bytes_read = bytes;
           }
         });
 
       wait_count = 0;
-      while (!second_read_done && wait_count < max_wait) {
+      while (not second_read_done and wait_count < max_wait) {
         std::this_thread::sleep_for(wait_interval);
         ++wait_count;
       }

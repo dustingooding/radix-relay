@@ -65,7 +65,7 @@ public:
 private:
   auto complete_pending_read() -> void
   {
-    if (!pending_read_handler_) { return; }
+    if (not pending_read_handler_) { return; }
 
     const auto buffer_size = pending_read_buffer_.size();
     const auto available = read_data_.size() - read_position_;

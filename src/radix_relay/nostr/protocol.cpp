@@ -22,31 +22,31 @@ auto event_data::deserialize(const std::string &json) -> std::optional<event_dat
 
     event_data event;
 
-    if (!json_obj.contains("id") || !json_obj["id"].is_string()) { return std::nullopt; }
+    if (not json_obj.contains("id") or not json_obj["id"].is_string()) { return std::nullopt; }
     event.id = json_obj["id"].get<std::string>();
 
-    if (!json_obj.contains("pubkey") || !json_obj["pubkey"].is_string()) { return std::nullopt; }
+    if (not json_obj.contains("pubkey") or not json_obj["pubkey"].is_string()) { return std::nullopt; }
     event.pubkey = json_obj["pubkey"].get<std::string>();
 
-    if (!json_obj.contains("created_at") || !json_obj["created_at"].is_number()) { return std::nullopt; }
+    if (not json_obj.contains("created_at") or not json_obj["created_at"].is_number()) { return std::nullopt; }
     event.created_at = json_obj["created_at"].get<std::uint64_t>();
 
-    if (!json_obj.contains("kind") || !json_obj["kind"].is_number()) { return std::nullopt; }
+    if (not json_obj.contains("kind") or not json_obj["kind"].is_number()) { return std::nullopt; }
     event.kind = json_obj["kind"].get<enum kind>();
 
-    if (!json_obj.contains("content") || !json_obj["content"].is_string()) { return std::nullopt; }
+    if (not json_obj.contains("content") or not json_obj["content"].is_string()) { return std::nullopt; }
     event.content = json_obj["content"].get<std::string>();
 
-    if (!json_obj.contains("sig") || !json_obj["sig"].is_string()) { return std::nullopt; }
+    if (not json_obj.contains("sig") or not json_obj["sig"].is_string()) { return std::nullopt; }
     event.sig = json_obj["sig"].get<std::string>();
 
     if (json_obj.contains("tags")) {
-      if (!json_obj["tags"].is_array()) { return std::nullopt; }
+      if (not json_obj["tags"].is_array()) { return std::nullopt; }
       for (const auto &tag_json : json_obj["tags"]) {
-        if (!tag_json.is_array()) { return std::nullopt; }
+        if (not tag_json.is_array()) { return std::nullopt; }
         std::vector<std::string> tag;
         for (const auto &element : tag_json) {
-          if (!element.is_string()) { return std::nullopt; }
+          if (not element.is_string()) { return std::nullopt; }
           tag.push_back(element.get<std::string>());
         }
         event.tags.push_back(std::move(tag));
@@ -189,15 +189,15 @@ auto ok::deserialize(const std::string &json) -> std::optional<ok>
   try {
     auto json_obj = nlohmann::json::parse(json);
 
-    if (!json_obj.is_array() || json_obj.size() < 3) { return std::nullopt; }
-    if (!json_obj[0].is_string() || json_obj[0].get<std::string>() != "OK") { return std::nullopt; }
-    if (!json_obj[1].is_string()) { return std::nullopt; }
-    if (!json_obj[2].is_boolean()) { return std::nullopt; }
+    if (not json_obj.is_array() or json_obj.size() < 3) { return std::nullopt; }
+    if (not json_obj[0].is_string() or json_obj[0].get<std::string>() != "OK") { return std::nullopt; }
+    if (not json_obj[1].is_string()) { return std::nullopt; }
+    if (not json_obj[2].is_boolean()) { return std::nullopt; }
 
     ok result;
     result.event_id = json_obj[1].get<std::string>();
     result.accepted = json_obj[2].get<bool>();
-    result.message = (json_obj.size() > 3 && json_obj[3].is_string()) ? json_obj[3].get<std::string>() : "";
+    result.message = (json_obj.size() > 3 and json_obj[3].is_string()) ? json_obj[3].get<std::string>() : "";
 
     return result;
   } catch (const std::exception &) {
@@ -210,9 +210,9 @@ auto eose::deserialize(const std::string &json) -> std::optional<eose>
   try {
     auto json_obj = nlohmann::json::parse(json);
 
-    if (!json_obj.is_array() || json_obj.size() < 2) { return std::nullopt; }
-    if (!json_obj[0].is_string() || json_obj[0].get<std::string>() != "EOSE") { return std::nullopt; }
-    if (!json_obj[1].is_string()) { return std::nullopt; }
+    if (not json_obj.is_array() or json_obj.size() < 2) { return std::nullopt; }
+    if (not json_obj[0].is_string() or json_obj[0].get<std::string>() != "EOSE") { return std::nullopt; }
+    if (not json_obj[1].is_string()) { return std::nullopt; }
 
     eose result;
     result.subscription_id = json_obj[1].get<std::string>();
@@ -237,10 +237,10 @@ auto req::deserialize(const std::string &json) -> std::optional<req>
   try {
     auto json_obj = nlohmann::json::parse(json);
 
-    if (!json_obj.is_array() || json_obj.size() < 3) { return std::nullopt; }
-    if (!json_obj[0].is_string() || json_obj[0].get<std::string>() != "REQ") { return std::nullopt; }
-    if (!json_obj[1].is_string()) { return std::nullopt; }
-    if (!json_obj[2].is_object()) { return std::nullopt; }
+    if (not json_obj.is_array() or json_obj.size() < 3) { return std::nullopt; }
+    if (not json_obj[0].is_string() or json_obj[0].get<std::string>() != "REQ") { return std::nullopt; }
+    if (not json_obj[1].is_string()) { return std::nullopt; }
+    if (not json_obj[2].is_object()) { return std::nullopt; }
 
     req result;
     result.subscription_id = json_obj[1].get<std::string>();
@@ -272,7 +272,7 @@ auto event::serialize() const -> std::string
 
   nlohmann::json message = nlohmann::json::array();
   message.push_back("EVENT");
-  if (!subscription_id.empty()) { message.push_back(subscription_id); }
+  if (not subscription_id.empty()) { message.push_back(subscription_id); }
   message.push_back(event_json);
 
   return message.dump();
@@ -283,25 +283,25 @@ auto event::deserialize(const std::string &json) -> std::optional<event>
   try {
     auto json_obj = nlohmann::json::parse(json);
 
-    if (!json_obj.is_array() || json_obj.empty()) { return std::nullopt; }
-    if (!json_obj[0].is_string() || json_obj[0].get<std::string>() != "EVENT") { return std::nullopt; }
+    if (not json_obj.is_array() or json_obj.empty()) { return std::nullopt; }
+    if (not json_obj[0].is_string() or json_obj[0].get<std::string>() != "EVENT") { return std::nullopt; }
 
     event result;
 
     if (json_obj.size() == 2) {
-      if (!json_obj[1].is_object()) { return std::nullopt; }
+      if (not json_obj[1].is_object()) { return std::nullopt; }
 
       auto event_opt = event_data::deserialize(json_obj[1].dump());
-      if (!event_opt) { return std::nullopt; }
+      if (not event_opt) { return std::nullopt; }
 
       result.data = std::move(*event_opt);
     }
     if (json_obj.size() == 3) {
-      if (!json_obj[1].is_string()) { return std::nullopt; }
-      if (!json_obj[2].is_object()) { return std::nullopt; }
+      if (not json_obj[1].is_string()) { return std::nullopt; }
+      if (not json_obj[2].is_object()) { return std::nullopt; }
 
       auto event_opt = event_data::deserialize(json_obj[2].dump());
-      if (!event_opt) { return std::nullopt; }
+      if (not event_opt) { return std::nullopt; }
 
       result.subscription_id = json_obj[1].get<std::string>();
       result.data = std::move(*event_opt);

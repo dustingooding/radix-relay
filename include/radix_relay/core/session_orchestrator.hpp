@@ -154,7 +154,7 @@ public:
 
         try {
           auto parsed = nlohmann::json::parse(json_str);
-          if (!parsed.is_array() || parsed.empty() || !parsed[0].is_string()) {
+          if (not parsed.is_array() or parsed.empty() or not parsed[0].is_string()) {
             nostr::events::incoming::unknown_protocol evt_inner{ json_str };
             handler_.handle(evt_inner);
             return;
@@ -182,7 +182,7 @@ public:
               nostr::events::incoming::unknown_protocol evt_inner{ json_str };
               handler_.handle(evt_inner);
             }
-          } else if (msg_type == "EVENT" && parsed.size() >= 3) {
+          } else if (msg_type == "EVENT" and parsed.size() >= 3) {
             auto event_data = parsed[2];
             auto kind_value = event_data["kind"].get<std::uint32_t>();
 

@@ -14,7 +14,7 @@ auto get_home_directory() -> std::string
 #ifdef _WIN32
   char *home_raw = nullptr;
   size_t len = 0;
-  if (_dupenv_s(&home_raw, &len, "USERPROFILE") == 0 && home_raw != nullptr) {
+  if (_dupenv_s(&home_raw, &len, "USERPROFILE") == 0 and home_raw != nullptr) {
     const std::unique_ptr<char, decltype(&free)> home(home_raw, &free);
     return { home.get() };
   }
@@ -33,7 +33,7 @@ auto get_temp_directory() -> std::string
 #ifdef _WIN32
   char *temp_raw = nullptr;
   size_t len = 0;
-  if (_dupenv_s(&temp_raw, &len, "TEMP") == 0 && temp_raw != nullptr) {
+  if (_dupenv_s(&temp_raw, &len, "TEMP") == 0 and temp_raw != nullptr) {
     const std::unique_ptr<char, decltype(&free)> temp(temp_raw, &free);
     return { temp.get() };
   }
@@ -50,7 +50,7 @@ auto get_temp_directory() -> std::string
 
 auto expand_tilde_path(const std::string &path) -> std::string
 {
-  if (!path.starts_with("~/")) { return path; }
+  if (not path.starts_with("~/")) { return path; }
 
   auto home = get_home_directory();
   if (home.empty()) { return path; }

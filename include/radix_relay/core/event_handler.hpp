@@ -53,7 +53,7 @@ template<concepts::command_handler CmdHandler> struct event_handler
     if (input.starts_with(send_cmd)) {
       const auto args = input.substr(std::string_view(send_cmd).length());
       const auto first_space = args.find(' ');
-      if (first_space != std::string::npos && !args.empty()) {
+      if (first_space != std::string::npos and not args.empty()) {
         command_handler_->handle(
           events::send{ .peer = args.substr(0, first_space), .message = args.substr(first_space + 1) });
       } else {

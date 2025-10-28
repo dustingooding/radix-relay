@@ -165,11 +165,11 @@ namespace transport {
   };
 
   template<typename T>
-  concept Command = std::same_as<T, connect> || std::same_as<T, send> || std::same_as<T, disconnect>;
+  concept Command = std::same_as<T, connect> or std::same_as<T, send> or std::same_as<T, disconnect>;
 
   template<typename T>
-  concept Event = std::same_as<T, connected> || std::same_as<T, connect_failed> || std::same_as<T, sent>
-                  || std::same_as<T, send_failed> || std::same_as<T, bytes_received> || std::same_as<T, disconnected>;
+  concept Event = std::same_as<T, connected> or std::same_as<T, connect_failed> or std::same_as<T, sent>
+                  or std::same_as<T, send_failed> or std::same_as<T, bytes_received> or std::same_as<T, disconnected>;
 
   using command_variant_t = std::variant<connect, send, disconnect>;
   using event_variant_t = std::variant<connected, connect_failed, sent, send_failed, bytes_received, disconnected>;
@@ -177,16 +177,16 @@ namespace transport {
 }// namespace transport
 
 template<typename T>
-concept Command = std::same_as<T, help> || std::same_as<T, peers> || std::same_as<T, status>
-                  || std::same_as<T, sessions> || std::same_as<T, scan> || std::same_as<T, version>
-                  || std::same_as<T, mode> || std::same_as<T, send> || std::same_as<T, broadcast>
-                  || std::same_as<T, connect> || std::same_as<T, publish_identity> || std::same_as<T, trust>
-                  || std::same_as<T, verify> || std::same_as<T, subscribe> || std::same_as<T, establish_session>;
+concept Command = std::same_as<T, help> or std::same_as<T, peers> or std::same_as<T, status>
+                  or std::same_as<T, sessions> or std::same_as<T, scan> or std::same_as<T, version>
+                  or std::same_as<T, mode> or std::same_as<T, send> or std::same_as<T, broadcast>
+                  or std::same_as<T, connect> or std::same_as<T, publish_identity> or std::same_as<T, trust>
+                  or std::same_as<T, verify> or std::same_as<T, subscribe> or std::same_as<T, establish_session>;
 
 template<typename T>
-concept TransportEvent = std::same_as<T, message_received> || std::same_as<T, session_established>
-                         || std::same_as<T, bundle_announcement_received> || std::same_as<T, message_sent>
-                         || std::same_as<T, bundle_published> || std::same_as<T, subscription_established>;
+concept TransportEvent = std::same_as<T, message_received> or std::same_as<T, session_established>
+                         or std::same_as<T, bundle_announcement_received> or std::same_as<T, message_sent>
+                         or std::same_as<T, bundle_published> or std::same_as<T, subscription_established>;
 
 using transport_event_variant_t = std::variant<message_received,
   session_established,
@@ -196,6 +196,6 @@ using transport_event_variant_t = std::variant<message_received,
   subscription_established>;
 
 template<typename T>
-concept Event = Command<T> || TransportEvent<T> || std::same_as<T, raw_command>;
+concept Event = Command<T> or TransportEvent<T> or std::same_as<T, raw_command>;
 
 }// namespace radix_relay::core::events

@@ -163,13 +163,13 @@ auto main() -> int
       constexpr auto connection_poll_interval = std::chrono::milliseconds(10);
       constexpr auto connection_timeout = std::chrono::seconds(5);
       const auto start_time = std::chrono::steady_clock::now();
-      while (
-        (!alice_connected or !bob_connected) and (std::chrono::steady_clock::now() - start_time < connection_timeout)) {
+      while ((not alice_connected or not bob_connected)
+             and (std::chrono::steady_clock::now() - start_time < connection_timeout)) {
         std::this_thread::sleep_for(connection_poll_interval);
         // Process io_context to allow connection events
       }
 
-      if (!alice_connected or !bob_connected) {
+      if (not alice_connected or not bob_connected) {
         std::cout << "   Warning: Connection timeout - Alice: " << (alice_connected ? "connected" : "not connected")
                   << ", Bob: " << (bob_connected ? "connected" : "not connected") << "\n";
       }
@@ -255,7 +255,7 @@ auto main() -> int
                 }
               } else if (std::holds_alternative<radix_relay::core::events::subscription_established>(evt)) {
                 const auto &sub = std::get<radix_relay::core::events::subscription_established>(evt);
-                if (!sub.subscription_id.empty()) {
+                if (not sub.subscription_id.empty()) {
                   // Track EOSE for bundle subscription
                   if (sub.subscription_id == "alice_bundles") {
                     alice_bundles_eose_received = true;
@@ -326,7 +326,7 @@ auto main() -> int
                 }
               } else if (std::holds_alternative<radix_relay::core::events::subscription_established>(evt)) {
                 const auto &sub = std::get<radix_relay::core::events::subscription_established>(evt);
-                if (!sub.subscription_id.empty()) {
+                if (not sub.subscription_id.empty()) {
                   // Track EOSE for bundle subscription
                   if (sub.subscription_id == "bob_bundles") {
                     bob_bundles_eose_received = true;
@@ -392,7 +392,7 @@ auto main() -> int
       spdlog::info("Waiting for message subscriptions to establish...");
       std::this_thread::sleep_for(subscription_wait_time);
 
-      if (!alice_peer_rdx.empty() && !bob_peer_rdx.empty()) {
+      if (not alice_peer_rdx.empty() and not bob_peer_rdx.empty()) {
         spdlog::info("[Bob] Assigning contact alias 'alice' to RDX: {}", bob_peer_rdx);
         bob_orchestrator->handle_command(radix_relay::core::events::trust{ .peer = bob_peer_rdx, .alias = "alice" });
 
@@ -425,7 +425,7 @@ auto main() -> int
         std::cout << "   Alice received " << alice_messages << " encrypted messages\n";
         std::cout << "   Bob received " << bob_messages << " encrypted messages\n";
 
-        if (alice_messages > 0 && bob_messages > 0) {
+        if (alice_messages > 0 and bob_messages > 0) {
           std::cout << "\n✓ SUCCESS: Messages were exchanged and decrypted successfully!\n";
         } else {
           std::cout << "\n✗ No messages were successfully exchanged\n";

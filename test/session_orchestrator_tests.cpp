@@ -126,7 +126,7 @@ struct event_driven_fixture : orchestrator_test_fixture
   auto make_orchestrator() const -> std::shared_ptr<
     radix_relay::core::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
   {
-    if (!bridge) { throw std::runtime_error("Bridge not initialized"); }
+    if (not bridge) { throw std::runtime_error("Bridge not initialized"); }
     return std::make_shared<
       radix_relay::core::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(bridge,
       tracker,
