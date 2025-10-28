@@ -10,6 +10,7 @@
 #include <radix_relay/platform/env_utils.hpp>
 #include <radix_relay/session_orchestrator.hpp>
 #include <radix_relay/signal_bridge.hpp>
+#include <spdlog/cfg/env.h>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <thread>
@@ -18,7 +19,6 @@
 namespace radix_relay {
 
 constexpr std::size_t event_id_preview_length = 8;
-constexpr auto bundle_wait_time = std::chrono::seconds(20);
 constexpr auto message_wait_time = std::chrono::seconds(5);
 constexpr auto subscription_wait_time = std::chrono::seconds(2);
 
@@ -26,6 +26,7 @@ constexpr auto subscription_wait_time = std::chrono::seconds(2);
 auto main() -> int
 {
   spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
+  spdlog::cfg::load_env_levels();
 
   std::cout << "Starting echo_demo_strand (Three-Strand Architecture)...\n";
   std::cout << "Radix Relay - Echo Demonstration with session_orchestrator\n";
@@ -69,6 +70,17 @@ auto main() -> int
       std::string bob_peer_rdx;
       bool alice_connected = false;
       bool bob_connected = false;
+      bool alice_bundles_eose_received = false;
+      bool bob_bundles_eose_received = false;
+
+      // Get own nostr pubkeys to filter out self-bundles
+      auto alice_bundle_json = alice_bridge->generate_prekey_bundle_announcement("0.1.0");
+      auto alice_bundle_parsed = nlohmann::json::parse(alice_bundle_json);
+      const std::string alice_own_pubkey = alice_bundle_parsed["pubkey"].get<std::string>();
+
+      auto bob_bundle_json = bob_bridge->generate_prekey_bundle_announcement("0.1.0");
+      auto bob_bundle_parsed = nlohmann::json::parse(bob_bundle_json);
+      const std::string bob_own_pubkey = bob_bundle_parsed["pubkey"].get<std::string>();
 
       std::cout << "\nCreating SessionOrchestrators and Transports...\n";
 
@@ -185,83 +197,147 @@ auto main() -> int
         });
       };
 
-      auto alice_send_event_to_main = [&main_strand, &alice_events, &alice_peer_rdx](
-                                        radix_relay::events::transport_event_variant_t evt) {
-        boost::asio::post(main_strand, [&alice_events, &alice_peer_rdx, evt = std::move(evt)]() {
-          alice_events.push_back(evt);
+      auto alice_send_event_to_main =
+        [&main_strand, &alice_events, &alice_peer_rdx, &alice_bundles_eose_received, &alice_bridge, &alice_own_pubkey](
+          radix_relay::events::transport_event_variant_t evt) {
+          boost::asio::post(main_strand,
+            [&alice_events,
+              &alice_peer_rdx,
+              &alice_bundles_eose_received,
+              &alice_bridge,
+              &alice_own_pubkey,
+              evt = std::move(evt)]() {
+              alice_events.push_back(evt);
 
-          if (std::holds_alternative<radix_relay::events::message_received>(evt)) {
-            const auto &msg = std::get<radix_relay::events::message_received>(evt);
-            spdlog::info("[Alice] ✓ Received message from {}: {}", msg.sender_rdx, msg.content);
-          } else if (std::holds_alternative<radix_relay::events::session_established>(evt)) {
-            const auto &session = std::get<radix_relay::events::session_established>(evt);
-            alice_peer_rdx = session.peer_rdx;
-            spdlog::info("[Alice] ✓ Session established with peer: {}", alice_peer_rdx);
-          } else if (std::holds_alternative<radix_relay::events::message_sent>(evt)) {
-            const auto &sent = std::get<radix_relay::events::message_sent>(evt);
-            if (sent.accepted) {
-              spdlog::info("[Alice] ✓ Message sent successfully (event_id: {}...)",
-                sent.event_id.substr(0, event_id_preview_length));
-            } else {
-              spdlog::warn("[Alice] ✗ Message send failed");
-            }
-          } else if (std::holds_alternative<radix_relay::events::bundle_published>(evt)) {
-            const auto &pub = std::get<radix_relay::events::bundle_published>(evt);
-            if (pub.accepted) {
-              spdlog::info(
-                "[Alice] ✓ Bundle published (event_id: {}...)", pub.event_id.substr(0, event_id_preview_length));
-            } else {
-              spdlog::warn("[Alice] ✗ Bundle publish failed");
-            }
-          } else if (std::holds_alternative<radix_relay::events::subscription_established>(evt)) {
-            const auto &sub = std::get<radix_relay::events::subscription_established>(evt);
-            if (!sub.subscription_id.empty()) {
-              spdlog::info("[Alice] ✓ Subscription established: {}", sub.subscription_id);
-            } else {
-              spdlog::warn("[Alice] ✗ Subscription failed (timeout)");
-            }
-          }
-        });
-      };
+              if (std::holds_alternative<radix_relay::events::message_received>(evt)) {
+                const auto &msg = std::get<radix_relay::events::message_received>(evt);
+                spdlog::info("[Alice] ✓ Received message from {}: {}", msg.sender_rdx, msg.content);
+              } else if (std::holds_alternative<radix_relay::events::session_established>(evt)) {
+                const auto &session = std::get<radix_relay::events::session_established>(evt);
+                alice_peer_rdx = session.peer_rdx;
+                spdlog::info("[Alice] ✓ Session established with peer: {}", alice_peer_rdx);
+              } else if (std::holds_alternative<radix_relay::events::bundle_announcement_received>(evt)) {
+                const auto &bundle = std::get<radix_relay::events::bundle_announcement_received>(evt);
+                if (alice_bundles_eose_received) {
+                  // Check if this is our own bundle
+                  if (bundle.pubkey == alice_own_pubkey) {
+                    spdlog::debug("[Alice] Ignoring own bundle");
+                    return;
+                  }
+                  spdlog::info("[Alice] ✓ New bundle from {}, establishing session", bundle.pubkey);
+                  try {
+                    // Establish session explicitly
+                    auto peer_rdx =
+                      alice_bridge->add_contact_and_establish_session_from_base64(bundle.bundle_content, "");
+                    alice_peer_rdx = peer_rdx;
+                    spdlog::info("[Alice] ✓ Session established with peer: {}", alice_peer_rdx);
+                  } catch (const std::exception &e) {
+                    spdlog::debug("[Alice] Skipping bundle ({}): {}", bundle.pubkey, e.what());
+                  }
+                } else {
+                  spdlog::debug("[Alice] Ignoring pre-EOSE bundle from {}", bundle.pubkey);
+                }
+              } else if (std::holds_alternative<radix_relay::events::message_sent>(evt)) {
+                const auto &sent = std::get<radix_relay::events::message_sent>(evt);
+                if (sent.accepted) {
+                  spdlog::info("[Alice] ✓ Message sent successfully (event_id: {}...)",
+                    sent.event_id.substr(0, event_id_preview_length));
+                } else {
+                  spdlog::warn("[Alice] ✗ Message send failed");
+                }
+              } else if (std::holds_alternative<radix_relay::events::bundle_published>(evt)) {
+                const auto &pub = std::get<radix_relay::events::bundle_published>(evt);
+                if (pub.accepted) {
+                  spdlog::info(
+                    "[Alice] ✓ Bundle published (event_id: {}...)", pub.event_id.substr(0, event_id_preview_length));
+                } else {
+                  spdlog::warn("[Alice] ✗ Bundle publish failed");
+                }
+              } else if (std::holds_alternative<radix_relay::events::subscription_established>(evt)) {
+                const auto &sub = std::get<radix_relay::events::subscription_established>(evt);
+                if (!sub.subscription_id.empty()) {
+                  // Track EOSE for bundle subscription
+                  if (sub.subscription_id == "alice_bundles") {
+                    alice_bundles_eose_received = true;
+                    spdlog::info("[Alice] Bundle subscription ready for real-time");
+                  }
+                } else {
+                  spdlog::warn("[Alice] ✗ Subscription failed (timeout)");
+                }
+              }
+            });
+        };
 
-      auto bob_send_event_to_main = [&main_strand, &bob_events, &bob_peer_rdx](
-                                      radix_relay::events::transport_event_variant_t evt) {
-        boost::asio::post(main_strand, [&bob_events, &bob_peer_rdx, evt = std::move(evt)]() {
-          bob_events.push_back(evt);
+      auto bob_send_event_to_main =
+        [&main_strand, &bob_events, &bob_peer_rdx, &bob_bundles_eose_received, &bob_bridge, &bob_own_pubkey](
+          radix_relay::events::transport_event_variant_t evt) {
+          boost::asio::post(main_strand,
+            [&bob_events,
+              &bob_peer_rdx,
+              &bob_bundles_eose_received,
+              &bob_bridge,
+              &bob_own_pubkey,
+              evt = std::move(evt)]() {
+              bob_events.push_back(evt);
 
-          if (std::holds_alternative<radix_relay::events::message_received>(evt)) {
-            const auto &msg = std::get<radix_relay::events::message_received>(evt);
-            spdlog::info("[Bob] ✓ Received message from {}: {}", msg.sender_rdx, msg.content);
-          } else if (std::holds_alternative<radix_relay::events::session_established>(evt)) {
-            const auto &session = std::get<radix_relay::events::session_established>(evt);
-            bob_peer_rdx = session.peer_rdx;
-            spdlog::info("[Bob] ✓ Session established with peer: {}", bob_peer_rdx);
-          } else if (std::holds_alternative<radix_relay::events::message_sent>(evt)) {
-            const auto &sent = std::get<radix_relay::events::message_sent>(evt);
-            if (sent.accepted) {
-              spdlog::info("[Bob] ✓ Message sent successfully (event_id: {}...)",
-                sent.event_id.substr(0, event_id_preview_length));
-            } else {
-              spdlog::warn("[Bob] ✗ Message send failed");
-            }
-          } else if (std::holds_alternative<radix_relay::events::bundle_published>(evt)) {
-            const auto &pub = std::get<radix_relay::events::bundle_published>(evt);
-            if (pub.accepted) {
-              spdlog::info(
-                "[Bob] ✓ Bundle published (event_id: {}...)", pub.event_id.substr(0, event_id_preview_length));
-            } else {
-              spdlog::warn("[Bob] ✗ Bundle publish failed");
-            }
-          } else if (std::holds_alternative<radix_relay::events::subscription_established>(evt)) {
-            const auto &sub = std::get<radix_relay::events::subscription_established>(evt);
-            if (!sub.subscription_id.empty()) {
-              spdlog::info("[Bob] ✓ Subscription established: {}", sub.subscription_id);
-            } else {
-              spdlog::warn("[Bob] ✗ Subscription failed (timeout)");
-            }
-          }
-        });
-      };
+              if (std::holds_alternative<radix_relay::events::message_received>(evt)) {
+                const auto &msg = std::get<radix_relay::events::message_received>(evt);
+                spdlog::info("[Bob] ✓ Received message from {}: {}", msg.sender_rdx, msg.content);
+              } else if (std::holds_alternative<radix_relay::events::session_established>(evt)) {
+                const auto &session = std::get<radix_relay::events::session_established>(evt);
+                bob_peer_rdx = session.peer_rdx;
+                spdlog::info("[Bob] ✓ Session established with peer: {}", bob_peer_rdx);
+              } else if (std::holds_alternative<radix_relay::events::bundle_announcement_received>(evt)) {
+                const auto &bundle = std::get<radix_relay::events::bundle_announcement_received>(evt);
+                if (bob_bundles_eose_received) {
+                  // Check if this is our own bundle
+                  if (bundle.pubkey == bob_own_pubkey) {
+                    spdlog::debug("[Bob] Ignoring own bundle");
+                    return;
+                  }
+                  spdlog::info("[Bob] ✓ New bundle from {}, establishing session", bundle.pubkey);
+                  try {
+                    // Establish session explicitly
+                    auto peer_rdx =
+                      bob_bridge->add_contact_and_establish_session_from_base64(bundle.bundle_content, "");
+                    bob_peer_rdx = peer_rdx;
+                    spdlog::info("[Bob] ✓ Session established with peer: {}", bob_peer_rdx);
+                  } catch (const std::exception &e) {
+                    spdlog::debug("[Bob] Skipping bundle ({}): {}", bundle.pubkey, e.what());
+                  }
+                } else {
+                  spdlog::debug("[Bob] Ignoring pre-EOSE bundle from {}", bundle.pubkey);
+                }
+              } else if (std::holds_alternative<radix_relay::events::message_sent>(evt)) {
+                const auto &sent = std::get<radix_relay::events::message_sent>(evt);
+                if (sent.accepted) {
+                  spdlog::info("[Bob] ✓ Message sent successfully (event_id: {}...)",
+                    sent.event_id.substr(0, event_id_preview_length));
+                } else {
+                  spdlog::warn("[Bob] ✗ Message send failed");
+                }
+              } else if (std::holds_alternative<radix_relay::events::bundle_published>(evt)) {
+                const auto &pub = std::get<radix_relay::events::bundle_published>(evt);
+                if (pub.accepted) {
+                  spdlog::info(
+                    "[Bob] ✓ Bundle published (event_id: {}...)", pub.event_id.substr(0, event_id_preview_length));
+                } else {
+                  spdlog::warn("[Bob] ✗ Bundle publish failed");
+                }
+              } else if (std::holds_alternative<radix_relay::events::subscription_established>(evt)) {
+                const auto &sub = std::get<radix_relay::events::subscription_established>(evt);
+                if (!sub.subscription_id.empty()) {
+                  // Track EOSE for bundle subscription
+                  if (sub.subscription_id == "bob_bundles") {
+                    bob_bundles_eose_received = true;
+                    spdlog::info("[Bob] Bundle subscription ready for real-time");
+                  }
+                } else {
+                  spdlog::warn("[Bob] ✗ Subscription failed (timeout)");
+                }
+              }
+            });
+        };
 
       auto alice_orchestrator = std::make_shared<
         radix_relay::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
@@ -299,7 +375,8 @@ auto main() -> int
       bob_orchestrator->handle_command(radix_relay::events::publish_identity{});
 
       spdlog::info("Waiting for bundles to be received and sessions established...");
-      std::this_thread::sleep_for(bundle_wait_time);
+      // With EOSE-aware processing, sessions establish immediately when new bundles arrive
+      std::this_thread::sleep_for(std::chrono::seconds(2));
 
       std::cout << "\n=== Phase 3: Subscribe to encrypted messages ===\n";
       const auto alice_msg_sub =

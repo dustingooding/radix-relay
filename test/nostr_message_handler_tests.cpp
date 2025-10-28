@@ -62,7 +62,8 @@ TEST_CASE("nostr_message_handler handles incoming encrypted_message", "[nostr_me
   std::filesystem::remove(bob_path);
 }
 
-TEST_CASE("nostr_message_handler handles incoming bundle_announcement", "[nostr_message_handler]")
+TEST_CASE("nostr_message_handler handles incoming bundle_announcement without establishing session",
+  "[nostr_message_handler]")
 {
   const std::string alice_path = "/tmp/nostr_handler_bundle_alice.db";
   const std::string bob_path = "/tmp/nostr_handler_bundle_bob.db";
@@ -89,13 +90,14 @@ TEST_CASE("nostr_message_handler handles incoming bundle_announcement", "[nostr_
 
     const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
 
-    radix_relay::nostr_message_handler<radix_relay::signal::bridge> handler(bob_bridge);
+    const radix_relay::nostr_message_handler<radix_relay::signal::bridge> handler(bob_bridge);
     auto result = handler.handle(event);
 
     REQUIRE(result.has_value());
     if (result.has_value()) {
-      CHECK(result->peer_rdx.starts_with("RDX:"));
-      CHECK(result->peer_rdx.length() == 68);
+      CHECK(result->pubkey == "alice_nostr_pubkey");
+      CHECK(result->bundle_content == alice_bundle_base64);
+      CHECK(result->event_id == "bundle_event_id");
     }
   }
 
@@ -188,6 +190,36 @@ TEST_CASE("nostr_message_handler handles publish_identity command", "[nostr_mess
   }
 
   std::filesystem::remove(alice_path);
+}
+
+TEST_CASE("nostr_message_handler handles establish_session command", "[nostr_message_handler]")
+{
+  const std::string alice_path = "/tmp/nostr_handler_establish_alice.db";
+  const std::string bob_path = "/tmp/nostr_handler_establish_bob.db";
+
+  std::filesystem::remove(alice_path);
+  std::filesystem::remove(bob_path);
+
+  {
+    auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
+    auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_path);
+
+    auto alice_bundle_json = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    auto alice_event_json = nlohmann::json::parse(alice_bundle_json);
+    const std::string alice_bundle_base64 = alice_event_json["content"].get<std::string>();
+
+    radix_relay::nostr_message_handler<radix_relay::signal::bridge> handler(bob_bridge);
+    auto result = handler.handle(radix_relay::events::establish_session{ .bundle_data = alice_bundle_base64 });
+
+    REQUIRE(result.has_value());
+    if (result.has_value()) {
+      CHECK(result->peer_rdx.starts_with("RDX:"));
+      CHECK(result->peer_rdx.length() == 68);
+    }
+  }
+
+  std::filesystem::remove(alice_path);
+  std::filesystem::remove(bob_path);
 }
 
 TEST_CASE("nostr_message_handler handles trust command", "[nostr_message_handler]")

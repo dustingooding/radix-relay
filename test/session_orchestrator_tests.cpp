@@ -322,10 +322,12 @@ TEST_CASE("session_orchestrator event-driven handles incoming bundle_announcemen
   bob_fixture.io_context.run();
 
   REQUIRE(bob_fixture.main_events.size() == 1);
-  CHECK(std::holds_alternative<radix_relay::events::session_established>(bob_fixture.main_events[0]));
+  CHECK(std::holds_alternative<radix_relay::events::bundle_announcement_received>(bob_fixture.main_events[0]));
 
-  const auto &session = std::get<radix_relay::events::session_established>(bob_fixture.main_events[0]);
-  CHECK(session.peer_rdx == alice_rdx_tag);
+  const auto &bundle = std::get<radix_relay::events::bundle_announcement_received>(bob_fixture.main_events[0]);
+  CHECK(bundle.pubkey == "alice_nostr_pubkey");
+  CHECK(bundle.bundle_content == alice_bundle_base64);
+  CHECK(bundle.event_id == "test_bundle_event_id");
 }
 
 TEST_CASE("session_orchestrator event-driven handles malformed JSON", "[session_orchestrator][event_driven]")
