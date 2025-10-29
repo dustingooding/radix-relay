@@ -22,7 +22,7 @@ template<concepts::event_handler EvtHandler> struct interactive_cli
     while (true) {
       fmt::print("[⇌] ");
 
-      if (!std::getline(std::cin, input)) {
+      if (not std::getline(std::cin, input)) {
         break;// EOF or Ctrl+D
       }
 
@@ -38,7 +38,7 @@ template<concepts::event_handler EvtHandler> struct interactive_cli
 
   [[nodiscard]] static auto should_quit(const std::string &input) -> bool
   {
-    if (input == "quit" || input == "exit" || input == "q") {
+    if (input == "quit" or input == "exit" or input == "q") {
       fmt::print("Goodbye!\n");
       return true;
     }
@@ -50,7 +50,7 @@ template<concepts::event_handler EvtHandler> struct interactive_cli
     constexpr auto mode_cmd = "mode ";
     if (input.starts_with(mode_cmd)) {
       const auto new_mode = input.substr(std::string_view(mode_cmd).length());
-      if (new_mode == "internet" || new_mode == "mesh" || new_mode == "hybrid") {
+      if (new_mode == "internet" or new_mode == "mesh" or new_mode == "hybrid") {
         mode_ = new_mode;
         fmt::print("Switched to {} mode\n", new_mode);
       } else {

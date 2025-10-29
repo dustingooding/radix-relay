@@ -30,7 +30,7 @@ public:
     auto timer = std::make_shared<boost::asio::steady_timer>(*io_context_, timeout);
 
     timer->async_wait([this, event_id](const boost::system::error_code &error) {
-      if (!error) { handle_timeout(event_id); }
+      if (not error) { handle_timeout(event_id); }
     });
 
     pending_[event_id] = pending_request{ .callback =

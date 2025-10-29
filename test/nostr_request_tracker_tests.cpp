@@ -13,7 +13,7 @@ TEST_CASE("request_tracker track() stores pending request", "[nostr][request_tra
   constexpr auto timeout = std::chrono::seconds(5);
   tracker.track("event_123", callback, timeout);
 
-  CHECK(!callback_invoked);
+  CHECK(not callback_invoked);
   CHECK(tracker.has_pending("event_123"));
 }
 
@@ -63,7 +63,7 @@ TEST_CASE("request_tracker resolve() removes request from pending", "[nostr][req
 
   tracker.resolve("event_789", response);
 
-  CHECK(!tracker.has_pending("event_789"));
+  CHECK(not tracker.has_pending("event_789"));
 }
 
 TEST_CASE("request_tracker resolve() on non-existent ID does nothing", "[nostr][request_tracker]")
@@ -77,7 +77,7 @@ TEST_CASE("request_tracker resolve() on non-existent ID does nothing", "[nostr][
 
   tracker.resolve("nonexistent", response);
 
-  CHECK(!tracker.has_pending("nonexistent"));
+  CHECK(not tracker.has_pending("nonexistent"));
 }
 
 TEST_CASE("request_tracker timeout invokes callback with timeout error", "[nostr][request_tracker]")
@@ -100,9 +100,9 @@ TEST_CASE("request_tracker timeout invokes callback with timeout error", "[nostr
 
   CHECK(callback_invoked);
   CHECK(received_response.event_id == "event_timeout");
-  CHECK(!received_response.accepted);
+  CHECK(not received_response.accepted);
   CHECK(received_response.message.find("timeout") != std::string::npos);
-  CHECK(!tracker.has_pending("event_timeout"));
+  CHECK(not tracker.has_pending("event_timeout"));
 }
 
 TEST_CASE("request_tracker resolve() cancels timer", "[nostr][request_tracker]")

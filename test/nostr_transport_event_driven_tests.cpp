@@ -265,7 +265,7 @@ SCENARIO("Event-driven transport emits connect_failed event", "[nostr][transport
         REQUIRE(std::holds_alternative<core::events::transport::connect_failed>(received_events[0]));
         const auto &failed_evt = std::get<core::events::transport::connect_failed>(received_events[0]);
         REQUIRE(failed_evt.url == "wss://relay.damus.io");
-        REQUIRE(!failed_evt.error_message.empty());
+        REQUIRE(not failed_evt.error_message.empty());
       }
     }
   }
@@ -323,7 +323,7 @@ SCENARIO("Event-driven transport emits send_failed event on write failure", "[no
         REQUIRE(std::holds_alternative<core::events::transport::send_failed>(received_events[0]));
         const auto &failed_evt = std::get<core::events::transport::send_failed>(received_events[0]);
         REQUIRE(failed_evt.message_id == "test-msg-id");
-        REQUIRE(!failed_evt.error_message.empty());
+        REQUIRE(not failed_evt.error_message.empty());
       }
     }
   }

@@ -28,7 +28,7 @@ public:
   [[nodiscard]] auto handle(const nostr::events::incoming::encrypted_message &event)
     -> std::optional<core::events::message_received>
   {
-    auto p_tag = std::ranges::find_if(event.tags, [](const auto &tag) { return tag.size() >= 2 && tag[0] == "p"; });
+    auto p_tag = std::ranges::find_if(event.tags, [](const auto &tag) { return tag.size() >= 2 and tag[0] == "p"; });
 
     if (p_tag == event.tags.end()) { return std::nullopt; }
 

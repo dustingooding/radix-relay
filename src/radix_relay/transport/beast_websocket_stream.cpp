@@ -45,7 +45,7 @@ auto websocket_stream::async_connect(websocket_connection_params params,
 #pragma GCC diagnostic ignored "-Wold-style-cast"
 #endif
           // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast,hicpp-no-array-decay)
-          if (!SSL_set_tlsext_host_name(ws_.next_layer().native_handle(), host_str.c_str())) {
+          if (not SSL_set_tlsext_host_name(ws_.next_layer().native_handle(), host_str.c_str())) {
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif
@@ -93,7 +93,7 @@ auto websocket_stream::async_read(const boost::asio::mutable_buffer &buffer,
   ws_.async_read(read_buffer_,
     [this, buffer, handler = std::move(handler)](
       const boost::system::error_code &error_code, std::size_t /*bytes_transferred*/) {
-      if (!error_code) {
+      if (not error_code) {
         const auto data = read_buffer_.data();
         const std::size_t size = std::min(boost::asio::buffer_size(buffer), data.size());
         boost::asio::buffer_copy(buffer, data, size);

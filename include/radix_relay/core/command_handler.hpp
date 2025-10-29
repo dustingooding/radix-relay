@@ -98,7 +98,7 @@ private:
   auto handle_impl(const events::mode &command) const -> void
   {
     std::ignore = initialized_;
-    if (command.new_mode == "internet" || command.new_mode == "mesh" || command.new_mode == "hybrid") {
+    if (command.new_mode == "internet" or command.new_mode == "mesh" or command.new_mode == "hybrid") {
       printer_->print("Switched to {} mode\n", command.new_mode);
     } else {
       printer_->print("Invalid mode. Use: internet, mesh, or hybrid\n");
@@ -108,7 +108,7 @@ private:
   auto handle_impl(const events::send &command) const -> void
   {
     std::ignore = initialized_;
-    if (!command.peer.empty() && !command.message.empty()) {
+    if (not command.peer.empty() and not command.message.empty()) {
       printer_->print("Sending '{}' to '{}' via hybrid transport (not implemented)\n", command.message, command.peer);
     } else {
       printer_->print("Usage: send <peer> <message>\n");
@@ -118,7 +118,7 @@ private:
   auto handle_impl(const events::broadcast &command) const -> void
   {
     std::ignore = initialized_;
-    if (!command.message.empty()) {
+    if (not command.message.empty()) {
       printer_->print("Broadcasting '{}' to all local peers (not implemented)\n", command.message);
     } else {
       printer_->print("Usage: broadcast <message>\n");
@@ -128,7 +128,7 @@ private:
   auto handle_impl(const events::connect &command) const -> void
   {
     std::ignore = initialized_;
-    if (!command.relay.empty()) {
+    if (not command.relay.empty()) {
       printer_->print("Connecting to Nostr relay {} (not implemented)\n", command.relay);
     } else {
       printer_->print("Usage: connect <relay>\n");
@@ -138,7 +138,7 @@ private:
   auto handle_impl(const events::trust &command) const -> void
   {
     std::ignore = initialized_;
-    if (!command.peer.empty()) {
+    if (not command.peer.empty()) {
       printer_->print("Marking {} as trusted (not implemented)\n", command.peer);
     } else {
       printer_->print("Usage: trust <peer>\n");
@@ -148,7 +148,7 @@ private:
   auto handle_impl(const events::verify &command) const -> void
   {
     std::ignore = initialized_;
-    if (!command.peer.empty()) {
+    if (not command.peer.empty()) {
       printer_->print("Safety numbers for {} (Signal Protocol not implemented)\n", command.peer);
     } else {
       printer_->print("Usage: verify <peer>\n");

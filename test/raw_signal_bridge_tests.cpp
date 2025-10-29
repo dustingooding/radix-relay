@@ -96,8 +96,8 @@ TEST_CASE("SignalBridge CXX Integration", "[signal][cxx]")
 
       auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
       auto alice_bundle = radix_relay::generate_pre_key_bundle(*alice);
-      REQUIRE(!bob_bundle.empty());
-      REQUIRE(!alice_bundle.empty());
+      REQUIRE(not bob_bundle.empty());
+      REQUIRE(not alice_bundle.empty());
 
       auto bob_rdx =
         radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "bob");
@@ -111,11 +111,11 @@ TEST_CASE("SignalBridge CXX Integration", "[signal][cxx]")
 
       auto ciphertext =
         radix_relay::encrypt_message(*alice, bob_rdx.c_str(), rust::Slice<const uint8_t>{ plaintext_bytes });
-      REQUIRE(!ciphertext.empty());
+      REQUIRE(not ciphertext.empty());
       REQUIRE(ciphertext.size() > plaintext_bytes.size());
 
       auto decrypted = radix_relay::decrypt_message(*bob, alice_rdx.c_str(), rust::Slice<const uint8_t>{ ciphertext });
-      REQUIRE(!decrypted.empty());
+      REQUIRE(not decrypted.empty());
       REQUIRE(decrypted.size() == plaintext_bytes.size());
 
       std::string decrypted_string(decrypted.begin(), decrypted.end());
@@ -176,11 +176,11 @@ TEST_CASE("SignalBridge Contact Management", "[signal][contacts][cxx]")
       auto bob = radix_relay::new_signal_bridge(bob_db.c_str());
 
       auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
-      REQUIRE(!bob_bundle.empty());
+      REQUIRE(not bob_bundle.empty());
 
       auto bob_rdx =
         radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "");
-      REQUIRE(!bob_rdx.empty());
+      REQUIRE(not bob_rdx.empty());
       REQUIRE(std::string(bob_rdx).starts_with("RDX:"));
 
       auto contact = radix_relay::lookup_contact(*alice, bob_rdx.c_str());
@@ -291,7 +291,7 @@ TEST_CASE("SignalBridge Bundle Announcement", "[signal][bundle][nostr][cxx]")
       auto alice = radix_relay::new_signal_bridge(alice_db.c_str());
 
       auto event_json = radix_relay::generate_prekey_bundle_announcement(*alice, "1.0.0-test");
-      REQUIRE(!event_json.empty());
+      REQUIRE(not event_json.empty());
 
       // Parse JSON to verify structure
       auto event_str = std::string(event_json);
@@ -339,7 +339,7 @@ TEST_CASE("SignalBridge Bundle Announcement", "[signal][bundle][nostr][cxx]")
       std::vector<uint8_t> plaintext_bytes(plaintext.begin(), plaintext.end());
       auto ciphertext =
         radix_relay::encrypt_message(*alice, bob_rdx.c_str(), rust::Slice<const uint8_t>{ plaintext_bytes });
-      REQUIRE(!ciphertext.empty());
+      REQUIRE(not ciphertext.empty());
     }
 
     std::filesystem::remove(alice_db);
