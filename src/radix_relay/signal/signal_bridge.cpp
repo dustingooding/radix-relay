@@ -84,6 +84,10 @@ auto bridge::sign_nostr_event(const std::string &event_json) const -> std::strin
   return std::string(signed_event);
 }
 
-auto bridge::get_rust_bridge() -> SignalBridge & { return *bridge_; }
+auto bridge::create_subscription_for_self(const std::string &subscription_id) const -> std::string
+{
+  auto subscription_json = radix_relay::create_subscription_for_self(*bridge_, subscription_id.c_str());
+  return std::string(subscription_json);
+}
 
 }// namespace radix_relay::signal
