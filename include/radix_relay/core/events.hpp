@@ -69,6 +69,16 @@ struct subscribe
   std::string subscription_json;
 };
 
+struct subscribe_identities
+{
+  std::string subscription_id;
+};
+
+struct subscribe_messages
+{
+  std::string subscription_id;
+};
+
 struct establish_session
 {
   std::string bundle_data;
@@ -171,17 +181,17 @@ namespace transport {
   concept Event = std::same_as<T, connected> or std::same_as<T, connect_failed> or std::same_as<T, sent>
                   or std::same_as<T, send_failed> or std::same_as<T, bytes_received> or std::same_as<T, disconnected>;
 
-  using command_variant_t = std::variant<connect, send, disconnect>;
-  using event_variant_t = std::variant<connected, connect_failed, sent, send_failed, bytes_received, disconnected>;
+  using in_t = std::variant<connect, send, disconnect>;
 
 }// namespace transport
 
 template<typename T>
-concept Command = std::same_as<T, help> or std::same_as<T, peers> or std::same_as<T, status>
-                  or std::same_as<T, sessions> or std::same_as<T, scan> or std::same_as<T, version>
-                  or std::same_as<T, mode> or std::same_as<T, send> or std::same_as<T, broadcast>
-                  or std::same_as<T, connect> or std::same_as<T, publish_identity> or std::same_as<T, trust>
-                  or std::same_as<T, verify> or std::same_as<T, subscribe> or std::same_as<T, establish_session>;
+concept Command =
+  std::same_as<T, help> or std::same_as<T, peers> or std::same_as<T, status> or std::same_as<T, sessions>
+  or std::same_as<T, scan> or std::same_as<T, version> or std::same_as<T, mode> or std::same_as<T, send>
+  or std::same_as<T, broadcast> or std::same_as<T, connect> or std::same_as<T, publish_identity>
+  or std::same_as<T, trust> or std::same_as<T, verify> or std::same_as<T, subscribe>
+  or std::same_as<T, subscribe_identities> or std::same_as<T, subscribe_messages> or std::same_as<T, establish_session>;
 
 template<typename T>
 concept TransportEvent = std::same_as<T, message_received> or std::same_as<T, session_established>
@@ -197,5 +207,25 @@ using transport_event_variant_t = std::variant<message_received,
 
 template<typename T>
 concept Event = Command<T> or TransportEvent<T> or std::same_as<T, raw_command>;
+
+namespace session_orchestrator {
+
+  using command_from_main_variant_t =
+    std::variant<send, publish_identity, trust, subscribe, subscribe_identities, subscribe_messages>;
+
+  using in_t = std::variant<send,
+    publish_identity,
+    trust,
+    subscribe,
+    subscribe_identities,
+    subscribe_messages,
+    transport::bytes_received,
+    transport::connected,
+    transport::connect_failed,
+    transport::sent,
+    transport::send_failed,
+    transport::disconnected>;
+
+}// namespace session_orchestrator
 
 }// namespace radix_relay::core::events

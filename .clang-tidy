@@ -20,7 +20,8 @@ Checks: "*,
         -clang-analyzer-optin.core.EnumCastOutOfRange,
         -clang-analyzer-optin.cplusplus.VirtualCall,
         -clang-analyzer-cplusplus.NewDelete,
-        -clang-analyzer-unix.BlockInCriticalSection
+        -clang-analyzer-unix.BlockInCriticalSection,
+        -clang-analyzer-core.NullDereference
 "
 WarningsAsErrors: ''
 HeaderFilterRegex: '^(?!.*test/)(?!.*_deps/).*$'

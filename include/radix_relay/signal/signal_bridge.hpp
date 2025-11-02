@@ -52,7 +52,7 @@ public:
 
   [[nodiscard]] auto sign_nostr_event(const std::string &event_json) const -> std::string;
 
-  [[nodiscard]] auto get_rust_bridge() -> SignalBridge &;
+  [[nodiscard]] auto create_subscription_for_self(const std::string &subscription_id) const -> std::string;
 
 private:
   mutable rust::Box<SignalBridge> bridge_;

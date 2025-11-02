@@ -1,10 +1,10 @@
 #include <radix_relay/platform/env_utils.hpp>
 
-#include <memory>
 #include <mutex>
 
 #ifdef _WIN32
 #include <cstdlib>
+#include <memory>
 #endif
 
 namespace radix_relay::platform {
