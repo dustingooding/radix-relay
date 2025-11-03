@@ -1,4 +1,4 @@
-# Core is now an INTERFACE library that aggregates everything
+# Core is an INTERFACE library that aggregates sub-libraries
 add_library(radix_relay_core INTERFACE)
 
 add_library(radix_relay::core ALIAS radix_relay_core)
