@@ -142,8 +142,17 @@ function(add_header_validation_targets)
 ")
 
     # Create library target (no main() needed) and link against the target library
-    add_library(${TARGET_NAME} OBJECT EXCLUDE_FROM_ALL "${VALIDATION_SOURCE}")
-    target_link_libraries(${TARGET_NAME} PRIVATE ${HEADER_VAL_TARGET})
+    # Skip if target already exists (can happen when multiple libraries share include directories)
+    # The first target to create the validation will win, which is acceptable since
+    # all validation targets should be able to compile with their respective dependencies
+    if(NOT TARGET ${TARGET_NAME})
+      add_library(${TARGET_NAME} OBJECT EXCLUDE_FROM_ALL "${VALIDATION_SOURCE}")
+      target_link_libraries(${TARGET_NAME} PRIVATE ${HEADER_VAL_TARGET})
+    else()
+      # If target exists, add this library's dependencies to it as well
+      # This ensures headers have access to all necessary dependencies
+      target_link_libraries(${TARGET_NAME} PRIVATE ${HEADER_VAL_TARGET})
+    endif()
   endforeach()
 
   # Create a custom target to build all header validation targets
@@ -155,9 +164,15 @@ function(add_header_validation_targets)
     list(APPEND ALL_HEADER_TARGETS "header_${TARGET_NAME}")
   endforeach()
 
-  add_custom_target(validate_headers
-    DEPENDS ${ALL_HEADER_TARGETS}
-    COMMENT "Building all header validation targets"
-  )
+  # Create or update the validate_headers target
+  if(NOT TARGET validate_headers)
+    add_custom_target(validate_headers
+      DEPENDS ${ALL_HEADER_TARGETS}
+      COMMENT "Building all header validation targets"
+    )
+  else()
+    # Add dependencies to existing target
+    add_dependencies(validate_headers ${ALL_HEADER_TARGETS})
+  endif()
 
 endfunction()

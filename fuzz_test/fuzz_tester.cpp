@@ -1,8 +1,10 @@
+#include <boost/asio/io_context.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <radix_relay/async/async_queue.hpp>
 #include <radix_relay/core/cli.hpp>
-#include <radix_relay/core/standard_event_handler.hpp>
+#include <radix_relay/core/events.hpp>
 #include <radix_relay/platform/env_utils.hpp>
 #include <radix_relay/signal/signal_bridge.hpp>
 #include <string>
@@ -22,9 +24,11 @@ extern "C" auto LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) -> int
     (std::filesystem::path(radix_relay::platform::get_temp_directory()) / "fuzz_signal_bridge.db").string();
   auto bridge = std::make_shared<bridge_t>(db_path);
 
-  auto command_handler = std::make_shared<radix_relay::core::command_handler<bridge_t>>(bridge);
-  auto event_handler = std::make_shared<radix_relay::core::standard_event_handler_t<bridge_t>>(command_handler);
-  radix_relay::core::interactive_cli cli("fuzz-node", "hybrid", event_handler);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  auto command_queue =
+    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
+
+  radix_relay::core::interactive_cli cli("fuzz-node", "hybrid", command_queue);
 
   std::ignore = cli.should_quit(input);
   std::ignore = cli.handle_command(input);

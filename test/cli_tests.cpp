@@ -1,14 +1,17 @@
+#include <boost/asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <radix_relay/async/async_queue.hpp>
+#include <radix_relay/core/cli.hpp>
+#include <radix_relay/core/events.hpp>
 #include <string>
 #include <utility>
 
-#include "test_doubles/test_double_event_handler.hpp"
-#include <radix_relay/core/cli.hpp>
-
 TEST_CASE("interactive_cli can be constructed", "[cli][construction]")
 {
-  auto test_event_handler = std::make_shared<radix_relay_test::test_double_event_handler>();
-  std::ignore = radix_relay::core::interactive_cli{ "test-node", "hybrid", test_event_handler };
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  auto command_queue =
+    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
+  std::ignore = radix_relay::core::interactive_cli{ "test-node", "hybrid", command_queue };
   REQUIRE(true);
 }
 
@@ -16,42 +19,38 @@ TEST_CASE("interactive_cli command routing works correctly", "[cli][routing]")
 {
   SECTION("should_quit identifies quit commands correctly")
   {
-    REQUIRE(
-      radix_relay::core::interactive_cli<radix_relay_test::test_double_event_handler>::should_quit("quit") == true);
-    REQUIRE(
-      radix_relay::core::interactive_cli<radix_relay_test::test_double_event_handler>::should_quit("exit") == true);
-    REQUIRE(radix_relay::core::interactive_cli<radix_relay_test::test_double_event_handler>::should_quit("q") == true);
-    REQUIRE(
-      radix_relay::core::interactive_cli<radix_relay_test::test_double_event_handler>::should_quit("help") == false);
-    REQUIRE(radix_relay::core::interactive_cli<radix_relay_test::test_double_event_handler>::should_quit("") == false);
-    REQUIRE(
-      radix_relay::core::interactive_cli<radix_relay_test::test_double_event_handler>::should_quit("version") == false);
+    REQUIRE(radix_relay::core::interactive_cli::should_quit("quit") == true);
+    REQUIRE(radix_relay::core::interactive_cli::should_quit("exit") == true);
+    REQUIRE(radix_relay::core::interactive_cli::should_quit("q") == true);
+    REQUIRE(radix_relay::core::interactive_cli::should_quit("help") == false);
+    REQUIRE(radix_relay::core::interactive_cli::should_quit("") == false);
+    REQUIRE(radix_relay::core::interactive_cli::should_quit("version") == false);
   }
 
-  SECTION("handle_command delegates to event_handler and handles mode switching")
+  SECTION("handle_command pushes commands to queue and handles mode switching")
   {
-    auto test_event_handler = std::make_shared<radix_relay_test::test_double_event_handler>();
-    radix_relay::core::interactive_cli cli("test-node", "hybrid", test_event_handler);
-
-    test_event_handler->clear_handles();
+    auto io_context = std::make_shared<boost::asio::io_context>();
+    auto command_queue =
+      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
+    radix_relay::core::interactive_cli cli("test-node", "hybrid", command_queue);
 
     REQUIRE(cli.handle_command("help") == true);
-    REQUIRE(test_event_handler->was_handled("help"));
+    REQUIRE(command_queue->size() == 1);
 
     REQUIRE(cli.handle_command("send alice hello") == true);
-    REQUIRE(test_event_handler->was_handled("send alice hello"));
+    REQUIRE(command_queue->size() == 2);
 
     REQUIRE(cli.handle_command("unknown_command") == true);
-    REQUIRE(test_event_handler->was_handled("unknown_command"));
-
-    REQUIRE(test_event_handler->get_handle_count() == 3);
+    REQUIRE(command_queue->size() == 3);
   }
 }
 
 TEST_CASE("interactive_cli mode handling works correctly", "[cli][mode]")
 {
-  auto test_event_handler = std::make_shared<radix_relay_test::test_double_event_handler>();
-  radix_relay::core::interactive_cli cli("test-node", "hybrid", test_event_handler);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  auto command_queue =
+    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
+  radix_relay::core::interactive_cli cli("test-node", "hybrid", command_queue);
 
   SECTION("mode can be switched to valid modes via handle_command")
   {
@@ -82,13 +81,13 @@ TEST_CASE("interactive_cli mode handling works correctly", "[cli][mode]")
 
 TEST_CASE("interactive_cli command handlers execute safely", "[cli][handlers]")
 {
-  auto test_event_handler = std::make_shared<radix_relay_test::test_double_event_handler>();
-  radix_relay::core::interactive_cli cli("test-node", "hybrid", test_event_handler);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  auto command_queue =
+    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
+  radix_relay::core::interactive_cli cli("test-node", "hybrid", command_queue);
 
-  SECTION("all commands are delegated to event_handler safely")
+  SECTION("all commands are pushed to queue safely")
   {
-    test_event_handler->clear_handles();
-
     REQUIRE_NOTHROW(cli.handle_command("help"));
     REQUIRE_NOTHROW(cli.handle_command("peers"));
     REQUIRE_NOTHROW(cli.handle_command("status"));
@@ -100,19 +99,17 @@ TEST_CASE("interactive_cli command handlers execute safely", "[cli][handlers]")
     REQUIRE_NOTHROW(cli.handle_command("trust alice"));
     REQUIRE_NOTHROW(cli.handle_command("verify alice"));
 
-    REQUIRE(test_event_handler->get_handle_count() == 10);
+    REQUIRE(command_queue->size() == 10);
   }
 
   SECTION("malformed commands are handled gracefully")
   {
-    test_event_handler->clear_handles();
-
     REQUIRE_NOTHROW(cli.handle_command("send alice hello world"));
     REQUIRE_NOTHROW(cli.handle_command("send alice"));
     REQUIRE_NOTHROW(cli.handle_command("send"));
     REQUIRE_NOTHROW(cli.handle_command("unknown_command"));
     REQUIRE_NOTHROW(cli.handle_command(""));
 
-    REQUIRE(test_event_handler->get_handle_count() == 5);
+    REQUIRE(command_queue->size() == 5);
   }
 }

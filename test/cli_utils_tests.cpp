@@ -1,6 +1,9 @@
+#include <boost/asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdio>
 #include <filesystem>
+#include <radix_relay/async/async_queue.hpp>
+#include <radix_relay/core/events.hpp>
 #include <radix_relay/signal/signal_bridge.hpp>
 #include <sstream>
 #include <tuple>
@@ -103,9 +106,12 @@ TEST_CASE("execute_cli_command handles version flag", "[cli_utils][app_init]")
   const auto db_path =
     std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_version.db";
   {
+    auto io_context = std::make_shared<boost::asio::io_context>();
+    auto output_queue =
+      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
     auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
     auto command_handler =
-      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper, output_queue);
     radix_relay::cli_utils::cli_args args;
     args.show_version = true;
 
@@ -118,9 +124,12 @@ TEST_CASE("execute_cli_command handles send command", "[cli_utils][app_init]")
 {
   const auto db_path = std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_send.db";
   {
+    auto io_context = std::make_shared<boost::asio::io_context>();
+    auto output_queue =
+      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
     auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
     auto command_handler =
-      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper, output_queue);
     radix_relay::cli_utils::cli_args args;
     args.send_parsed = true;
     args.send_recipient = "alice";
@@ -135,9 +144,12 @@ TEST_CASE("execute_cli_command handles peers command", "[cli_utils][app_init]")
 {
   const auto db_path = std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_peers.db";
   {
+    auto io_context = std::make_shared<boost::asio::io_context>();
+    auto output_queue =
+      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
     auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
     auto command_handler =
-      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper, output_queue);
     radix_relay::cli_utils::cli_args args;
     args.peers_parsed = true;
 
@@ -151,9 +163,12 @@ TEST_CASE("execute_cli_command handles status command", "[cli_utils][app_init]")
   const auto db_path =
     std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_status.db";
   {
+    auto io_context = std::make_shared<boost::asio::io_context>();
+    auto output_queue =
+      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
     auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
     auto command_handler =
-      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper, output_queue);
     radix_relay::cli_utils::cli_args args;
     args.status_parsed = true;
 
@@ -166,9 +181,12 @@ TEST_CASE("execute_cli_command returns false for no commands", "[cli_utils][app_
 {
   const auto db_path = std::filesystem::path(radix_relay::platform::get_temp_directory()) / "test_execute_cli_false.db";
   {
+    auto io_context = std::make_shared<boost::asio::io_context>();
+    auto output_queue =
+      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
     auto bridge_wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
     auto command_handler =
-      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper);
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper, output_queue);
     const radix_relay::cli_utils::cli_args args;
 
     REQUIRE(radix_relay::cli_utils::execute_cli_command(args, command_handler) == false);
