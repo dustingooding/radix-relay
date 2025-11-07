@@ -471,8 +471,7 @@ TEST_CASE("session_orchestrator handles subscribe_identities command", "[session
 {
   GIVEN("A session orchestrator")
   {
-    // NOLINTNEXTLINE(misc-const-correctness)
-    queue_based_fixture fixture("/tmp/test_subscribe_identities.db");
+    const queue_based_fixture fixture("/tmp/test_subscribe_identities.db");
 
     WHEN("subscribe_identities command is sent")
     {
@@ -517,8 +516,7 @@ TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_o
 {
   GIVEN("A session orchestrator")
   {
-    // NOLINTNEXTLINE(misc-const-correctness)
-    queue_based_fixture fixture("/tmp/test_subscribe_messages.db");
+    const queue_based_fixture fixture("/tmp/test_subscribe_messages.db");
 
     WHEN("subscribe_messages command is sent")
     {

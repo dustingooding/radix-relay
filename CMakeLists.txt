@@ -94,6 +94,7 @@ endif()
 include(cmake/HeaderValidation.cmake)
 if(BUILD_TESTING)
   add_header_validation_targets(TARGET radix_relay::core)
+  add_header_validation_targets(TARGET radix_relay::tui)
 endif()
 
 # Code quality targets (clang-tidy, etc.)

@@ -228,4 +228,9 @@ namespace session_orchestrator {
 
 }// namespace session_orchestrator
 
+struct display_message
+{
+  std::string message;
+};
+
 }// namespace radix_relay::core::events

@@ -66,6 +66,7 @@ add_catch_test(NAME cli_parser_integration_tests SOURCES cli_parser_integration_
 add_catch_test(NAME cli_tests SOURCES cli_tests.cpp)
 add_catch_test(NAME cli_utils_tests SOURCES cli_utils_tests.cpp LIBS CLI11::CLI11;fmt::fmt;spdlog::spdlog;signal_bridge_cxx)
 add_catch_test(NAME command_handler_tests SOURCES command_handler_tests.cpp LIBS fmt::fmt)
+add_catch_test(NAME command_processor_tests SOURCES command_processor_tests.cpp LIBS Boost::asio)
 add_catch_test(NAME event_handler_tests SOURCES event_handler_tests.cpp)
 add_catch_test(NAME event_system_tests SOURCES event_system_tests.cpp)
 add_catch_test(NAME node_identity_tests SOURCES node_identity_tests.cpp LIBS signal_bridge_cxx)
@@ -77,6 +78,7 @@ add_catch_test(NAME nostr_transport_tests SOURCES nostr_transport_tests.cpp LIBS
 add_catch_test(NAME raw_signal_bridge_tests SOURCES raw_signal_bridge_tests.cpp LIBS signal_bridge_cxx PREFIX signal)
 add_catch_test(NAME scroll_state_tests SOURCES scroll_state_tests.cpp)
 add_catch_test(NAME session_orchestrator_tests SOURCES session_orchestrator_tests.cpp LIBS signal_bridge_cxx Boost::asio nlohmann_json::nlohmann_json fmt::fmt)
+add_catch_test(NAME tui_processor_tests SOURCES tui_processor_tests.cpp LIBS Boost::asio ftxui::component)
 add_catch_test(NAME signal_bridge_tests SOURCES signal_bridge_tests.cpp LIBS signal_bridge_cxx PREFIX signal)
 
 if(WIN32 AND BUILD_SHARED_LIBS)

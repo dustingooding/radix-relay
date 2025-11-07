@@ -3,17 +3,19 @@
 #include <fmt/core.h>
 #include <iostream>
 #include <memory>
-#include <radix_relay/concepts/event_handler.hpp>
+#include <radix_relay/async/async_queue.hpp>
 #include <radix_relay/core/events.hpp>
 #include <string>
 #include <string_view>
 
 namespace radix_relay::core {
 
-template<concepts::event_handler EvtHandler> struct interactive_cli
+struct interactive_cli
 {
-  interactive_cli(std::string node_id, std::string mode, std::shared_ptr<EvtHandler> event_handler)
-    : node_id_(std::move(node_id)), mode_(std::move(mode)), event_handler_(std::move(event_handler))
+  interactive_cli(std::string node_id,
+    std::string mode,
+    std::shared_ptr<async::async_queue<events::raw_command>> command_queue)
+    : node_id_(std::move(node_id)), mode_(std::move(mode)), command_queue_(std::move(command_queue))
   {}
 
   auto run() -> void
@@ -59,7 +61,7 @@ template<concepts::event_handler EvtHandler> struct interactive_cli
       return true;
     }
 
-    event_handler_->handle(events::raw_command{ .input = input });
+    command_queue_->push(events::raw_command{ .input = input });
     return true;
   }
 
@@ -68,7 +70,7 @@ template<concepts::event_handler EvtHandler> struct interactive_cli
 private:
   std::string node_id_;
   std::string mode_;
-  std::shared_ptr<EvtHandler> event_handler_;
+  std::shared_ptr<async::async_queue<events::raw_command>> command_queue_;
 };
 
 }// namespace radix_relay::core

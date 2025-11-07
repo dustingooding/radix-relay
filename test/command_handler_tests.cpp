@@ -1,16 +1,39 @@
+#include <boost/asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdio>
 #include <filesystem>
 #include <nlohmann/json.hpp>
 #include <tuple>
 
-#include "test_doubles/test_double_printer.hpp"
 #include "test_doubles/test_double_signal_bridge.hpp"
+#include <radix_relay/async/async_queue.hpp>
 #include <radix_relay/core/command_handler.hpp>
 #include <radix_relay/core/events.hpp>
 #include <radix_relay/platform/env_utils.hpp>
 #include <radix_relay/signal/node_identity.hpp>
 #include <radix_relay/signal/signal_bridge.hpp>
+
+struct command_handler_fixture
+{
+  std::shared_ptr<boost::asio::io_context> io_context;
+  std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::display_message>> output_queue;
+  std::shared_ptr<radix_relay_test::test_double_signal_bridge> bridge;
+  radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge> handler;
+
+  command_handler_fixture()
+    : io_context(std::make_shared<boost::asio::io_context>()),
+      output_queue(
+        std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context)),
+      bridge(std::make_shared<radix_relay_test::test_double_signal_bridge>()), handler(bridge, output_queue)
+  {}
+
+  [[nodiscard]] auto get_all_output() const -> std::string
+  {
+    std::string result;
+    while (auto msg = output_queue->try_pop()) { result += msg->message; }
+    return result;
+  }
+};
 
 SCENARIO("Command handler processes simple commands correctly", "[commands][handler][simple]")
 {
@@ -20,15 +43,13 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
     {
       auto help_command = radix_relay::core::events::help{};
 
-      THEN("handler outputs available commands")
+      THEN("handler emits display_message event with available commands")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(help_command);
-        REQUIRE(test_printer->get_output().find("Interactive Commands") != std::string::npos);
+        const command_handler_fixture fixture;
+        fixture.handler.handle(help_command);
+
+        const auto output = fixture.get_all_output();
+        REQUIRE(output.find("Interactive Commands") != std::string::npos);
       }
     }
 
@@ -38,13 +59,9 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
 
       THEN("handler outputs version information")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(version_command);
-        REQUIRE(test_printer->get_output().find("Radix Relay v") != std::string::npos);
+        const command_handler_fixture fixture;
+        fixture.handler.handle(version_command);
+        REQUIRE(fixture.get_all_output().find("Radix Relay v") != std::string::npos);
       }
     }
 
@@ -54,13 +71,9 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
 
       THEN("handler outputs peer discovery information")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(peers_command);
-        REQUIRE(test_printer->get_output().find("Connected Peers") != std::string::npos);
+        const command_handler_fixture fixture;
+        fixture.handler.handle(peers_command);
+        REQUIRE(fixture.get_all_output().find("Connected Peers") != std::string::npos);
       }
     }
 
@@ -70,13 +83,9 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
 
       THEN("handler outputs network and crypto status")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(status_command);
-        const auto output = test_printer->get_output();
+        const command_handler_fixture fixture;
+        fixture.handler.handle(status_command);
+        const auto output = fixture.get_all_output();
         REQUIRE(output.find("Network Status") != std::string::npos);
         REQUIRE(output.find("Node Fingerprint") != std::string::npos);
         REQUIRE(output.find("RDX:") != std::string::npos);
@@ -89,14 +98,10 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
 
       THEN("handler outputs no active sessions message")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        bridge->contacts_to_return = {};
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(sessions_command);
-        REQUIRE(test_printer->get_output().find("No active sessions") != std::string::npos);
+        const command_handler_fixture fixture;
+        fixture.bridge->contacts_to_return = {};
+        fixture.handler.handle(sessions_command);
+        REQUIRE(fixture.get_all_output().find("No active sessions") != std::string::npos);
       }
     }
 
@@ -106,8 +111,8 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
 
       THEN("handler outputs active sessions with contact information")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        bridge->contacts_to_return = {
+        const command_handler_fixture fixture;
+        fixture.bridge->contacts_to_return = {
           radix_relay::signal::contact_info{
             .rdx_fingerprint = "RDX:alice123",
             .nostr_pubkey = "npub_alice",
@@ -121,12 +126,8 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
             .has_active_session = true,
           },
         };
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(sessions_command);
-        const auto output = test_printer->get_output();
+        fixture.handler.handle(sessions_command);
+        const auto output = fixture.get_all_output();
         REQUIRE(output.find("Active Sessions") != std::string::npos);
         REQUIRE(output.find("Alice") != std::string::npos);
         REQUIRE(output.find("RDX:alice123") != std::string::npos);
@@ -140,13 +141,9 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
 
       THEN("handler outputs scan information")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(scan_command);
-        REQUIRE(test_printer->get_output().find("Scanning") != std::string::npos);
+        const command_handler_fixture fixture;
+        fixture.handler.handle(scan_command);
+        REQUIRE(fixture.get_all_output().find("Scanning") != std::string::npos);
       }
     }
   }
@@ -162,13 +159,9 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
 
       THEN("handler outputs mode change confirmation")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(mode_command);
-        REQUIRE(test_printer->get_output().find("internet") != std::string::npos);
+        const command_handler_fixture fixture;
+        fixture.handler.handle(mode_command);
+        REQUIRE(fixture.get_all_output().find("internet") != std::string::npos);
       }
     }
 
@@ -178,13 +171,9 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
 
       THEN("handler outputs send command confirmation with peer and message")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(send_command);
-        const auto output = test_printer->get_output();
+        const command_handler_fixture fixture;
+        fixture.handler.handle(send_command);
+        const auto output = fixture.get_all_output();
         REQUIRE(output.find("alice") != std::string::npos);
         REQUIRE(output.find("hello world") != std::string::npos);
       }
@@ -196,13 +185,9 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
 
       THEN("handler outputs broadcast command confirmation with message")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(broadcast_command);
-        REQUIRE(test_printer->get_output().find("hello everyone") != std::string::npos);
+        const command_handler_fixture fixture;
+        fixture.handler.handle(broadcast_command);
+        REQUIRE(fixture.get_all_output().find("hello everyone") != std::string::npos);
       }
     }
 
@@ -212,13 +197,9 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
 
       THEN("handler outputs connect command confirmation with relay URL")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(connect_command);
-        REQUIRE(test_printer->get_output().find("relay.damus.io") != std::string::npos);
+        const command_handler_fixture fixture;
+        fixture.handler.handle(connect_command);
+        REQUIRE(fixture.get_all_output().find("relay.damus.io") != std::string::npos);
       }
     }
 
@@ -228,13 +209,9 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
 
       THEN("handler outputs trust command confirmation with peer")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(trust_command);
-        REQUIRE(test_printer->get_output().find("alice") != std::string::npos);
+        const command_handler_fixture fixture;
+        fixture.handler.handle(trust_command);
+        REQUIRE(fixture.get_all_output().find("alice") != std::string::npos);
       }
     }
 
@@ -244,13 +221,9 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
 
       THEN("handler outputs verify command confirmation with peer")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(verify_command);
-        REQUIRE(test_printer->get_output().find("bob") != std::string::npos);
+        const command_handler_fixture fixture;
+        fixture.handler.handle(verify_command);
+        REQUIRE(fixture.get_all_output().find("bob") != std::string::npos);
       }
     }
   }
@@ -266,13 +239,9 @@ SCENARIO("Command handler validates command parameters", "[commands][handler][va
 
       THEN("handler outputs usage information")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(send_command);
-        REQUIRE(test_printer->get_output().find("Usage") != std::string::npos);
+        const command_handler_fixture fixture;
+        fixture.handler.handle(send_command);
+        REQUIRE(fixture.get_all_output().find("Usage") != std::string::npos);
       }
     }
 
@@ -282,13 +251,9 @@ SCENARIO("Command handler validates command parameters", "[commands][handler][va
 
       THEN("handler outputs usage information")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(broadcast_command);
-        REQUIRE(test_printer->get_output().find("Usage") != std::string::npos);
+        const command_handler_fixture fixture;
+        fixture.handler.handle(broadcast_command);
+        REQUIRE(fixture.get_all_output().find("Usage") != std::string::npos);
       }
     }
 
@@ -298,13 +263,9 @@ SCENARIO("Command handler validates command parameters", "[commands][handler][va
 
       THEN("handler outputs invalid mode error message")
       {
-        auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
-        auto test_printer = std::make_shared<radix_relay_test::test_double_printer>();
-        const radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge,
-          radix_relay_test::test_double_printer>
-          handler{ bridge, test_printer };
-        handler.handle(mode_command);
-        REQUIRE(test_printer->get_output().find("Invalid mode") != std::string::npos);
+        const command_handler_fixture fixture;
+        fixture.handler.handle(mode_command);
+        REQUIRE(fixture.get_all_output().find("Invalid mode") != std::string::npos);
       }
     }
   }
