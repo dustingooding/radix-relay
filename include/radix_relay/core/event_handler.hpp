@@ -12,7 +12,7 @@ template<concepts::command_handler CmdHandler> struct event_handler
 {
   using command_handler_t = CmdHandler;
 
-  explicit event_handler(std::shared_ptr<CmdHandler> command_handler) : command_handler_(std::move(command_handler)) {}
+  explicit event_handler(std::shared_ptr<CmdHandler> command_handler) : command_handler_(command_handler) {}
 
   auto handle(const events::raw_command &event) const -> void
   {
@@ -71,6 +71,11 @@ template<concepts::command_handler CmdHandler> struct event_handler
     constexpr auto connect_cmd = "connect ";
     if (input.starts_with(connect_cmd)) {
       command_handler_->handle(events::connect{ .relay = input.substr(std::string_view(connect_cmd).length()) });
+      return;
+    }
+
+    if (input == "disconnect") {
+      command_handler_->handle(events::disconnect{});
       return;
     }
 

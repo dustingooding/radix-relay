@@ -16,8 +16,9 @@ template<typename T> class async_queue
 public:
   static const std::size_t channel_size{ 1024 };
 
-  explicit async_queue(std::shared_ptr<boost::asio::io_context> io_context)
-    : io_context_(std::move(io_context)), channel_(*io_context_, channel_size), size_(0)
+  explicit async_queue(std::shared_ptr<boost::asio::io_context> io_context)// NOLINT(modernize-pass-by-value)
+    : io_context_(io_context), channel_(*io_context_, channel_size),// NOLINT(performance-unnecessary-value-param)
+      size_(0)
   {}
 
   auto push(T value) -> void
@@ -52,6 +53,10 @@ public:
   [[nodiscard]] auto empty() const -> bool { return size_.load() == 0; }
 
   [[nodiscard]] auto size() const -> std::size_t { return size_.load(); }
+
+  auto cancel() -> void { channel_.cancel(); }
+
+  auto close() -> void { channel_.close(); }
 
 private:
   std::shared_ptr<boost::asio::io_context> io_context_;

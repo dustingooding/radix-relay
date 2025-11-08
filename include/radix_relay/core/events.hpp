@@ -49,6 +49,10 @@ struct connect
   std::string relay;
 };
 
+struct disconnect
+{
+};
+
 struct publish_identity
 {
 };
@@ -189,9 +193,10 @@ template<typename T>
 concept Command =
   std::same_as<T, help> or std::same_as<T, peers> or std::same_as<T, status> or std::same_as<T, sessions>
   or std::same_as<T, scan> or std::same_as<T, version> or std::same_as<T, mode> or std::same_as<T, send>
-  or std::same_as<T, broadcast> or std::same_as<T, connect> or std::same_as<T, publish_identity>
-  or std::same_as<T, trust> or std::same_as<T, verify> or std::same_as<T, subscribe>
-  or std::same_as<T, subscribe_identities> or std::same_as<T, subscribe_messages> or std::same_as<T, establish_session>;
+  or std::same_as<T, broadcast> or std::same_as<T, connect> or std::same_as<T, disconnect>
+  or std::same_as<T, publish_identity> or std::same_as<T, trust> or std::same_as<T, verify>
+  or std::same_as<T, subscribe> or std::same_as<T, subscribe_identities> or std::same_as<T, subscribe_messages>
+  or std::same_as<T, establish_session>;
 
 template<typename T>
 concept TransportEvent = std::same_as<T, message_received> or std::same_as<T, session_established>

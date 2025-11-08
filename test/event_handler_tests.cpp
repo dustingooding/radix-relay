@@ -39,6 +39,8 @@ SCENARIO("Event handler processes raw command events correctly", "[events][handl
       auto mode_event = radix_relay::core::events::raw_command{ .input = "mode internet" };
       auto send_event = radix_relay::core::events::raw_command{ .input = "send alice hello" };
       auto broadcast_event = radix_relay::core::events::raw_command{ .input = "broadcast test message" };
+      auto connect_event = radix_relay::core::events::raw_command{ .input = "connect wss://relay.example.com" };
+      auto disconnect_event = radix_relay::core::events::raw_command{ .input = "disconnect" };
 
       THEN("handler should parse parameters correctly and route to command handler")
       {
@@ -53,7 +55,13 @@ SCENARIO("Event handler processes raw command events correctly", "[events][handl
         event_handler.handle(broadcast_event);
         REQUIRE(test_cmd_handler->was_called("broadcast:test message"));
 
-        REQUIRE(test_cmd_handler->get_call_count() == 3);
+        event_handler.handle(connect_event);
+        REQUIRE(test_cmd_handler->was_called("connect:wss://relay.example.com"));
+
+        event_handler.handle(disconnect_event);
+        REQUIRE(test_cmd_handler->was_called("disconnect"));
+
+        REQUIRE(test_cmd_handler->get_call_count() == 5);
       }
     }
 

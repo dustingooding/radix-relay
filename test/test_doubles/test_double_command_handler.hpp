@@ -65,6 +65,11 @@ private:
     called_commands.push_back("connect:" + command.relay);
   }
 
+  auto handle_impl(const radix_relay::core::events::disconnect & /*command*/) const -> void
+  {
+    called_commands.push_back("disconnect");
+  }
+
   auto handle_impl(const radix_relay::core::events::trust &command) const -> void
   {
     called_commands.push_back("trust:" + command.peer);

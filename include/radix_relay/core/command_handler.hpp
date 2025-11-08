@@ -14,8 +14,10 @@ namespace radix_relay::core {
 template<concepts::signal_bridge Bridge> struct command_handler
 {
   explicit command_handler(std::shared_ptr<Bridge> bridge,
-    std::shared_ptr<async::async_queue<events::display_message>> output_queue)
-    : bridge_(std::move(bridge)), output_queue_(std::move(output_queue))
+    std::shared_ptr<async::async_queue<events::display_message>> display_out_queue,// NOLINT(modernize-pass-by-value)
+    std::shared_ptr<async::async_queue<events::transport::in_t>> transport_out_queue)// NOLINT(modernize-pass-by-value)
+    : bridge_(bridge), display_out_queue_(display_out_queue),
+      transport_out_queue_(transport_out_queue)// NOLINT(performance-unnecessary-value-param)
   {}
 
   template<events::Command T> auto handle(const T &command) const -> void { handle_impl(command); }
@@ -25,7 +27,7 @@ template<concepts::signal_bridge Bridge> struct command_handler
 private:
   template<typename... Args> auto emit(fmt::format_string<Args...> format_string, Args &&...args) const -> void
   {
-    output_queue_->push(events::display_message{ fmt::format(format_string, std::forward<Args>(args)...) });
+    display_out_queue_->push(events::display_message{ fmt::format(format_string, std::forward<Args>(args)...) });
   }
 
   auto handle_impl(const events::help & /*command*/) const -> void
@@ -40,6 +42,7 @@ private:
     emit("  mode <internet|mesh|hybrid>  Switch transport mode\n");
     emit("  scan                      Force peer discovery\n");
     emit("  connect <relay>           Add Nostr relay\n");
+    emit("  disconnect                Disconnect from Nostr relay\n");
     emit("  trust <peer>              Mark peer as trusted\n");
     emit("  verify <peer>             Show safety numbers\n");
     emit("  version                   Show version information\n");
@@ -133,10 +136,18 @@ private:
   {
     std::ignore = initialized_;
     if (not command.relay.empty()) {
-      emit("Connecting to Nostr relay {} (not implemented)\n", command.relay);
+      transport_out_queue_->push(events::transport::connect{ .url = command.relay });
+      emit("Connecting to Nostr relay {}\n", command.relay);
     } else {
       emit("Usage: connect <relay>\n");
     }
+  }
+
+  auto handle_impl(const events::disconnect & /*command*/) const -> void
+  {
+    std::ignore = initialized_;
+    transport_out_queue_->push(events::transport::disconnect{});
+    emit("Disconnecting from Nostr relay\n");
   }
 
   auto handle_impl(const events::trust &command) const -> void
@@ -160,7 +171,8 @@ private:
   }
 
   std::shared_ptr<Bridge> bridge_;
-  std::shared_ptr<async::async_queue<events::display_message>> output_queue_;
+  std::shared_ptr<async::async_queue<events::display_message>> display_out_queue_;
+  std::shared_ptr<async::async_queue<events::transport::in_t>> transport_out_queue_;
   bool initialized_ = true;
 };
 
