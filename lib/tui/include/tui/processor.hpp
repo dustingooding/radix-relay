@@ -21,12 +21,11 @@ template<concepts::signal_bridge Bridge> struct processor
 {
   processor(std::string node_id,
     std::string mode,
-    std::shared_ptr<Bridge> bridge,// NOLINT(modernize-pass-by-value)
-    std::shared_ptr<async::async_queue<core::events::raw_command>> command_queue,// NOLINT(modernize-pass-by-value)
-    std::shared_ptr<async::async_queue<core::events::display_message>> output_queue)// NOLINT(modernize-pass-by-value)
-    : node_id_(std::move(node_id)), mode_(std::move(mode)), bridge_(bridge),
-      command_queue_(command_queue),// NOLINT(performance-unnecessary-value-param)
-      output_queue_(output_queue)// NOLINT(performance-unnecessary-value-param)
+    const std::shared_ptr<Bridge> &bridge,
+    const std::shared_ptr<async::async_queue<core::events::raw_command>> &command_queue,
+    const std::shared_ptr<async::async_queue<core::events::display_message>> &output_queue)
+    : node_id_(std::move(node_id)), mode_(std::move(mode)), bridge_(bridge), command_queue_(command_queue),
+      output_queue_(output_queue)
   {}
 
   ~processor() { stop(); }

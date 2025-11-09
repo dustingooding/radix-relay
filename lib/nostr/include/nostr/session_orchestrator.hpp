@@ -29,20 +29,14 @@ namespace radix_relay::nostr {
 template<concepts::signal_bridge Bridge, concepts::request_tracker Tracker>
 struct session_orchestrator : public std::enable_shared_from_this<session_orchestrator<Bridge, Tracker>>
 {
-  session_orchestrator(std::shared_ptr<Bridge> bridge,
-    std::shared_ptr<Tracker> tracker,
-    std::shared_ptr<boost::asio::io_context> io_context,// NOLINT(modernize-pass-by-value)
-    std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>>// NOLINT(modernize-pass-by-value)
-      in_queue,
-    std::shared_ptr<async::async_queue<core::events::transport::in_t>>// NOLINT(modernize-pass-by-value)
-      transport_out_queue,
-    std::shared_ptr<async::async_queue<core::events::transport_event_variant_t>>// NOLINT(modernize-pass-by-value)
-      main_out_queue)
-    : bridge_(bridge), handler_(bridge_), tracker_(tracker),
-      io_context_(io_context),// NOLINT(performance-unnecessary-value-param)
-      in_queue_(in_queue),// NOLINT(performance-unnecessary-value-param)
-      transport_out_queue_(transport_out_queue),// NOLINT(performance-unnecessary-value-param)
-      main_out_queue_(main_out_queue)// NOLINT(performance-unnecessary-value-param)
+  session_orchestrator(const std::shared_ptr<Bridge> &bridge,
+    const std::shared_ptr<Tracker> &tracker,
+    const std::shared_ptr<boost::asio::io_context> &io_context,
+    const std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> &in_queue,
+    const std::shared_ptr<async::async_queue<core::events::transport::in_t>> &transport_out_queue,
+    const std::shared_ptr<async::async_queue<core::events::transport_event_variant_t>> &main_out_queue)
+    : bridge_(bridge), handler_(bridge_), tracker_(tracker), io_context_(io_context), in_queue_(in_queue),
+      transport_out_queue_(transport_out_queue), main_out_queue_(main_out_queue)
   {}
 
   auto run_once() -> boost::asio::awaitable<void>

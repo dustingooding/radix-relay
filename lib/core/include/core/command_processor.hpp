@@ -11,11 +11,10 @@ namespace radix_relay::core {
 template<typename EventHandler> class command_processor
 {
 public:
-  command_processor(std::shared_ptr<boost::asio::io_context> io_context,// NOLINT(modernize-pass-by-value)
-    std::shared_ptr<async::async_queue<events::raw_command>> in_queue,// NOLINT(modernize-pass-by-value)
-    std::shared_ptr<EventHandler> event_handler)
-    : io_context_(io_context), in_queue_(in_queue),// NOLINT(performance-unnecessary-value-param)
-      event_handler_(event_handler)// NOLINT(performance-unnecessary-value-param)
+  command_processor(const std::shared_ptr<boost::asio::io_context> &io_context,
+    const std::shared_ptr<async::async_queue<events::raw_command>> &in_queue,
+    const std::shared_ptr<EventHandler> &event_handler)
+    : io_context_(io_context), in_queue_(in_queue), event_handler_(event_handler)
   {}
 
   auto run_once() -> boost::asio::awaitable<void>

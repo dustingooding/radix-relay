@@ -10,8 +10,8 @@ namespace radix_relay::core {
 struct transport_event_display_handler
 {
   explicit transport_event_display_handler(
-    std::shared_ptr<async::async_queue<events::display_message>> display_out_queue)// NOLINT(modernize-pass-by-value)
-    : display_out_queue_(display_out_queue)// NOLINT(performance-unnecessary-value-param)
+    const std::shared_ptr<async::async_queue<events::display_message>> &display_out_queue)
+    : display_out_queue_(display_out_queue)
   {}
 
   auto handle(const events::message_received &evt) const -> void
