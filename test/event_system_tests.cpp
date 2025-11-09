@@ -2,7 +2,7 @@
 #include <string>
 #include <utility>
 
-#include <radix_relay/core/events.hpp>
+#include <core/events.hpp>
 
 SCENARIO("Event structures can be constructed and hold data correctly", "[events][construction]")
 {

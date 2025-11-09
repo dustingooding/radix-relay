@@ -1,15 +1,15 @@
 #include <algorithm>
+#include <async/async_queue.hpp>
 #include <bit>
 #include <catch2/catch_test_macros.hpp>
+#include <core/events.hpp>
 #include <filesystem>
 #include <memory>
 #include <nlohmann/json.hpp>
-#include <radix_relay/async/async_queue.hpp>
-#include <radix_relay/core/events.hpp>
-#include <radix_relay/core/session_orchestrator.hpp>
-#include <radix_relay/nostr/request_tracker.hpp>
-#include <radix_relay/signal/signal_bridge.hpp>
+#include <nostr/request_tracker.hpp>
+#include <nostr/session_orchestrator.hpp>
 #include <ranges>
+#include <signal/signal_bridge.hpp>
 #include <spdlog/spdlog.h>
 #include <system_error>
 #include <variant>
@@ -30,10 +30,12 @@ struct queue_based_fixture
   std::string db_path;
   std::shared_ptr<radix_relay::signal::bridge> bridge;
   std::shared_ptr<radix_relay::nostr::request_tracker> tracker;
-  std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> in_queue;
-  std::shared_ptr<async::async_queue<events::transport::in_t>> transport_out_queue;
-  std::shared_ptr<async::async_queue<events::transport_event_variant_t>> main_out_queue;
-  std::shared_ptr<session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>> orchestrator;
+  std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> in_queue;
+  std::shared_ptr<async::async_queue<core::events::transport::in_t>> transport_out_queue;
+  std::shared_ptr<async::async_queue<core::events::transport_event_variant_t>> main_out_queue;
+  std::shared_ptr<
+    radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
+    orchestrator;
 
   explicit queue_based_fixture(std::string path) : db_path(std::move(path))
   {
@@ -41,12 +43,12 @@ struct queue_based_fixture
     io_context = std::make_shared<boost::asio::io_context>();
     bridge = std::make_shared<radix_relay::signal::bridge>(db_path);
     tracker = std::make_shared<radix_relay::nostr::request_tracker>(io_context.get());
-    in_queue = std::make_shared<async::async_queue<events::session_orchestrator::in_t>>(io_context);
-    transport_out_queue = std::make_shared<async::async_queue<events::transport::in_t>>(io_context);
-    main_out_queue = std::make_shared<async::async_queue<events::transport_event_variant_t>>(io_context);
-    orchestrator =
-      std::make_shared<session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
-        bridge, tracker, io_context, in_queue, transport_out_queue, main_out_queue);
+    in_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
+    transport_out_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
+    main_out_queue = std::make_shared<async::async_queue<core::events::transport_event_variant_t>>(io_context);
+    orchestrator = std::make_shared<
+      radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
+      bridge, tracker, io_context, in_queue, transport_out_queue, main_out_queue);
   }
 
   // NOLINTNEXTLINE(bugprone-exception-escape)
@@ -76,18 +78,22 @@ struct two_bridge_fixture
   std::string bob_rdx;
 
   std::shared_ptr<boost::asio::io_context> alice_io;
-  std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> alice_in;
-  std::shared_ptr<async::async_queue<events::transport::in_t>> alice_transport_out;
-  std::shared_ptr<async::async_queue<events::transport_event_variant_t>> alice_main_out;
+  std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> alice_in;
+  std::shared_ptr<async::async_queue<core::events::transport::in_t>> alice_transport_out;
+  std::shared_ptr<async::async_queue<core::events::transport_event_variant_t>> alice_main_out;
   std::shared_ptr<radix_relay::nostr::request_tracker> alice_tracker;
-  std::shared_ptr<session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>> alice_orch;
+  std::shared_ptr<
+    radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
+    alice_orch;
 
   std::shared_ptr<boost::asio::io_context> bob_io;
-  std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> bob_in;
-  std::shared_ptr<async::async_queue<events::transport::in_t>> bob_transport_out;
-  std::shared_ptr<async::async_queue<events::transport_event_variant_t>> bob_main_out;
+  std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> bob_in;
+  std::shared_ptr<async::async_queue<core::events::transport::in_t>> bob_transport_out;
+  std::shared_ptr<async::async_queue<core::events::transport_event_variant_t>> bob_main_out;
   std::shared_ptr<radix_relay::nostr::request_tracker> bob_tracker;
-  std::shared_ptr<session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>> bob_orch;
+  std::shared_ptr<
+    radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
+    bob_orch;
 
   explicit two_bridge_fixture(std::string alice_path, std::string bob_path)
     : alice_db_path(std::move(alice_path)), bob_db_path(std::move(bob_path))
@@ -110,20 +116,21 @@ struct two_bridge_fixture
     alice_rdx = bob_bridge->add_contact_and_establish_session_from_base64(alice_bundle_base64, "alice");
 
     alice_io = std::make_shared<boost::asio::io_context>();
-    alice_in = std::make_shared<async::async_queue<events::session_orchestrator::in_t>>(alice_io);
-    alice_transport_out = std::make_shared<async::async_queue<events::transport::in_t>>(alice_io);
-    alice_main_out = std::make_shared<async::async_queue<events::transport_event_variant_t>>(alice_io);
+    alice_in = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(alice_io);
+    alice_transport_out = std::make_shared<async::async_queue<core::events::transport::in_t>>(alice_io);
+    alice_main_out = std::make_shared<async::async_queue<core::events::transport_event_variant_t>>(alice_io);
     alice_tracker = std::make_shared<radix_relay::nostr::request_tracker>(alice_io.get());
-    alice_orch =
-      std::make_shared<session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
-        alice_bridge, alice_tracker, alice_io, alice_in, alice_transport_out, alice_main_out);
+    alice_orch = std::make_shared<
+      radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
+      alice_bridge, alice_tracker, alice_io, alice_in, alice_transport_out, alice_main_out);
 
     bob_io = std::make_shared<boost::asio::io_context>();
-    bob_in = std::make_shared<async::async_queue<events::session_orchestrator::in_t>>(bob_io);
-    bob_transport_out = std::make_shared<async::async_queue<events::transport::in_t>>(bob_io);
-    bob_main_out = std::make_shared<async::async_queue<events::transport_event_variant_t>>(bob_io);
+    bob_in = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(bob_io);
+    bob_transport_out = std::make_shared<async::async_queue<core::events::transport::in_t>>(bob_io);
+    bob_main_out = std::make_shared<async::async_queue<core::events::transport_event_variant_t>>(bob_io);
     bob_tracker = std::make_shared<radix_relay::nostr::request_tracker>(bob_io.get());
-    bob_orch = std::make_shared<session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
+    bob_orch = std::make_shared<
+      radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
       bob_bridge, bob_tracker, bob_io, bob_in, bob_transport_out, bob_main_out);
   }
 
@@ -219,7 +226,7 @@ SCENARIO("Queue-based session_orchestrator processes bytes_received with unknown
       const std::string json_msg = R"(["UNKNOWN","test"])";
       const auto bytes = string_to_bytes(json_msg);
 
-      fixture.in_queue->push(events::transport::bytes_received{ bytes });
+      fixture.in_queue->push(core::events::transport::bytes_received{ bytes });
 
       boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
 
@@ -246,7 +253,7 @@ SCENARIO("Queue-based session_orchestrator processes bytes_received with OK mess
       const std::string json_msg = R"(["OK","test_event_id",true,""])";
       const auto bytes = string_to_bytes(json_msg);
 
-      fixture.in_queue->push(events::transport::bytes_received{ bytes });
+      fixture.in_queue->push(core::events::transport::bytes_received{ bytes });
 
       boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
 
@@ -273,7 +280,7 @@ SCENARIO("Queue-based session_orchestrator processes bytes_received with EOSE me
       const std::string json_msg = R"(["EOSE","test_subscription_id"])";
       const auto bytes = string_to_bytes(json_msg);
 
-      fixture.in_queue->push(events::transport::bytes_received{ bytes });
+      fixture.in_queue->push(core::events::transport::bytes_received{ bytes });
 
       boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
 
@@ -296,7 +303,7 @@ SCENARIO("Queue-based session_orchestrator processes transport connected event",
 
     WHEN("run_once processes a transport connected event from in_queue")
     {
-      fixture.in_queue->push(events::transport::connected{});
+      fixture.in_queue->push(core::events::transport::connected{});
 
       boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
 
@@ -322,7 +329,7 @@ SCENARIO("Queue-based session_orchestrator processes transport disconnected even
 
     WHEN("run_once processes a transport disconnected event from in_queue")
     {
-      fixture.in_queue->push(events::transport::disconnected{});
+      fixture.in_queue->push(core::events::transport::disconnected{});
 
       boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
 
@@ -345,7 +352,7 @@ SCENARIO("Queue-based session_orchestrator processes transport sent event", "[co
 
     WHEN("run_once processes a transport sent event from in_queue")
     {
-      fixture.in_queue->push(events::transport::sent{ .message_id = "test_msg_id" });
+      fixture.in_queue->push(core::events::transport::sent{ .message_id = "test_msg_id" });
 
       boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
 
@@ -372,7 +379,7 @@ SCENARIO("Queue-based session_orchestrator processes transport send_failed event
     WHEN("run_once processes a transport send_failed event from in_queue")
     {
       fixture.in_queue->push(
-        events::transport::send_failed{ .message_id = "test_msg_id", .error_message = "test reason" });
+        core::events::transport::send_failed{ .message_id = "test_msg_id", .error_message = "test reason" });
 
       boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
 
@@ -398,7 +405,8 @@ SCENARIO("Queue-based session_orchestrator processes transport connect_failed ev
 
     WHEN("run_once processes a transport connect_failed event from in_queue")
     {
-      fixture.in_queue->push(events::transport::connect_failed{ .url = "test_url", .error_message = "test reason" });
+      fixture.in_queue->push(
+        core::events::transport::connect_failed{ .url = "test_url", .error_message = "test reason" });
 
       boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
 
@@ -443,7 +451,7 @@ SCENARIO("Queue-based session_orchestrator Alice encrypts and Bob decrypts end-t
 
       const std::string nostr_message_json = nlohmann::json::array({ "EVENT", "sub_id_queue", event_json }).dump();
 
-      fixture.bob_in->push(events::transport::bytes_received{ .bytes = string_to_bytes(nostr_message_json) });
+      fixture.bob_in->push(core::events::transport::bytes_received{ .bytes = string_to_bytes(nostr_message_json) });
       boost::asio::co_spawn(*fixture.bob_io, fixture.bob_orch->run_once(), boost::asio::detached);
       fixture.bob_io->run();
 
@@ -490,9 +498,9 @@ TEST_CASE("session_orchestrator handles subscribe_identities command", "[session
         REQUIRE(transport_cmd.has_value());
 
         if (transport_cmd.has_value()) {
-          REQUIRE(std::holds_alternative<events::transport::send>(transport_cmd.value()));
+          REQUIRE(std::holds_alternative<core::events::transport::send>(transport_cmd.value()));
 
-          const auto &send_cmd = std::get<events::transport::send>(transport_cmd.value());
+          const auto &send_cmd = std::get<core::events::transport::send>(transport_cmd.value());
           std::string json_str;
           json_str.resize(send_cmd.bytes.size());
           std::ranges::transform(
@@ -535,9 +543,9 @@ TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_o
         REQUIRE(transport_cmd.has_value());
 
         if (transport_cmd.has_value()) {
-          REQUIRE(std::holds_alternative<events::transport::send>(transport_cmd.value()));
+          REQUIRE(std::holds_alternative<core::events::transport::send>(transport_cmd.value()));
 
-          const auto &send_cmd = std::get<events::transport::send>(transport_cmd.value());
+          const auto &send_cmd = std::get<core::events::transport::send>(transport_cmd.value());
           std::string json_str;
           json_str.resize(send_cmd.bytes.size());
           std::ranges::transform(

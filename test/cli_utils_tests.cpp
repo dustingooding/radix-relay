@@ -1,18 +1,18 @@
+#include <async/async_queue.hpp>
 #include <boost/asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <core/events.hpp>
 #include <cstdio>
 #include <filesystem>
-#include <radix_relay/async/async_queue.hpp>
-#include <radix_relay/core/events.hpp>
-#include <radix_relay/signal/signal_bridge.hpp>
+#include <signal/signal_bridge.hpp>
 #include <sstream>
 #include <tuple>
 #include <vector>
 
-#include <radix_relay/cli_utils/app_init.hpp>
-#include <radix_relay/cli_utils/cli_parser.hpp>
-#include <radix_relay/platform/env_utils.hpp>
-#include <radix_relay/signal/node_identity.hpp>
+#include <cli_utils/app_init.hpp>
+#include <cli_utils/cli_parser.hpp>
+#include <platform/env_utils.hpp>
+#include <signal/node_identity.hpp>
 
 TEST_CASE("cli_args default values", "[cli_utils][cli_parser]")
 {

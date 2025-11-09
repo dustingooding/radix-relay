@@ -1,12 +1,12 @@
+#include <async/async_queue.hpp>
 #include <boost/asio/io_context.hpp>
+#include <core/cli.hpp>
+#include <core/events.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <radix_relay/async/async_queue.hpp>
-#include <radix_relay/core/cli.hpp>
-#include <radix_relay/core/events.hpp>
-#include <radix_relay/platform/env_utils.hpp>
-#include <radix_relay/signal/signal_bridge.hpp>
+#include <platform/env_utils.hpp>
+#include <signal/signal_bridge.hpp>
 #include <string>
 #include <utility>
 

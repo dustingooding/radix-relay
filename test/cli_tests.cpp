@@ -1,8 +1,8 @@
+#include <async/async_queue.hpp>
 #include <boost/asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <radix_relay/async/async_queue.hpp>
-#include <radix_relay/core/cli.hpp>
-#include <radix_relay/core/events.hpp>
+#include <core/cli.hpp>
+#include <core/events.hpp>
 #include <string>
 #include <utility>
 

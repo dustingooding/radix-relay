@@ -10,7 +10,7 @@
 #include <thread>
 #include <vector>
 
-#include <radix_relay/async/async_queue.hpp>
+#include <async/async_queue.hpp>
 
 SCENARIO("async_queue can be constructed", "[async_queue][construction]")
 {

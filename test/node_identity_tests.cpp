@@ -1,9 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdio>
 #include <filesystem>
-#include <radix_relay/platform/env_utils.hpp>
-#include <radix_relay/signal/node_identity.hpp>
-#include <radix_relay/signal/signal_bridge.hpp>
+#include <platform/env_utils.hpp>
+#include <signal/node_identity.hpp>
+#include <signal/signal_bridge.hpp>
 #include <tuple>
 
 TEST_CASE("Node Identity Functions", "[node_identity]")

@@ -7,7 +7,7 @@
 //
 // This test connects to wss://echo.websocket.org which echoes back any message sent
 
-#include <radix_relay/transport/websocket_stream.hpp>
+#include <transport/websocket_stream.hpp>
 
 #include <boost/asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>

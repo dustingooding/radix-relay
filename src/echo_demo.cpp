@@ -1,20 +1,20 @@
 #include <algorithm>
+#include <async/async_queue.hpp>
 #include <chrono>
+#include <core/events.hpp>
 #include <filesystem>
 #include <iostream>
 #include <memory>
-#include <radix_relay/async/async_queue.hpp>
-#include <radix_relay/core/events.hpp>
-#include <radix_relay/core/session_orchestrator.hpp>
-#include <radix_relay/nostr/request_tracker.hpp>
-#include <radix_relay/nostr/transport.hpp>
-#include <radix_relay/platform/env_utils.hpp>
-#include <radix_relay/signal/signal_bridge.hpp>
-#include <radix_relay/transport/websocket_stream.hpp>
+#include <nostr/request_tracker.hpp>
+#include <nostr/session_orchestrator.hpp>
+#include <nostr/transport.hpp>
+#include <platform/env_utils.hpp>
+#include <signal/signal_bridge.hpp>
 #include <spdlog/cfg/env.h>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <thread>
+#include <transport/websocket_stream.hpp>
 #include <vector>
 
 namespace radix_relay {
@@ -95,7 +95,7 @@ auto main() -> int
     auto bob_ws = std::make_shared<radix_relay::transport::websocket_stream>(*io_context);
 
     auto alice_orchestrator = std::make_shared<
-      radix_relay::core::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
+      radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
       alice_bridge,
       alice_tracker,
       io_context,
@@ -104,7 +104,7 @@ auto main() -> int
       alice_main_event_queue);
 
     auto bob_orchestrator = std::make_shared<
-      radix_relay::core::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
+      radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
       bob_bridge, bob_tracker, io_context, bob_session_in_queue, bob_transport_in_queue, bob_main_event_queue);
 
     auto alice_transport = std::make_shared<radix_relay::nostr::transport<radix_relay::transport::websocket_stream>>(
@@ -119,7 +119,7 @@ auto main() -> int
 
     auto spawn_orchestrator_loop =
       [](const std::shared_ptr<boost::asio::io_context> &ctx,
-        std::shared_ptr<radix_relay::core::session_orchestrator<radix_relay::signal::bridge,
+        std::shared_ptr<radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge,
           radix_relay::nostr::request_tracker>> orch) {
         boost::asio::co_spawn(
           *ctx,

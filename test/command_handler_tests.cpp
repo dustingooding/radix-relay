@@ -6,12 +6,12 @@
 #include <tuple>
 
 #include "test_doubles/test_double_signal_bridge.hpp"
-#include <radix_relay/async/async_queue.hpp>
-#include <radix_relay/core/command_handler.hpp>
-#include <radix_relay/core/events.hpp>
-#include <radix_relay/platform/env_utils.hpp>
-#include <radix_relay/signal/node_identity.hpp>
-#include <radix_relay/signal/signal_bridge.hpp>
+#include <async/async_queue.hpp>
+#include <core/command_handler.hpp>
+#include <core/events.hpp>
+#include <platform/env_utils.hpp>
+#include <signal/node_identity.hpp>
+#include <signal/signal_bridge.hpp>
 
 struct command_handler_fixture
 {
@@ -117,13 +117,13 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
       {
         const command_handler_fixture fixture;
         fixture.bridge->contacts_to_return = {
-          radix_relay::signal::contact_info{
+          radix_relay::core::contact_info{
             .rdx_fingerprint = "RDX:alice123",
             .nostr_pubkey = "npub_alice",
             .user_alias = "Alice",
             .has_active_session = true,
           },
-          radix_relay::signal::contact_info{
+          radix_relay::core::contact_info{
             .rdx_fingerprint = "RDX:bob456",
             .nostr_pubkey = "npub_bob",
             .user_alias = "",

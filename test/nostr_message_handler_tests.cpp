@@ -2,9 +2,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <nlohmann/json.hpp>
-#include <radix_relay/nostr/message_handler.hpp>
-#include <radix_relay/signal/node_identity.hpp>
-#include <radix_relay/signal/signal_bridge.hpp>
+#include <nostr/message_handler.hpp>
+#include <signal/node_identity.hpp>
+#include <signal/signal_bridge.hpp>
 
 TEST_CASE("message_handler handles incoming encrypted_message", "[message_handler]")
 {
