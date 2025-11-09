@@ -2,8 +2,8 @@
 #include <chrono>
 #include <filesystem>
 #include <nlohmann/json.hpp>
-#include <radix_relay/platform/env_utils.hpp>
-#include <radix_relay/signal/signal_bridge.hpp>
+#include <platform/env_utils.hpp>
+#include <signal/signal_bridge.hpp>
 
 TEST_CASE("signal::bridge basic functionality", "[signal][wrapper]")
 {

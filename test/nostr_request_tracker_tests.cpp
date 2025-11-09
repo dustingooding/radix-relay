@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
-#include <radix_relay/nostr/protocol.hpp>
-#include <radix_relay/nostr/request_tracker.hpp>
+#include <nostr/protocol.hpp>
+#include <nostr/request_tracker.hpp>
 
 TEST_CASE("request_tracker track() stores pending request", "[nostr][request_tracker]")
 {

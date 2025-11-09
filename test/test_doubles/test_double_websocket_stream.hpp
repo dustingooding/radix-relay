@@ -1,7 +1,7 @@
 #pragma once
 
-#include <radix_relay/concepts/websocket_stream.hpp>
-#include <radix_relay/transport/websocket_stream.hpp>
+#include <concepts/websocket_stream.hpp>
+#include <transport/websocket_stream.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/system/error_code.hpp>

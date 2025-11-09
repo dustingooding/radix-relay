@@ -1,8 +1,8 @@
 #pragma once
 
 #include <algorithm>
-#include <radix_relay/concepts/event_handler.hpp>
-#include <radix_relay/core/events.hpp>
+#include <concepts/event_handler.hpp>
+#include <core/events.hpp>
 #include <string>
 #include <vector>
 

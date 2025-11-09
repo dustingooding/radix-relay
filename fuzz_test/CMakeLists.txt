@@ -9,6 +9,7 @@ target_link_libraries(
   PRIVATE radix_relay_options
           radix_relay_warnings
           radix_relay::core
+          radix_relay::signal
           fmt::fmt
           -coverage
           -fsanitize=fuzzer)

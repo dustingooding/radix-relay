@@ -1,12 +1,12 @@
+#include <async/async_queue.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <core/command_processor.hpp>
+#include <core/events.hpp>
 #include <memory>
-#include <radix_relay/async/async_queue.hpp>
-#include <radix_relay/core/command_processor.hpp>
-#include <radix_relay/core/events.hpp>
 #include <string>
 #include <vector>
 

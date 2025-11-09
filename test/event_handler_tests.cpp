@@ -1,8 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "test_doubles/test_double_command_handler.hpp"
-#include <radix_relay/core/event_handler.hpp>
-#include <radix_relay/core/events.hpp>
+#include <core/event_handler.hpp>
+#include <core/events.hpp>
 
 SCENARIO("Event handler processes raw command events correctly", "[events][handler][raw_command]")
 {

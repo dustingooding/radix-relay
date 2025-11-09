@@ -72,8 +72,13 @@ add_library(radix_relay::radix_relay_warnings ALIAS radix_relay_warnings)
 #add_library(radix_relay::radix_relay_options INTERFACE IMPORTED)
 #add_library(radix_relay::radix_relay_warnings INTERFACE IMPORTED)
 
-# configure files based on CMake configuration options
-add_subdirectory(configured_files)
+# Add library subdirectories
+add_subdirectory(lib/nostr)
+add_subdirectory(lib/signal)
+add_subdirectory(lib/transport)
+add_subdirectory(lib/platform)
+add_subdirectory(lib/core)
+add_subdirectory(lib/tui)
 
 # Adding the src:
 add_subdirectory(src)
@@ -90,13 +95,6 @@ if(BUILD_TESTING)
   add_subdirectory(test)
 endif()
 
-# Header validation targets
-include(cmake/HeaderValidation.cmake)
-if(BUILD_TESTING)
-  add_header_validation_targets(TARGET radix_relay::core)
-  add_header_validation_targets(TARGET radix_relay::tui)
-endif()
-
 # Code quality targets (clang-tidy, etc.)
 include(cmake/Quality.cmake)
 
@@ -106,7 +104,6 @@ if(radix_relay_BUILD_FUZZ_TESTS)
     message(WARNING "You need asan or tsan enabled for meaningful fuzz testing")
   endif()
   add_subdirectory(fuzz_test)
-
 endif()
 
 # If MSVC is being used, and ASAN is enabled, we need to set the debugger environment

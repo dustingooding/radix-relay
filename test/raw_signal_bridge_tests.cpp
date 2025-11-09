@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "signal_bridge_cxx/lib.h"
-#include <radix_relay/platform/env_utils.hpp>
+#include <platform/env_utils.hpp>
 
 TEST_CASE("SignalBridge Node Fingerprint Integration", "[signal][fingerprint][cxx]")
 {

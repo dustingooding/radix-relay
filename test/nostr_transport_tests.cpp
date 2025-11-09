@@ -1,7 +1,7 @@
 #include "test_doubles/test_double_websocket_stream.hpp"
-#include <radix_relay/async/async_queue.hpp>
-#include <radix_relay/core/events.hpp>
-#include <radix_relay/nostr/transport.hpp>
+#include <async/async_queue.hpp>
+#include <core/events.hpp>
+#include <nostr/transport.hpp>
 
 #include <boost/asio.hpp>
 #include <catch2/catch_test_macros.hpp>

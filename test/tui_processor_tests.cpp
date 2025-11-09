@@ -1,9 +1,9 @@
+#include <async/async_queue.hpp>
 #include <boost/asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <core/events.hpp>
 #include <memory>
-#include <radix_relay/async/async_queue.hpp>
-#include <radix_relay/core/events.hpp>
-#include <radix_relay/tui/processor.hpp>
+#include <tui/processor.hpp>
 
 #include "test_doubles/test_double_signal_bridge.hpp"
 

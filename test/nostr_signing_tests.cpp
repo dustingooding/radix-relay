@@ -1,9 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
-#include <radix_relay/nostr/protocol.hpp>
-#include <radix_relay/platform/env_utils.hpp>
-#include <radix_relay/signal/signal_bridge.hpp>
+#include <nostr/protocol.hpp>
+#include <platform/env_utils.hpp>
 #include <ranges>
+#include <signal/signal_bridge.hpp>
 
 // Helper function to convert string literals to byte spans for testing
 auto string_to_bytes(const std::string &str) -> std::vector<std::byte>

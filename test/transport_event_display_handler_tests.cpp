@@ -1,9 +1,9 @@
 #include <boost/asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include <radix_relay/async/async_queue.hpp>
-#include <radix_relay/core/events.hpp>
-#include <radix_relay/core/transport_event_display_handler.hpp>
+#include <async/async_queue.hpp>
+#include <core/events.hpp>
+#include <core/transport_event_display_handler.hpp>
 
 struct transport_event_display_handler_fixture
 {

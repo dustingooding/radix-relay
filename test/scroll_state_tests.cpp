@@ -1,5 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
-#include <radix_relay/tui/scroll_state.hpp>
+#include <tui/scroll_state.hpp>
 
 TEST_CASE("scroll_state starts with stick-to-bottom behavior", "[scroll_state][initialization]")
 {

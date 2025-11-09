@@ -1,7 +1,7 @@
 #pragma once
 
-#include <radix_relay/concepts/signal_bridge.hpp>
-#include <radix_relay/signal/signal_types.hpp>
+#include <concepts/signal_bridge.hpp>
+#include <core/contact_info.hpp>
 #include <string>
 #include <vector>
 
@@ -11,7 +11,7 @@ struct test_double_signal_bridge
 {
   mutable std::vector<std::string> called_methods;
   std::string fingerprint_to_return = "RDX:test_fingerprint";
-  std::vector<radix_relay::signal::contact_info> contacts_to_return;
+  std::vector<radix_relay::core::contact_info> contacts_to_return;
 
   auto get_node_fingerprint() -> std::string
   {
@@ -19,7 +19,7 @@ struct test_double_signal_bridge
     return fingerprint_to_return;
   }
 
-  auto list_contacts() -> std::vector<radix_relay::signal::contact_info>
+  auto list_contacts() -> std::vector<radix_relay::core::contact_info>
   {
     called_methods.push_back("list_contacts");
     return contacts_to_return;
@@ -67,10 +67,10 @@ struct test_double_signal_bridge
     called_methods.push_back("assign_contact_alias");
   }
 
-  auto lookup_contact(const std::string & /*alias*/) -> radix_relay::signal::contact_info
+  auto lookup_contact(const std::string & /*alias*/) -> radix_relay::core::contact_info
   {
     called_methods.push_back("lookup_contact");
-    return radix_relay::signal::contact_info{
+    return radix_relay::core::contact_info{
       .rdx_fingerprint = "RDX:test_contact",
       .nostr_pubkey = "npub_test",
       .user_alias = "test_alias",
