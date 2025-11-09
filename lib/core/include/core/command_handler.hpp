@@ -13,11 +13,10 @@ namespace radix_relay::core {
 
 template<concepts::signal_bridge Bridge> struct command_handler
 {
-  explicit command_handler(std::shared_ptr<Bridge> bridge,
-    std::shared_ptr<async::async_queue<events::display_message>> display_out_queue,// NOLINT(modernize-pass-by-value)
-    std::shared_ptr<async::async_queue<events::transport::in_t>> transport_out_queue)// NOLINT(modernize-pass-by-value)
-    : bridge_(bridge), display_out_queue_(display_out_queue),// NOLINT(performance-unnecessary-value-param)
-      transport_out_queue_(transport_out_queue)// NOLINT(performance-unnecessary-value-param)
+  explicit command_handler(const std::shared_ptr<Bridge> &bridge,
+    const std::shared_ptr<async::async_queue<events::display_message>> &display_out_queue,
+    const std::shared_ptr<async::async_queue<events::transport::in_t>> &transport_out_queue)
+    : bridge_(bridge), display_out_queue_(display_out_queue), transport_out_queue_(transport_out_queue)
   {}
 
   template<events::Command T> auto handle(const T &command) const -> void { handle_impl(command); }

@@ -22,13 +22,11 @@ namespace radix_relay::nostr {
 
 template<concepts::websocket_stream WebSocketStream> struct transport
 {
-  transport(std::shared_ptr<WebSocketStream> websocket_stream,// NOLINT(modernize-pass-by-value)
-    std::shared_ptr<boost::asio::io_context> io_context,// NOLINT(modernize-pass-by-value)
-    std::shared_ptr<async::async_queue<core::events::transport::in_t>> in_queue,// NOLINT(modernize-pass-by-value)
-    std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>>// NOLINT(modernize-pass-by-value)
-      to_session_queue)
-    : ws_(websocket_stream), io_context_(io_context), in_queue_(in_queue),// NOLINT(performance-unnecessary-value-param)
-      to_session_queue_(to_session_queue)// NOLINT(performance-unnecessary-value-param)
+  transport(const std::shared_ptr<WebSocketStream> &websocket_stream,
+    const std::shared_ptr<boost::asio::io_context> &io_context,
+    const std::shared_ptr<async::async_queue<core::events::transport::in_t>> &in_queue,
+    const std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> &to_session_queue)
+    : ws_(websocket_stream), io_context_(io_context), in_queue_(in_queue), to_session_queue_(to_session_queue)
   {}
 
   ~transport()

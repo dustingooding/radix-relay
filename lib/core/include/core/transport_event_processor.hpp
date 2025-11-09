@@ -12,11 +12,10 @@ namespace radix_relay::core {
 template<typename TransportEventHandler> class transport_event_processor
 {
 public:
-  transport_event_processor(std::shared_ptr<boost::asio::io_context> io_context,// NOLINT(modernize-pass-by-value)
-    std::shared_ptr<async::async_queue<events::transport_event_variant_t>> in_queue,// NOLINT(modernize-pass-by-value)
-    std::shared_ptr<TransportEventHandler> event_handler)// NOLINT(modernize-pass-by-value)
-    : io_context_(io_context), in_queue_(in_queue),// NOLINT(performance-unnecessary-value-param)
-      event_handler_(event_handler)// NOLINT(performance-unnecessary-value-param)
+  transport_event_processor(const std::shared_ptr<boost::asio::io_context> &io_context,
+    const std::shared_ptr<async::async_queue<events::transport_event_variant_t>> &in_queue,
+    const std::shared_ptr<TransportEventHandler> &event_handler)
+    : io_context_(io_context), in_queue_(in_queue), event_handler_(event_handler)
   {}
 
   auto run_once() -> boost::asio::awaitable<void>
