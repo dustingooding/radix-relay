@@ -6,6 +6,7 @@
 #include <core/uuid_generator.hpp>
 
 #include <boost/asio.hpp>
+#include <boost/asio/experimental/channel_error.hpp>
 #include <spdlog/spdlog.h>
 
 #include <cstddef>
@@ -31,6 +32,7 @@ template<concepts::websocket_stream WebSocketStream> struct transport
 
   ~transport()
   {
+    in_queue_->close();
     if (connected_) {
       connected_ = false;
       ws_->async_close([](const boost::system::error_code & /*error*/, std::size_t /*bytes*/) {});
@@ -42,17 +44,30 @@ template<concepts::websocket_stream WebSocketStream> struct transport
   transport(transport &&) = delete;
   auto operator=(transport &&) -> transport & = delete;
 
-  auto run_once() -> boost::asio::awaitable<void>
+  // NOLINTNEXTLINE(performance-unnecessary-value-param)
+  auto run_once(std::shared_ptr<boost::asio::cancellation_slot> cancel_slot = nullptr) -> boost::asio::awaitable<void>
   {
-    auto cmd = co_await in_queue_->pop();
+    auto cmd = co_await in_queue_->pop(cancel_slot);
     std::visit([&](auto &&event) { handle(std::forward<decltype(event)>(event)); }, cmd);
     co_return;
   }
 
-  auto run() -> boost::asio::awaitable<void>
+  // NOLINTNEXTLINE(performance-unnecessary-value-param)
+  auto run(std::shared_ptr<boost::asio::cancellation_slot> cancel_slot = nullptr) -> boost::asio::awaitable<void>
   {
-    while (true) { co_await run_once(); }
-    co_return;
+    try {
+      while (true) { co_await run_once(cancel_slot); }
+    } catch (const boost::system::system_error &e) {
+      if (e.code() == boost::asio::error::operation_aborted
+          or e.code() == boost::asio::experimental::error::channel_cancelled
+          or e.code() == boost::asio::experimental::error::channel_closed) {
+        spdlog::debug("[transport] Cancelled, exiting run loop");
+        co_return;
+      } else {
+        spdlog::error("[transport] Unexpected error in run loop: {}", e.what());
+        throw;
+      }
+    }
   }
 
 private:

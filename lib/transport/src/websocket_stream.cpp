@@ -4,9 +4,9 @@
 
 namespace radix_relay::transport {
 
-websocket_stream::websocket_stream(boost::asio::io_context &io_context)
-  : ssl_context_(boost::asio::ssl::context::tlsv12_client), resolver_(io_context),
-    ws_(boost::asio::make_strand(io_context), ssl_context_)
+websocket_stream::websocket_stream(const std::shared_ptr<boost::asio::io_context> &io_context)
+  : ssl_context_(boost::asio::ssl::context::tlsv12_client), resolver_(*io_context),
+    ws_(boost::asio::make_strand(*io_context), ssl_context_)
 {
   ssl_context_.set_default_verify_paths();
   ssl_context_.set_verify_mode(boost::asio::ssl::verify_peer);

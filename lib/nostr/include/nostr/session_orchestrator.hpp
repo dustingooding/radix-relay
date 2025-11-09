@@ -5,6 +5,7 @@
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/experimental/channel_error.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/strand.hpp>
@@ -19,7 +20,6 @@
 #include <nostr/events.hpp>
 #include <nostr/message_handler.hpp>
 #include <nostr/protocol.hpp>
-#include <optional>
 #include <spdlog/spdlog.h>
 #include <variant>
 #include <vector>
@@ -39,17 +39,30 @@ struct session_orchestrator : public std::enable_shared_from_this<session_orches
       transport_out_queue_(transport_out_queue), main_out_queue_(main_out_queue)
   {}
 
-  auto run_once() -> boost::asio::awaitable<void>
+  // NOLINTNEXTLINE(performance-unnecessary-value-param)
+  auto run_once(std::shared_ptr<boost::asio::cancellation_slot> cancel_slot = nullptr) -> boost::asio::awaitable<void>
   {
-    auto evt = co_await in_queue_->pop();
+    auto evt = co_await in_queue_->pop(cancel_slot);
     std::visit([&](auto &&event) { handle(std::forward<decltype(event)>(event)); }, evt);
     co_return;
   }
 
-  auto run() -> boost::asio::awaitable<void>
+  // NOLINTNEXTLINE(performance-unnecessary-value-param)
+  auto run(std::shared_ptr<boost::asio::cancellation_slot> cancel_slot = nullptr) -> boost::asio::awaitable<void>
   {
-    while (true) { co_await run_once(); }
-    co_return;
+    try {
+      while (true) { co_await run_once(cancel_slot); }
+    } catch (const boost::system::system_error &e) {
+      if (e.code() == boost::asio::error::operation_aborted
+          or e.code() == boost::asio::experimental::error::channel_cancelled
+          or e.code() == boost::asio::experimental::error::channel_closed) {
+        spdlog::debug("[session_orchestrator] Cancelled, exiting run loop");
+        co_return;
+      } else {
+        spdlog::error("[session_orchestrator] Unexpected error in run loop: {}", e.what());
+        throw;
+      }
+    }
   }
 
 private:

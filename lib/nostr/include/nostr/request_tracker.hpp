@@ -21,7 +21,7 @@ private:
   };
 
 public:
-  explicit request_tracker(boost::asio::io_context *io_context) : io_context_(io_context) {}
+  explicit request_tracker(const std::shared_ptr<boost::asio::io_context> &io_context) : io_context_(io_context) {}
 
   auto track(const std::string &event_id,
     std::function<void(const protocol::ok &)> callback,
@@ -98,7 +98,7 @@ private:
     }
   }
 
-  boost::asio::io_context *io_context_;
+  std::shared_ptr<boost::asio::io_context> io_context_;
   std::unordered_map<std::string, pending_request> pending_;
 };
 

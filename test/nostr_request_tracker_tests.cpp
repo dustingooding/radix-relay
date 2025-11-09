@@ -4,8 +4,8 @@
 
 TEST_CASE("request_tracker track() stores pending request", "[nostr][request_tracker]")
 {
-  boost::asio::io_context io_context;
-  radix_relay::nostr::request_tracker tracker(&io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::nostr::request_tracker tracker(io_context);
 
   bool callback_invoked = false;
   auto callback = [&callback_invoked](const radix_relay::nostr::protocol::ok &) { callback_invoked = true; };
@@ -19,8 +19,8 @@ TEST_CASE("request_tracker track() stores pending request", "[nostr][request_tra
 
 TEST_CASE("request_tracker resolve() invokes callback with response", "[nostr][request_tracker]")
 {
-  boost::asio::io_context io_context;
-  radix_relay::nostr::request_tracker tracker(&io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::nostr::request_tracker tracker(io_context);
 
   bool callback_invoked = false;
   radix_relay::nostr::protocol::ok received_response;
@@ -47,8 +47,8 @@ TEST_CASE("request_tracker resolve() invokes callback with response", "[nostr][r
 
 TEST_CASE("request_tracker resolve() removes request from pending", "[nostr][request_tracker]")
 {
-  boost::asio::io_context io_context;
-  radix_relay::nostr::request_tracker tracker(&io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::nostr::request_tracker tracker(io_context);
 
   auto callback = [](const radix_relay::nostr::protocol::ok &) {};
 
@@ -68,8 +68,8 @@ TEST_CASE("request_tracker resolve() removes request from pending", "[nostr][req
 
 TEST_CASE("request_tracker resolve() on non-existent ID does nothing", "[nostr][request_tracker]")
 {
-  boost::asio::io_context io_context;
-  radix_relay::nostr::request_tracker tracker(&io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::nostr::request_tracker tracker(io_context);
 
   radix_relay::nostr::protocol::ok response;
   response.event_id = "nonexistent";
@@ -82,8 +82,8 @@ TEST_CASE("request_tracker resolve() on non-existent ID does nothing", "[nostr][
 
 TEST_CASE("request_tracker timeout invokes callback with timeout error", "[nostr][request_tracker]")
 {
-  boost::asio::io_context io_context;
-  radix_relay::nostr::request_tracker tracker(&io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::nostr::request_tracker tracker(io_context);
 
   bool callback_invoked = false;
   radix_relay::nostr::protocol::ok received_response;
@@ -96,7 +96,7 @@ TEST_CASE("request_tracker timeout invokes callback with timeout error", "[nostr
   constexpr auto timeout = std::chrono::milliseconds(50);
   tracker.track("event_timeout", callback, timeout);
 
-  io_context.run();
+  io_context->run();
 
   CHECK(callback_invoked);
   CHECK(received_response.event_id == "event_timeout");
@@ -107,8 +107,8 @@ TEST_CASE("request_tracker timeout invokes callback with timeout error", "[nostr
 
 TEST_CASE("request_tracker resolve() cancels timer", "[nostr][request_tracker]")
 {
-  boost::asio::io_context io_context;
-  radix_relay::nostr::request_tracker tracker(&io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::nostr::request_tracker tracker(io_context);
 
   int callback_count = 0;
 
@@ -125,15 +125,15 @@ TEST_CASE("request_tracker resolve() cancels timer", "[nostr][request_tracker]")
 
   CHECK(callback_count == 1);
 
-  io_context.run();
+  io_context->run();
 
   CHECK(callback_count == 1);
 }
 
 TEST_CASE("request_tracker async_track() returns OK when response arrives", "[nostr][request_tracker][awaitable]")
 {
-  boost::asio::io_context io_context;
-  radix_relay::nostr::request_tracker tracker(&io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::nostr::request_tracker tracker(io_context);
 
   auto result = std::make_shared<radix_relay::nostr::protocol::ok>();
   auto completed = std::make_shared<bool>(false);
@@ -141,7 +141,7 @@ TEST_CASE("request_tracker async_track() returns OK when response arrives", "[no
   constexpr auto timeout = std::chrono::seconds(5);
 
   boost::asio::co_spawn(
-    io_context,
+    *io_context,
     [](std::reference_wrapper<radix_relay::nostr::request_tracker> tracker_ref,
       std::shared_ptr<radix_relay::nostr::protocol::ok> result_ptr,
       std::shared_ptr<bool> completed_ptr,
@@ -151,7 +151,7 @@ TEST_CASE("request_tracker async_track() returns OK when response arrives", "[no
     }(std::ref(tracker), result, completed, timeout),
     boost::asio::detached);
 
-  boost::asio::post(io_context, [&tracker]() {
+  boost::asio::post(*io_context, [&tracker]() {
     radix_relay::nostr::protocol::ok response;
     response.event_id = "event_async";
     response.accepted = true;
@@ -160,7 +160,7 @@ TEST_CASE("request_tracker async_track() returns OK when response arrives", "[no
     tracker.resolve("event_async", response);
   });
 
-  io_context.run();
+  io_context->run();
 
   CHECK(*completed);
   CHECK(result->event_id == "event_async");
@@ -170,8 +170,8 @@ TEST_CASE("request_tracker async_track() returns OK when response arrives", "[no
 
 TEST_CASE("request_tracker async_track() throws on timeout", "[nostr][request_tracker][awaitable]")
 {
-  boost::asio::io_context io_context;
-  radix_relay::nostr::request_tracker tracker(&io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::nostr::request_tracker tracker(io_context);
 
   auto exception_thrown = std::make_shared<bool>(false);
   auto exception_message = std::make_shared<std::string>();
@@ -179,7 +179,7 @@ TEST_CASE("request_tracker async_track() throws on timeout", "[nostr][request_tr
   constexpr auto timeout = std::chrono::milliseconds(50);
 
   boost::asio::co_spawn(
-    io_context,
+    *io_context,
     [](std::reference_wrapper<radix_relay::nostr::request_tracker> tracker_ref,
       std::shared_ptr<bool> thrown_ptr,
       std::shared_ptr<std::string> message_ptr,
@@ -193,7 +193,7 @@ TEST_CASE("request_tracker async_track() throws on timeout", "[nostr][request_tr
     }(std::ref(tracker), exception_thrown, exception_message, timeout),
     boost::asio::detached);
 
-  io_context.run();
+  io_context->run();
 
   CHECK(*exception_thrown);
   CHECK(exception_message->find("timeout") != std::string::npos);
@@ -201,8 +201,8 @@ TEST_CASE("request_tracker async_track() throws on timeout", "[nostr][request_tr
 
 TEST_CASE("request_tracker async_track() works with EOSE responses", "[nostr][request_tracker][awaitable][eose]")
 {
-  boost::asio::io_context io_context;
-  radix_relay::nostr::request_tracker tracker(&io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::nostr::request_tracker tracker(io_context);
 
   auto result = std::make_shared<radix_relay::nostr::protocol::eose>();
   auto completed = std::make_shared<bool>(false);
@@ -210,7 +210,7 @@ TEST_CASE("request_tracker async_track() works with EOSE responses", "[nostr][re
   constexpr auto timeout = std::chrono::seconds(5);
 
   boost::asio::co_spawn(
-    io_context,
+    *io_context,
     [](std::reference_wrapper<radix_relay::nostr::request_tracker> tracker_ref,
       std::shared_ptr<radix_relay::nostr::protocol::eose> result_ptr,
       std::shared_ptr<bool> completed_ptr,
@@ -220,13 +220,13 @@ TEST_CASE("request_tracker async_track() works with EOSE responses", "[nostr][re
     }(std::ref(tracker), result, completed, timeout),
     boost::asio::detached);
 
-  boost::asio::post(io_context, [&tracker]() {
+  boost::asio::post(*io_context, [&tracker]() {
     radix_relay::nostr::protocol::eose response;
     response.subscription_id = "sub_123";
     tracker.resolve("sub_123", response);
   });
 
-  io_context.run();
+  io_context->run();
 
   CHECK(*completed);
   CHECK(result->subscription_id == "sub_123");

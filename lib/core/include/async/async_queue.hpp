@@ -2,8 +2,11 @@
 
 #include <atomic>
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/redirect_error.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <cstddef>
 #include <memory>
@@ -20,17 +23,34 @@ public:
     : io_context_(io_context), channel_(*io_context_, channel_size), size_(0)
   {}
 
+  async_queue(const async_queue &) = delete;
+  auto operator=(const async_queue &) -> async_queue & = delete;
+  async_queue(async_queue &&) = delete;
+  auto operator=(async_queue &&) -> async_queue & = delete;
+  ~async_queue() = default;
+
   auto push(T value) -> void
   {
     channel_.try_send(boost::system::error_code{}, std::move(value));
     ++size_;
   }
 
-  auto pop() -> boost::asio::awaitable<T>
+  auto pop(std::shared_ptr<boost::asio::cancellation_slot> cancel_slot = nullptr) -> boost::asio::awaitable<T>
   {
-    auto value = co_await channel_.async_receive(boost::asio::use_awaitable);
-    --size_;
-    co_return value;
+    boost::system::error_code err;
+
+    if (cancel_slot) {
+      auto val = co_await channel_.async_receive(boost::asio::bind_cancellation_slot(
+        *cancel_slot, boost::asio::redirect_error(boost::asio::use_awaitable, err)));
+      if (err) { throw boost::system::system_error(err); }
+      --size_;
+      co_return val;
+    } else {
+      auto val = co_await channel_.async_receive(boost::asio::redirect_error(boost::asio::use_awaitable, err));
+      if (err) { throw boost::system::system_error(err); }
+      --size_;
+      co_return val;
+    }
   }
 
   // Non-blocking pop: returns std::nullopt if queue is empty
@@ -52,8 +72,6 @@ public:
   [[nodiscard]] auto empty() const -> bool { return size_.load() == 0; }
 
   [[nodiscard]] auto size() const -> std::size_t { return size_.load(); }
-
-  auto cancel() -> void { channel_.cancel(); }
 
   auto close() -> void { channel_.close(); }
 
