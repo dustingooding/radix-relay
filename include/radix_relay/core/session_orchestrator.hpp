@@ -31,13 +31,15 @@ struct session_orchestrator : public std::enable_shared_from_this<session_orches
 {
   session_orchestrator(std::shared_ptr<Bridge> bridge,
     std::shared_ptr<Tracker> tracker,
-    std::shared_ptr<boost::asio::io_context> io_context,
-    std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> in_queue,
-    std::shared_ptr<async::async_queue<events::transport::in_t>> transport_out_queue,
-    std::shared_ptr<async::async_queue<events::transport_event_variant_t>> main_out_queue)
-    : bridge_(std::move(bridge)), handler_(bridge_), tracker_(std::move(tracker)), io_context_(std::move(io_context)),
-      in_queue_(std::move(in_queue)), transport_out_queue_(std::move(transport_out_queue)),
-      main_out_queue_(std::move(main_out_queue))
+    std::shared_ptr<boost::asio::io_context> io_context,// NOLINT(modernize-pass-by-value)
+    std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> in_queue,// NOLINT(modernize-pass-by-value)
+    std::shared_ptr<async::async_queue<events::transport::in_t>> transport_out_queue,// NOLINT(modernize-pass-by-value)
+    std::shared_ptr<async::async_queue<events::transport_event_variant_t>>
+      main_out_queue)// NOLINT(modernize-pass-by-value)
+    : bridge_(bridge), handler_(bridge_), tracker_(tracker), io_context_(io_context),
+      in_queue_(in_queue),// NOLINT(performance-unnecessary-value-param)
+      transport_out_queue_(transport_out_queue),
+      main_out_queue_(main_out_queue)// NOLINT(performance-unnecessary-value-param)
   {}
 
   auto run_once() -> boost::asio::awaitable<void>

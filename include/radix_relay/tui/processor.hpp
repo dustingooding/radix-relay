@@ -22,12 +22,20 @@ template<concepts::signal_bridge Bridge> struct processor
 {
   processor(std::string node_id,
     std::string mode,
-    std::shared_ptr<Bridge> bridge,
-    std::shared_ptr<async::async_queue<core::events::raw_command>> command_queue,
-    std::shared_ptr<async::async_queue<core::events::display_message>> output_queue)
-    : node_id_(std::move(node_id)), mode_(std::move(mode)), bridge_(std::move(bridge)),
-      command_queue_(std::move(command_queue)), output_queue_(std::move(output_queue))
+    std::shared_ptr<Bridge> bridge,// NOLINT(modernize-pass-by-value)
+    std::shared_ptr<async::async_queue<core::events::raw_command>> command_queue,// NOLINT(modernize-pass-by-value)
+    std::shared_ptr<async::async_queue<core::events::display_message>> output_queue)// NOLINT(modernize-pass-by-value)
+    : node_id_(std::move(node_id)), mode_(std::move(mode)), bridge_(bridge),
+      command_queue_(command_queue),// NOLINT(performance-unnecessary-value-param)
+      output_queue_(output_queue)// NOLINT(performance-unnecessary-value-param)
   {}
+
+  ~processor() { stop(); }
+
+  processor(const processor &) = delete;
+  auto operator=(const processor &) -> processor & = delete;
+  processor(processor &&) = delete;
+  auto operator=(processor &&) -> processor & = delete;
 
   auto run() -> void
   {
@@ -122,11 +130,9 @@ template<concepts::signal_bridge Bridge> struct processor
 
     input_box->TakeFocus();
 
-    // Background task to poll output queue and trigger screen refreshes
-    std::atomic<bool> running{ true };
-    constexpr auto message_poll_interval_ms = 16;
-    std::thread message_poller([&] {
-      while (running.load()) {
+    running_.store(true);
+    message_poller_ = std::thread([this] {
+      while (running_.load()) {
         bool had_messages = false;
         while (auto msg = output_queue_->try_pop()) {
           add_message(msg->message);
@@ -139,8 +145,14 @@ template<concepts::signal_bridge Bridge> struct processor
 
     screen_.Loop(main_renderer);
 
-    running.store(false);
-    if (message_poller.joinable()) { message_poller.join(); }
+    stop();
+  }
+
+  auto stop() -> void
+  {
+    if (running_.exchange(false)) {
+      if (message_poller_.joinable()) { message_poller_.join(); }
+    }
   }
 
   [[nodiscard]] auto get_mode() const -> const std::string & { return mode_; }
@@ -189,6 +201,10 @@ private:
   std::vector<std::string> messages_;
   std::string input_content_;
   ftxui::ScreenInteractive screen_ = ftxui::ScreenInteractive::Fullscreen();
+
+  std::atomic<bool> running_{ false };
+  std::thread message_poller_;
+  static constexpr auto message_poll_interval_ms = 16;
 };
 
 }// namespace radix_relay::tui
