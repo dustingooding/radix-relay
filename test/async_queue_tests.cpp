@@ -1,6 +1,8 @@
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/experimental/channel_error.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/strand.hpp>
@@ -257,6 +259,142 @@ SCENARIO("async_queue handles concurrent multi-producer push", "[async_queue][co
       }
 
       THEN("the queue should be empty") { REQUIRE(queue.empty()); }
+    }
+  }
+}
+
+SCENARIO("async_queue pop operation respects cancellation signal", "[async_queue][cancellation]")
+{
+  struct test_state
+  {
+    std::shared_ptr<bool> was_cancelled;
+    std::shared_ptr<bool> completed_normally;
+  };
+
+  GIVEN("A queue with a pending pop operation")
+  {
+    auto io_context = std::make_shared<boost::asio::io_context>();
+    radix_relay::async::async_queue<int> queue(io_context);
+
+    WHEN("cancellation signal is emitted before value is available")
+    {
+      auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
+      auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
+      auto state = std::make_shared<test_state>(test_state{
+        .was_cancelled = std::make_shared<bool>(false), .completed_normally = std::make_shared<bool>(false) });
+
+      boost::asio::co_spawn(
+        *io_context,
+        [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
+          std::shared_ptr<boost::asio::cancellation_slot> c_slot,
+          std::shared_ptr<test_state> tstate) -> boost::asio::awaitable<void> {
+          try {
+            co_await queue_ref.get().pop(c_slot);
+            *tstate->completed_normally = true;
+          } catch (const boost::system::system_error &e) {
+            if (e.code() == boost::asio::error::operation_aborted
+                or e.code() == boost::asio::experimental::error::channel_cancelled) {
+              *tstate->was_cancelled = true;
+            } else {
+              throw;
+            }
+          }
+        }(std::ref(queue), cancel_slot, state),
+        boost::asio::detached);
+
+      io_context->poll();
+
+      THEN("the coroutine should be waiting")
+      {
+        REQUIRE_FALSE(*state->was_cancelled);
+        REQUIRE_FALSE(*state->completed_normally);
+      }
+
+      AND_WHEN("the cancellation signal is emitted")
+      {
+        cancel_signal->emit(boost::asio::cancellation_type::terminal);
+        io_context->run();
+
+        THEN("the pop operation should be cancelled")
+        {
+          REQUIRE(*state->was_cancelled);
+          REQUIRE_FALSE(*state->completed_normally);
+        }
+      }
+    }
+  }
+
+  GIVEN("A queue with a value available")
+  {
+    auto io_context = std::make_shared<boost::asio::io_context>();
+    radix_relay::async::async_queue<int> queue(io_context);
+    constexpr int test_value = 42;
+    queue.push(test_value);
+
+    WHEN("pop is called with a cancellation slot")
+    {
+      auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
+      auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
+      auto result = std::make_shared<int>(0);
+      auto completed = std::make_shared<bool>(false);
+
+      boost::asio::co_spawn(
+        *io_context,
+        [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
+          std::shared_ptr<boost::asio::cancellation_slot> c_slot,
+          std::shared_ptr<int> result_ptr,
+          std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
+          *result_ptr = co_await queue_ref.get().pop(c_slot);
+          *completed_ptr = true;
+        }(std::ref(queue), cancel_slot, result, completed),
+        boost::asio::detached);
+
+      io_context->run();
+
+      THEN("the value should be received normally")
+      {
+        REQUIRE(*completed);
+        REQUIRE(*result == test_value);
+      }
+    }
+  }
+
+  GIVEN("A queue with pop called without cancellation slot")
+  {
+    auto io_context = std::make_shared<boost::asio::io_context>();
+    radix_relay::async::async_queue<int> queue(io_context);
+
+    WHEN("pop is called with nullptr")
+    {
+      auto completed = std::make_shared<bool>(false);
+      auto result = std::make_shared<int>(0);
+
+      boost::asio::co_spawn(
+        *io_context,
+        [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
+          std::shared_ptr<int> result_ptr,
+          std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
+          *result_ptr = co_await queue_ref.get().pop();
+          *completed_ptr = true;
+        }(std::ref(queue), result, completed),
+        boost::asio::detached);
+
+      io_context->poll();
+
+      THEN("the coroutine should wait for a value") { REQUIRE_FALSE(*completed); }
+
+      AND_WHEN("a value is pushed")
+      {
+        constexpr int pushed_value = 99;
+        queue.push(pushed_value);
+        io_context->run();
+
+        THEN("the coroutine should complete normally")
+        {
+          REQUIRE(*completed);
+          REQUIRE(*result == pushed_value);
+        }
+      }
     }
   }
 }

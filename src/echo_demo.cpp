@@ -46,6 +46,8 @@ auto main() -> int
 
   std::cout << "Setting up queue-based architecture...\n";
   auto io_context = std::make_shared<boost::asio::io_context>();
+  auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
+  auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
 
   std::cout << "Creating Signal Protocol bridges...\n";
   std::cout << "   Alice database: " << alice_db_path << "\n";
@@ -56,8 +58,8 @@ auto main() -> int
     auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_db_path);
 
     std::cout << "\nCreating RequestTrackers...\n";
-    auto alice_tracker = std::make_shared<radix_relay::nostr::request_tracker>(io_context.get());
-    auto bob_tracker = std::make_shared<radix_relay::nostr::request_tracker>(io_context.get());
+    auto alice_tracker = std::make_shared<radix_relay::nostr::request_tracker>(io_context);
+    auto bob_tracker = std::make_shared<radix_relay::nostr::request_tracker>(io_context);
 
     std::vector<radix_relay::core::events::transport_event_variant_t> alice_events;
     std::vector<radix_relay::core::events::transport_event_variant_t> bob_events;
@@ -91,8 +93,8 @@ auto main() -> int
 
     std::cout << "\nCreating SessionOrchestrators and Transports...\n";
 
-    auto alice_ws = std::make_shared<radix_relay::transport::websocket_stream>(*io_context);
-    auto bob_ws = std::make_shared<radix_relay::transport::websocket_stream>(*io_context);
+    auto alice_ws = std::make_shared<radix_relay::transport::websocket_stream>(io_context);
+    auto bob_ws = std::make_shared<radix_relay::transport::websocket_stream>(io_context);
 
     auto alice_orchestrator = std::make_shared<
       radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
@@ -120,28 +122,51 @@ auto main() -> int
     auto spawn_orchestrator_loop =
       [](const std::shared_ptr<boost::asio::io_context> &ctx,
         std::shared_ptr<radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge,
-          radix_relay::nostr::request_tracker>> orch) {
+          radix_relay::nostr::request_tracker>> orch,
+        std::shared_ptr<boost::asio::cancellation_slot> c_slot) {
         boost::asio::co_spawn(
           *ctx,
-          // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-          [orchestrator = std::move(orch)]() -> boost::asio::awaitable<void> { co_await orchestrator->run(); },
+          [](std::shared_ptr<radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge,
+               radix_relay::nostr::request_tracker>> orchestrator,
+            std::shared_ptr<boost::asio::cancellation_slot> slot) -> boost::asio::awaitable<void> {
+            try {
+              co_await orchestrator->run(slot);
+            } catch (const boost::system::system_error &err) {
+              if (err.code() != boost::asio::error::operation_aborted
+                  and err.code() != boost::asio::experimental::error::channel_cancelled
+                  and err.code() != boost::asio::experimental::error::channel_closed) {
+                spdlog::error("[echo_demo] Orchestrator unexpected error: {}", err.what());
+              }
+            }
+          }(std::move(orch), c_slot),// NOLINT(performance-unnecessary-value-param) - c_slot reused across calls
           boost::asio::detached);
       };
 
     auto spawn_transport_loop =
       [](const std::shared_ptr<boost::asio::io_context> &ctx,
-        std::shared_ptr<radix_relay::nostr::transport<radix_relay::transport::websocket_stream>> trans) {
+        std::shared_ptr<radix_relay::nostr::transport<radix_relay::transport::websocket_stream>> trans,
+        std::shared_ptr<boost::asio::cancellation_slot> c_slot) {
         boost::asio::co_spawn(
           *ctx,
-          // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-          [transport = std::move(trans)]() -> boost::asio::awaitable<void> { co_await transport->run(); },
+          [](std::shared_ptr<radix_relay::nostr::transport<radix_relay::transport::websocket_stream>> transport,
+            std::shared_ptr<boost::asio::cancellation_slot> slot) -> boost::asio::awaitable<void> {
+            try {
+              co_await transport->run(slot);
+            } catch (const boost::system::system_error &err) {
+              if (err.code() != boost::asio::error::operation_aborted
+                  and err.code() != boost::asio::experimental::error::channel_cancelled
+                  and err.code() != boost::asio::experimental::error::channel_closed) {
+                spdlog::error("[echo_demo] Transport unexpected error: {}", err.what());
+              }
+            }
+          }(std::move(trans), c_slot),// NOLINT(performance-unnecessary-value-param) - c_slot reused across calls
           boost::asio::detached);
       };
 
-    spawn_orchestrator_loop(io_context, alice_orchestrator);
-    spawn_orchestrator_loop(io_context, bob_orchestrator);
-    spawn_transport_loop(io_context, alice_transport);
-    spawn_transport_loop(io_context, bob_transport);
+    spawn_orchestrator_loop(io_context, alice_orchestrator, cancel_slot);
+    spawn_orchestrator_loop(io_context, bob_orchestrator, cancel_slot);
+    spawn_transport_loop(io_context, alice_transport, cancel_slot);
+    spawn_transport_loop(io_context, bob_transport, cancel_slot);
 
     std::thread io_thread([&io_context]() {
       spdlog::debug("io_context thread started");
@@ -338,10 +363,33 @@ auto main() -> int
       std::cout << "   This is expected if not connected to a relay.\n";
     }
 
-    std::cout << "\nStopping io_context...\n";
+    std::cout << "\nShutting down...\n";
+
+    spdlog::debug("Posting cancellation signal to io_context thread...");
+    boost::asio::post(*io_context, [cancel_signal]() {
+      spdlog::debug("[echo_demo] Emitting cancellation signal on io_context thread");
+      cancel_signal->emit(boost::asio::cancellation_type::all);
+    });
+
+    spdlog::debug("Closing all queues...");
+    alice_session_in_queue->close();
+    alice_transport_in_queue->close();
+    alice_main_event_queue->close();
+    bob_session_in_queue->close();
+    bob_transport_in_queue->close();
+    bob_main_event_queue->close();
+
+    spdlog::debug("Resetting work guard...");
     work_guard.reset();
+
+    spdlog::debug("Stopping io_context...");
     io_context->stop();
-    if (io_thread.joinable()) { io_thread.join(); }
+
+    spdlog::debug("Waiting for io_thread to join...");
+    if (io_thread.joinable()) {
+      io_thread.join();
+      spdlog::debug("io_thread joined");
+    }
 
     std::cout << "Cleaning up databases...\n";
   }

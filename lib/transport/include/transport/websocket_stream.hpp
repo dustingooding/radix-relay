@@ -32,7 +32,7 @@ private:
   boost::beast::flat_buffer read_buffer_;
 
 public:
-  explicit websocket_stream(boost::asio::io_context &io_context);
+  explicit websocket_stream(const std::shared_ptr<boost::asio::io_context> &io_context);
 
   auto async_connect(websocket_connection_params params,
     std::function<void(const boost::system::error_code &, std::size_t)> handler) -> void;

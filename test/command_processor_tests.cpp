@@ -1,7 +1,9 @@
 #include <async/async_queue.hpp>
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/experimental/channel_error.hpp>
 #include <boost/asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <core/command_processor.hpp>
@@ -118,4 +120,47 @@ TEST_CASE("command_processor run processes commands continuously", "[command_pro
   CHECK(handler->received_commands[0] == "cmd1");
   CHECK(handler->received_commands[1] == "cmd2");
   CHECK(handler->received_commands[2] == "cmd3");
+}
+
+TEST_CASE("command_processor respects cancellation signal", "[command_processor][cancellation]")
+{
+  struct test_state
+  {
+    std::atomic<bool> coroutine_done{ false };
+  };
+
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  auto in_queue = std::make_shared<async::async_queue<events::raw_command>>(io_context);
+  auto handler = std::make_shared<mock_handler>();
+  auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
+  auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
+  auto processor = std::make_shared<command_processor<mock_handler>>(io_context, in_queue, handler);
+
+  auto state = std::make_shared<test_state>();
+
+  boost::asio::co_spawn(
+    *io_context,
+    [](std::shared_ptr<command_processor<mock_handler>> proc,
+      std::shared_ptr<test_state> test_state_ptr,
+      std::shared_ptr<boost::asio::cancellation_slot> c_slot) -> boost::asio::awaitable<void> {
+      try {
+        co_await proc->run(c_slot);
+      } catch (const boost::system::system_error &e) {
+        if (e.code() != boost::asio::error::operation_aborted
+            and e.code() != boost::asio::experimental::error::channel_cancelled
+            and e.code() != boost::asio::experimental::error::channel_closed) {
+          throw;
+        }
+      }
+      test_state_ptr->coroutine_done = true;
+    }(processor, state, cancel_slot),
+    boost::asio::detached);
+
+  io_context->poll();
+
+  cancel_signal->emit(boost::asio::cancellation_type::terminal);
+  io_context->run();
+
+  REQUIRE(state->coroutine_done);
+  CHECK(handler->received_commands.empty());
 }

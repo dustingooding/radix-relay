@@ -17,6 +17,10 @@ target_link_system_libraries(
           fmt::fmt
           spdlog::spdlog)
 
+if(MSVC)
+  target_compile_options(radix-relay PRIVATE /bigobj)
+endif()
+
 add_executable(echo_demo echo_demo.cpp)
 
 target_link_libraries(

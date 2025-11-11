@@ -42,7 +42,7 @@ struct queue_based_fixture
     std::filesystem::remove(db_path);
     io_context = std::make_shared<boost::asio::io_context>();
     bridge = std::make_shared<radix_relay::signal::bridge>(db_path);
-    tracker = std::make_shared<radix_relay::nostr::request_tracker>(io_context.get());
+    tracker = std::make_shared<radix_relay::nostr::request_tracker>(io_context);
     in_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
     transport_out_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
     main_out_queue = std::make_shared<async::async_queue<core::events::transport_event_variant_t>>(io_context);
@@ -119,7 +119,7 @@ struct two_bridge_fixture
     alice_in = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(alice_io);
     alice_transport_out = std::make_shared<async::async_queue<core::events::transport::in_t>>(alice_io);
     alice_main_out = std::make_shared<async::async_queue<core::events::transport_event_variant_t>>(alice_io);
-    alice_tracker = std::make_shared<radix_relay::nostr::request_tracker>(alice_io.get());
+    alice_tracker = std::make_shared<radix_relay::nostr::request_tracker>(alice_io);
     alice_orch = std::make_shared<
       radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
       alice_bridge, alice_tracker, alice_io, alice_in, alice_transport_out, alice_main_out);
@@ -128,7 +128,7 @@ struct two_bridge_fixture
     bob_in = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(bob_io);
     bob_transport_out = std::make_shared<async::async_queue<core::events::transport::in_t>>(bob_io);
     bob_main_out = std::make_shared<async::async_queue<core::events::transport_event_variant_t>>(bob_io);
-    bob_tracker = std::make_shared<radix_relay::nostr::request_tracker>(bob_io.get());
+    bob_tracker = std::make_shared<radix_relay::nostr::request_tracker>(bob_io);
     bob_orch = std::make_shared<
       radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
       bob_bridge, bob_tracker, bob_io, bob_in, bob_transport_out, bob_main_out);
@@ -560,6 +560,54 @@ TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_o
           REQUIRE(parsed[2].contains("#p"));
         }
       }
+    }
+  }
+}
+
+SCENARIO("session_orchestrator respects cancellation signal", "[core][session_orchestrator][cancellation]")
+{
+  struct test_state
+  {
+    std::atomic<bool> coroutine_done{ false };
+  };
+
+  GIVEN("A session_orchestrator with cancellation support")
+  {
+    const queue_based_fixture fixture{
+      (std::filesystem::temp_directory_path() / "test_cancellation_orchestrator.db").string()
+    };
+    auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
+    auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
+
+    auto state = std::make_shared<test_state>();
+
+    WHEN("cancellation signal is emitted while session_orchestrator is waiting")
+    {
+      boost::asio::co_spawn(
+        *fixture.io_context,
+        [](std::shared_ptr<radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge,
+             radix_relay::nostr::request_tracker>> orch,
+          std::shared_ptr<test_state> test_state_ptr,
+          std::shared_ptr<boost::asio::cancellation_slot> c_slot) -> boost::asio::awaitable<void> {
+          try {
+            co_await orch->run(c_slot);
+          } catch (const boost::system::system_error &err) {
+            if (err.code() != boost::asio::error::operation_aborted
+                and err.code() != boost::asio::experimental::error::channel_cancelled
+                and err.code() != boost::asio::experimental::error::channel_closed) {
+              throw;
+            }
+          }
+          test_state_ptr->coroutine_done = true;
+        }(fixture.orchestrator, state, cancel_slot),
+        boost::asio::detached);
+
+      fixture.io_context->poll();
+
+      cancel_signal->emit(boost::asio::cancellation_type::terminal);
+      fixture.io_context->run();
+
+      THEN("the session_orchestrator should be cancelled") { REQUIRE(state->coroutine_done); }
     }
   }
 }

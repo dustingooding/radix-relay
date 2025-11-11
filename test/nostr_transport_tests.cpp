@@ -4,6 +4,7 @@
 #include <nostr/transport.hpp>
 
 #include <boost/asio.hpp>
+#include <boost/asio/experimental/channel_error.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <spdlog/spdlog.h>
@@ -18,7 +19,7 @@ SCENARIO("Queue-based transport processes connect command", "[nostr][transport][
   GIVEN("A transport constructed with queues")
   {
     auto io_context = std::make_shared<boost::asio::io_context>();
-    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(*io_context);
+    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
 
     auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
     auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
@@ -64,7 +65,7 @@ SCENARIO("Queue-based transport emits bytes_received events", "[nostr][transport
   GIVEN("A connected transport with queues")
   {
     auto io_context = std::make_shared<boost::asio::io_context>();
-    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(*io_context);
+    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
 
     auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
     auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
@@ -114,7 +115,7 @@ SCENARIO("Queue-based transport processes send command", "[nostr][transport][que
   GIVEN("A connected transport with queues")
   {
     auto io_context = std::make_shared<boost::asio::io_context>();
-    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(*io_context);
+    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
 
     auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
     auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
@@ -170,7 +171,7 @@ SCENARIO("Queue-based transport processes disconnect command", "[nostr][transpor
   GIVEN("A connected transport with queues")
   {
     auto io_context = std::make_shared<boost::asio::io_context>();
-    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(*io_context);
+    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
 
     auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
     auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
@@ -207,6 +208,56 @@ SCENARIO("Queue-based transport processes disconnect command", "[nostr][transpor
 
         REQUIRE(std::holds_alternative<core::events::transport::disconnected>(event));
       }
+    }
+  }
+}
+
+SCENARIO("Transport respects cancellation signal", "[nostr][transport][cancellation]")
+{
+  struct test_state
+  {
+    std::atomic<bool> coroutine_done{ false };
+  };
+
+  GIVEN("A transport with cancellation support")
+  {
+    auto io_context = std::make_shared<boost::asio::io_context>();
+    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
+    auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
+    auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
+    auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
+    auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
+    auto trans = std::make_shared<transport<radix_relay::test::test_double_websocket_stream>>(
+      fake, io_context, in_queue, out_queue);
+
+    auto state = std::make_shared<test_state>();
+
+    WHEN("cancellation signal is emitted while transport is waiting")
+    {
+      boost::asio::co_spawn(
+        *io_context,
+        [](std::shared_ptr<transport<radix_relay::test::test_double_websocket_stream>> transport_ptr,
+          std::shared_ptr<test_state> test_state_ptr,
+          std::shared_ptr<boost::asio::cancellation_slot> c_slot) -> boost::asio::awaitable<void> {
+          try {
+            co_await transport_ptr->run(c_slot);
+          } catch (const boost::system::system_error &err) {
+            if (err.code() != boost::asio::error::operation_aborted
+                and err.code() != boost::asio::experimental::error::channel_cancelled
+                and err.code() != boost::asio::experimental::error::channel_closed) {
+              throw;
+            }
+          }
+          test_state_ptr->coroutine_done = true;
+        }(trans, state, cancel_slot),
+        boost::asio::detached);
+
+      io_context->poll();
+
+      cancel_signal->emit(boost::asio::cancellation_type::terminal);
+      io_context->run();
+
+      THEN("the transport should be cancelled") { REQUIRE(state->coroutine_done); }
     }
   }
 }
