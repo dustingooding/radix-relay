@@ -15,8 +15,10 @@ template<concepts::signal_bridge Bridge> struct command_handler
 {
   explicit command_handler(const std::shared_ptr<Bridge> &bridge,
     const std::shared_ptr<async::async_queue<events::display_message>> &display_out_queue,
-    const std::shared_ptr<async::async_queue<events::transport::in_t>> &transport_out_queue)
-    : bridge_(bridge), display_out_queue_(display_out_queue), transport_out_queue_(transport_out_queue)
+    const std::shared_ptr<async::async_queue<events::transport::in_t>> &transport_out_queue,
+    const std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> &session_out_queue)
+    : bridge_(bridge), display_out_queue_(display_out_queue), transport_out_queue_(transport_out_queue),
+      session_out_queue_(session_out_queue)
   {}
 
   template<events::Command T> auto handle(const T &command) const -> void { handle_impl(command); }
@@ -135,7 +137,7 @@ private:
   {
     std::ignore = initialized_;
     if (not command.relay.empty()) {
-      transport_out_queue_->push(events::transport::connect{ .url = command.relay });
+      session_out_queue_->push(command);
       emit("Connecting to Nostr relay {}\n", command.relay);
     } else {
       emit("Usage: connect <relay>\n");
@@ -172,6 +174,7 @@ private:
   std::shared_ptr<Bridge> bridge_;
   std::shared_ptr<async::async_queue<events::display_message>> display_out_queue_;
   std::shared_ptr<async::async_queue<events::transport::in_t>> transport_out_queue_;
+  std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> session_out_queue_;
   bool initialized_ = true;
 };
 

@@ -4,6 +4,7 @@
 #include <core/events.hpp>
 #include <fmt/core.h>
 #include <memory>
+#include <spdlog/spdlog.h>
 
 namespace radix_relay::core {
 
@@ -24,9 +25,9 @@ struct transport_event_display_handler
     emit("Encrypted session established with {}\n", evt.peer_rdx);
   }
 
-  auto handle(const events::bundle_announcement_received &evt) const -> void
+  static auto handle(const events::bundle_announcement_received &evt) -> void
   {
-    emit("Received bundle announcement from {}\n", evt.pubkey);
+    spdlog::debug("Received bundle announcement from {}", evt.pubkey);
   }
 
   auto handle(const events::message_sent &evt) const -> void
@@ -47,9 +48,9 @@ struct transport_event_display_handler
     }
   }
 
-  auto handle(const events::subscription_established &evt) const -> void
+  static auto handle(const events::subscription_established &evt) -> void
   {
-    emit("Subscription established: {}\n", evt.subscription_id);
+    spdlog::debug("Subscription established: {}", evt.subscription_id);
   }
 
 private:

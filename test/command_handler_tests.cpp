@@ -18,6 +18,8 @@ struct command_handler_fixture
   std::shared_ptr<boost::asio::io_context> io_context;
   std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::display_message>> display_out_queue;
   std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::transport::in_t>> transport_out_queue;
+  std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::session_orchestrator::in_t>>
+    session_out_queue;
   std::shared_ptr<radix_relay_test::test_double_signal_bridge> bridge;
   radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge> handler;
 
@@ -27,8 +29,11 @@ struct command_handler_fixture
         std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context)),
       transport_out_queue(
         std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::transport::in_t>>(io_context)),
+      session_out_queue(
+        std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::session_orchestrator::in_t>>(
+          io_context)),
       bridge(std::make_shared<radix_relay_test::test_double_signal_bridge>()),
-      handler(bridge, display_out_queue, transport_out_queue)
+      handler(bridge, display_out_queue, transport_out_queue, session_out_queue)
   {}
 
   [[nodiscard]] auto get_all_output() const -> std::string
@@ -206,17 +211,17 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
         REQUIRE(fixture.get_all_output().find("relay.damus.io") != std::string::npos);
       }
 
-      THEN("handler pushes transport connect event to transport queue")
+      THEN("handler pushes connect event to session queue")
       {
         const command_handler_fixture fixture;
         fixture.handler.handle(connect_command);
 
-        auto transport_event = fixture.transport_out_queue->try_pop();
-        REQUIRE(transport_event.has_value());
-        if (transport_event) {
-          REQUIRE(std::holds_alternative<radix_relay::core::events::transport::connect>(*transport_event));
-          const auto &connect_event = std::get<radix_relay::core::events::transport::connect>(*transport_event);
-          REQUIRE(connect_event.url == "wss://relay.damus.io");
+        auto session_event = fixture.session_out_queue->try_pop();
+        REQUIRE(session_event.has_value());
+        if (session_event) {
+          REQUIRE(std::holds_alternative<radix_relay::core::events::connect>(*session_event));
+          const auto &connect_event = std::get<radix_relay::core::events::connect>(*session_event);
+          REQUIRE(connect_event.relay == "wss://relay.damus.io");
         }
       }
     }

@@ -182,8 +182,8 @@ auto main() -> int
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
     std::cout << "\n=== Phase 1: Subscribe to bundle announcements ===\n";
-    alice_session_in_queue->push(radix_relay::core::events::subscribe_identities{ .subscription_id = "alice_bundles" });
-    bob_session_in_queue->push(radix_relay::core::events::subscribe_identities{ .subscription_id = "bob_bundles" });
+    alice_session_in_queue->push(radix_relay::core::events::subscribe_identities{});
+    bob_session_in_queue->push(radix_relay::core::events::subscribe_identities{});
 
     std::this_thread::sleep_for(subscription_wait_time);
 
@@ -203,9 +203,9 @@ auto main() -> int
 
         if (std::holds_alternative<radix_relay::core::events::subscription_established>(*evt)) {
           const auto &sub = std::get<radix_relay::core::events::subscription_established>(*evt);
-          if (sub.subscription_id == "alice_bundles") {
+          if (not sub.subscription_id.empty() and not alice_bundles_eose_received) {
             alice_bundles_eose_received = true;
-            spdlog::info("[Alice] Bundle subscription ready for real-time");
+            spdlog::info("[Alice] Bundle subscription ready for real-time (sub_id: {})", sub.subscription_id);
           }
         } else if (std::holds_alternative<radix_relay::core::events::bundle_announcement_received>(*evt)) {
           const auto &bundle = std::get<radix_relay::core::events::bundle_announcement_received>(*evt);
@@ -230,9 +230,9 @@ auto main() -> int
 
         if (std::holds_alternative<radix_relay::core::events::subscription_established>(*evt)) {
           const auto &sub = std::get<radix_relay::core::events::subscription_established>(*evt);
-          if (sub.subscription_id == "bob_bundles") {
+          if (not sub.subscription_id.empty() and not bob_bundles_eose_received) {
             bob_bundles_eose_received = true;
-            spdlog::info("[Bob] Bundle subscription ready for real-time");
+            spdlog::info("[Bob] Bundle subscription ready for real-time (sub_id: {})", sub.subscription_id);
           }
         } else if (std::holds_alternative<radix_relay::core::events::bundle_announcement_received>(*evt)) {
           const auto &bundle = std::get<radix_relay::core::events::bundle_announcement_received>(*evt);
@@ -253,8 +253,8 @@ auto main() -> int
     }
 
     std::cout << "\n=== Phase 3: Subscribe to encrypted messages ===\n";
-    alice_session_in_queue->push(radix_relay::core::events::subscribe_messages{ .subscription_id = "alice_msgs" });
-    bob_session_in_queue->push(radix_relay::core::events::subscribe_messages{ .subscription_id = "bob_msgs" });
+    alice_session_in_queue->push(radix_relay::core::events::subscribe_messages{});
+    bob_session_in_queue->push(radix_relay::core::events::subscribe_messages{});
 
     spdlog::info("Waiting for message subscriptions to establish...");
     std::this_thread::sleep_for(subscription_wait_time);

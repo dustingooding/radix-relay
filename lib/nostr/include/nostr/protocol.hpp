@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -103,5 +104,15 @@ struct event
 
   static auto deserialize(const std::string &json) -> std::optional<event>;
 };
+
+constexpr std::size_t max_subscription_id_length = 64;
+
+inline auto validate_subscription_id(const std::string &subscription_id) -> void
+{
+  if (subscription_id.empty()) { throw std::invalid_argument("Subscription ID cannot be empty"); }
+  if (subscription_id.length() > max_subscription_id_length) {
+    throw std::invalid_argument("Subscription ID exceeds maximum length of 64 characters");
+  }
+}
 
 }// namespace radix_relay::nostr::protocol

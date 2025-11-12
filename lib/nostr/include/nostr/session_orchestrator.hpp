@@ -154,18 +154,24 @@ private:
       boost::asio::detached);
   }
 
-  auto handle(const core::events::subscribe_identities &cmd) -> void
+  auto handle(const core::events::subscribe_identities & /*cmd*/) -> void
   {
+    const auto subscription_id = core::uuid_generator::generate();
+    nostr::protocol::validate_subscription_id(subscription_id);
+
     const auto kind_value = std::to_string(
       static_cast<std::underlying_type_t<nostr::protocol::kind>>(nostr::protocol::kind::bundle_announcement));
     const std::string subscription_json =
-      R"(["REQ",")" + cmd.subscription_id + R"(",{"kinds":[)" + kind_value + R"(],"#d":["radix_prekey_bundle_v1"]}])";
+      R"(["REQ",")" + subscription_id + R"(",{"kinds":[)" + kind_value + R"(],"#d":["radix_prekey_bundle_v1"]}])";
     handle(core::events::subscribe{ .subscription_json = subscription_json });
   }
 
-  auto handle(const core::events::subscribe_messages &cmd) -> void
+  auto handle(const core::events::subscribe_messages & /*cmd*/) -> void
   {
-    auto subscription_json = bridge_->create_subscription_for_self(cmd.subscription_id);
+    const auto subscription_id = core::uuid_generator::generate();
+    nostr::protocol::validate_subscription_id(subscription_id);
+
+    auto subscription_json = bridge_->create_subscription_for_self(subscription_id);
     handle(core::events::subscribe{ .subscription_json = subscription_json });
   }
 
@@ -299,15 +305,22 @@ private:
     }
   }
 
-  auto handle(const core::events::transport::connected & /*evt*/) -> void
+  auto handle(const core::events::connect &evt) -> void
   {
-    spdlog::debug("[session_orchestrator] Transport connected");
-    std::ignore = bridge_;
+    spdlog::info("[session_orchestrator] Connecting to relay: {}", evt.relay);
+    emit_transport_event(core::events::transport::connect{ .url = evt.relay });
   }
 
-  auto handle(const core::events::transport::connect_failed & /*evt*/) -> void
+  auto handle(const core::events::transport::connected & /*evt*/) -> void
   {
-    spdlog::debug("[session_orchestrator] Transport connect failed");
+    spdlog::info("[session_orchestrator] Transport connected, subscribing to identities and messages");
+    handle(core::events::subscribe_identities{});
+    handle(core::events::subscribe_messages{});
+  }
+
+  auto handle(const core::events::transport::connect_failed &evt) -> void
+  {
+    spdlog::error("[session_orchestrator] Transport connect failed: {}", evt.error_message);
     std::ignore = bridge_;
   }
 
@@ -317,15 +330,15 @@ private:
     std::ignore = bridge_;
   }
 
-  auto handle(const core::events::transport::send_failed & /*evt*/) -> void
+  auto handle(const core::events::transport::send_failed &evt) -> void
   {
-    spdlog::debug("[session_orchestrator] Transport send failed");
+    spdlog::error("[session_orchestrator] Transport send failed: {}", evt.error_message);
     std::ignore = bridge_;
   }
 
   auto handle(const core::events::transport::disconnected & /*evt*/) -> void
   {
-    spdlog::debug("[session_orchestrator] Transport disconnected");
+    spdlog::info("[session_orchestrator] Transport disconnected");
     std::ignore = bridge_;
   }
 };

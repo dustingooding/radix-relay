@@ -35,8 +35,6 @@ auto main(int argc, char **argv) -> int
 
   if (not cli_utils::validate_cli_args(args)) { return 1; }
 
-  cli_utils::configure_logging(args);
-
   auto io_context = std::make_shared<boost::asio::io_context>();
   auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
   auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
@@ -47,27 +45,29 @@ auto main(int argc, char **argv) -> int
 
     auto display_queue = std::make_shared<async::async_queue<core::events::display_message>>(io_context);
     auto transport_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
+    auto session_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
+    auto command_queue = std::make_shared<async::async_queue<core::events::raw_command>>(io_context);
 
-    auto cli_command_handler =
-      std::make_shared<core::command_handler<bridge_t>>(bridge, display_queue, transport_queue);
+    auto command_handler =
+      std::make_shared<core::command_handler<bridge_t>>(bridge, display_queue, transport_queue, session_queue);
 
-    if (cli_utils::execute_cli_command(args, cli_command_handler)) {
+    if (cli_utils::execute_cli_command(args, command_handler)) {
+      cli_utils::configure_logging(args);
       while (auto msg = display_queue->try_pop()) { fmt::print("{}", msg->message); }
       return 0;
     }
 
-    auto command_queue = std::make_shared<async::async_queue<core::events::raw_command>>(io_context);
-    auto session_in_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
+    cli_utils::configure_logging(args, display_queue);
     auto main_event_queue = std::make_shared<async::async_queue<core::events::transport_event_variant_t>>(io_context);
 
     auto request_tracker = std::make_shared<nostr::request_tracker>(io_context);
     auto websocket = std::make_shared<transport::websocket_stream>(io_context);
 
     auto orchestrator = std::make_shared<nostr::session_orchestrator<bridge_t, nostr::request_tracker>>(
-      bridge, request_tracker, io_context, session_in_queue, transport_queue, main_event_queue);
+      bridge, request_tracker, io_context, session_queue, transport_queue, main_event_queue);
 
     auto transport = std::make_shared<nostr::transport<transport::websocket_stream>>(
-      websocket, io_context, transport_queue, session_in_queue);
+      websocket, io_context, transport_queue, session_queue);
 
     using cmd_handler_t = core::command_handler<bridge_t>;
     using evt_handler_t = core::event_handler<cmd_handler_t>;
@@ -75,8 +75,7 @@ auto main(int argc, char **argv) -> int
     using transport_evt_handler_t = core::transport_event_display_handler;
     using transport_evt_processor_t = core::transport_event_processor<transport_evt_handler_t>;
 
-    auto cmd_handler = std::make_shared<cmd_handler_t>(bridge, display_queue, transport_queue);
-    auto evt_handler = std::make_shared<evt_handler_t>(cmd_handler);
+    auto evt_handler = std::make_shared<evt_handler_t>(command_handler);
     auto cmd_processor = std::make_shared<cmd_processor_t>(io_context, command_queue, evt_handler);
 
     auto transport_evt_handler = std::make_shared<transport_evt_handler_t>(display_queue);
@@ -109,7 +108,7 @@ auto main(int argc, char **argv) -> int
     spdlog::debug("Closing all queues...");
     command_queue->close();
     display_queue->close();
-    session_in_queue->close();
+    session_queue->close();
     transport_queue->close();
     main_event_queue->close();
 

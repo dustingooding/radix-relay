@@ -295,29 +295,6 @@ SCENARIO("Queue-based session_orchestrator processes bytes_received with EOSE me
   }
 }
 
-SCENARIO("Queue-based session_orchestrator processes transport connected event", "[core][session_orchestrator][queue]")
-{
-  GIVEN("A session_orchestrator constructed with queues")
-  {
-    const queue_based_fixture fixture{ (std::filesystem::temp_directory_path() / "test_queue_connected.db").string() };
-
-    WHEN("run_once processes a transport connected event from in_queue")
-    {
-      fixture.in_queue->push(core::events::transport::connected{});
-
-      boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
-
-      fixture.io_context->run();
-
-      THEN("Event is processed without output")
-      {
-        REQUIRE(fixture.main_out_queue->empty());
-        REQUIRE(fixture.transport_out_queue->empty());
-      }
-    }
-  }
-}
-
 SCENARIO("Queue-based session_orchestrator processes transport disconnected event",
   "[core][session_orchestrator][queue]")
 {
@@ -483,7 +460,7 @@ TEST_CASE("session_orchestrator handles subscribe_identities command", "[session
 
     WHEN("subscribe_identities command is sent")
     {
-      fixture.in_queue->push(events::subscribe_identities{ .subscription_id = "test_bundles" });
+      fixture.in_queue->push(events::subscribe_identities{});
 
       boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
 
@@ -491,7 +468,7 @@ TEST_CASE("session_orchestrator handles subscribe_identities command", "[session
       fixture.io_context->restart();
       fixture.io_context->run();
 
-      THEN("it sends a subscription request for bundle announcements to transport")
+      THEN("it generates subscription ID and sends request for bundle announcements to transport")
       {
         REQUIRE(not fixture.transport_out_queue->empty());
         auto transport_cmd = fixture.transport_out_queue->try_pop();
@@ -509,7 +486,11 @@ TEST_CASE("session_orchestrator handles subscribe_identities command", "[session
           auto parsed = nlohmann::json::parse(json_str);
           REQUIRE(parsed.is_array());
           REQUIRE(parsed[0] == "REQ");
-          REQUIRE(parsed[1] == "test_bundles");
+
+          const std::string subscription_id = parsed[1];
+          REQUIRE(not subscription_id.empty());
+          REQUIRE(subscription_id.length() <= 64);
+
           REQUIRE(parsed[2].contains("kinds"));
           REQUIRE(parsed[2]["kinds"][0] == 30078);
           REQUIRE(parsed[2].contains("#d"));
@@ -528,7 +509,7 @@ TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_o
 
     WHEN("subscribe_messages command is sent")
     {
-      fixture.in_queue->push(events::subscribe_messages{ .subscription_id = "test_messages" });
+      fixture.in_queue->push(events::subscribe_messages{});
 
       boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
 
@@ -536,7 +517,7 @@ TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_o
       fixture.io_context->restart();
       fixture.io_context->run();
 
-      THEN("it sends a subscription request for encrypted messages to transport")
+      THEN("it generates subscription ID and sends request for encrypted messages to transport")
       {
         REQUIRE(not fixture.transport_out_queue->empty());
         auto transport_cmd = fixture.transport_out_queue->try_pop();
@@ -553,11 +534,80 @@ TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_o
 
           auto parsed = nlohmann::json::parse(json_str);
           REQUIRE(parsed.is_array());
-          REQUIRE(parsed[0] == "REQ");
-          REQUIRE(parsed[1] == "test_messages");
+          CHECK_NOTHROW(parsed[0] == "REQ");
+
+          const std::string subscription_id = parsed[1];
+          CHECK(not subscription_id.empty());
+          CHECK(subscription_id.length() <= 64);
+
           REQUIRE(parsed[2].contains("kinds"));
-          REQUIRE(parsed[2]["kinds"][0] == 40001);
-          REQUIRE(parsed[2].contains("#p"));
+          CHECK(parsed[2]["kinds"][0] == 40001);
+          CHECK(parsed[2].contains("#p"));
+        }
+      }
+    }
+  }
+}
+
+TEST_CASE("session_orchestrator handles connect command and manages connection lifecycle",
+  "[session_orchestrator][connect]")
+{
+  GIVEN("A session orchestrator")
+  {
+    const queue_based_fixture fixture("/tmp/test_connect_lifecycle.db");
+
+    WHEN("connect command is sent")
+    {
+      fixture.in_queue->push(events::connect{ .relay = "wss://relay.example.com" });
+
+      boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
+      fixture.io_context->run();
+      fixture.io_context->restart();
+
+      THEN("it forwards connect to transport without sending subscriptions")
+      {
+        REQUIRE(not fixture.transport_out_queue->empty());
+        auto transport_cmd = fixture.transport_out_queue->try_pop();
+        REQUIRE(transport_cmd.has_value());
+        if (transport_cmd.has_value()) {
+          REQUIRE(std::holds_alternative<core::events::transport::connect>(transport_cmd.value()));
+          const auto &connect_cmd = std::get<core::events::transport::connect>(transport_cmd.value());
+          REQUIRE(connect_cmd.url == "wss://relay.example.com");
+        }
+
+        REQUIRE(fixture.transport_out_queue->empty());
+      }
+    }
+  }
+}
+
+TEST_CASE("session_orchestrator sends subscriptions when transport connects", "[session_orchestrator][connect]")
+{
+  GIVEN("A session orchestrator")
+  {
+    const queue_based_fixture fixture("/tmp/test_transport_connected.db");
+
+    WHEN("transport connected event is received")
+    {
+      fixture.in_queue->push(core::events::transport::connected{ .url = "wss://relay.example.com" });
+
+      boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
+      fixture.io_context->run();
+      fixture.io_context->restart();
+      fixture.io_context->run();
+
+      THEN("it sends subscribe_identities and subscribe_messages")
+      {
+        auto first_send = fixture.transport_out_queue->try_pop();
+        REQUIRE(first_send.has_value());
+        if (first_send.has_value()) {
+          REQUIRE(std::holds_alternative<core::events::transport::send>(first_send.value()));
+        }
+
+        auto second_send = fixture.transport_out_queue->try_pop();
+        REQUIRE(second_send.has_value());
+        if (second_send.has_value()) {
+          REQUIRE(std::holds_alternative<core::events::transport::send>(second_send.value()));
         }
       }
     }
