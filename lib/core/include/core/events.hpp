@@ -75,12 +75,10 @@ struct subscribe
 
 struct subscribe_identities
 {
-  std::string subscription_id;
 };
 
 struct subscribe_messages
 {
-  std::string subscription_id;
 };
 
 struct establish_session
@@ -224,6 +222,7 @@ namespace session_orchestrator {
     subscribe,
     subscribe_identities,
     subscribe_messages,
+    connect,
     transport::bytes_received,
     transport::connected,
     transport::connect_failed,

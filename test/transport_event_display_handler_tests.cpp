@@ -110,14 +110,13 @@ SCENARIO("Transport event display handler formats events as display messages", "
     {
       const radix_relay::core::events::subscription_established evt{ .subscription_id = "sub123" };
 
-      THEN("handler emits subscription message")
+      THEN("handler logs subscription via spdlog (not display queue)")
       {
         const transport_event_display_handler_fixture fixture;
         fixture.handler.handle(evt);
 
         const auto output = fixture.get_all_output();
-        REQUIRE(output.find("sub123") != std::string::npos);
-        REQUIRE(output.find("Subscription") != std::string::npos);
+        REQUIRE(output.empty());
       }
     }
 
@@ -127,13 +126,13 @@ SCENARIO("Transport event display handler formats events as display messages", "
         .pubkey = "npub123", .bundle_content = "bundle_data", .event_id = "evt456"
       };
 
-      THEN("handler emits bundle announcement message")
+      THEN("handler logs bundle announcement via spdlog (not display queue)")
       {
         const transport_event_display_handler_fixture fixture;
         fixture.handler.handle(evt);
 
         const auto output = fixture.get_all_output();
-        REQUIRE(output.find("bundle") != std::string::npos);
+        REQUIRE(output.empty());
       }
     }
   }

@@ -1,7 +1,10 @@
 #pragma once
 
+#include <async/async_queue.hpp>
 #include <cli_utils/cli_parser.hpp>
+#include <cli_utils/tui_sink.hpp>
 #include <concepts/command_handler.hpp>
+#include <core/events.hpp>
 #include <core/standard_event_handler.hpp>
 #include <fmt/core.h>
 #include <memory>
@@ -17,8 +20,15 @@ struct app_state
   std::string identity_path;
 };
 
-inline auto configure_logging(const cli_args &args) -> void
+inline auto configure_logging(const cli_args &args,
+  std::shared_ptr<async::async_queue<core::events::display_message>> display_queue = nullptr) -> void
 {
+  if (display_queue) {
+    auto tui_sink = std::make_shared<tui_sink_mutex_t>(display_queue);
+    auto logger = std::make_shared<spdlog::logger>("tui_logger", tui_sink);
+    spdlog::set_default_logger(logger);
+  }
+
   if (args.verbose) { spdlog::set_level(spdlog::level::debug); }
 }
 

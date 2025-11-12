@@ -11,7 +11,6 @@
 #include <memory>
 #include <spdlog/spdlog.h>
 #include <string_view>
-#include <system_error>
 
 namespace radix_relay::core {
 
@@ -49,7 +48,7 @@ struct coroutine_state
 };
 
 template<Processor P>
-auto spawn_processor(std::shared_ptr<boost::asio::io_context> io_ctx,
+auto spawn_processor(const std::shared_ptr<boost::asio::io_context> &io_ctx,
   std::shared_ptr<P> proc,
   std::shared_ptr<boost::asio::cancellation_slot> cancel_slot,
   std::string_view processor_name) -> std::shared_ptr<coroutine_state>
