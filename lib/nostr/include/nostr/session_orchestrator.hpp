@@ -26,6 +26,14 @@
 
 namespace radix_relay::nostr {
 
+struct discovered_bundle
+{
+  std::string rdx_fingerprint;
+  std::string nostr_pubkey;
+  std::string bundle_base64;
+  std::string event_id;
+};
+
 template<concepts::signal_bridge Bridge, concepts::request_tracker Tracker>
 struct session_orchestrator : public std::enable_shared_from_this<session_orchestrator<Bridge, Tracker>>
 {
@@ -34,9 +42,9 @@ struct session_orchestrator : public std::enable_shared_from_this<session_orches
     const std::shared_ptr<boost::asio::io_context> &io_context,
     const std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> &in_queue,
     const std::shared_ptr<async::async_queue<core::events::transport::in_t>> &transport_out_queue,
-    const std::shared_ptr<async::async_queue<core::events::transport_event_variant_t>> &main_out_queue)
+    const std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> &presentation_out_queue)
     : bridge_(bridge), handler_(bridge_), tracker_(tracker), io_context_(io_context), in_queue_(in_queue),
-      transport_out_queue_(transport_out_queue), main_out_queue_(main_out_queue)
+      transport_out_queue_(transport_out_queue), presentation_out_queue_(presentation_out_queue)
   {}
 
   // NOLINTNEXTLINE(performance-unnecessary-value-param)
@@ -66,6 +74,10 @@ struct session_orchestrator : public std::enable_shared_from_this<session_orches
   }
 
 private:
+  [[nodiscard]] auto get_discovered_bundles() const -> const std::vector<discovered_bundle> &
+  {
+    return discovered_bundles_;
+  }
   static constexpr auto default_timeout = std::chrono::seconds(15);
 
   std::shared_ptr<Bridge> bridge_;
@@ -74,11 +86,15 @@ private:
   std::shared_ptr<boost::asio::io_context> io_context_;
   std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> in_queue_;
   std::shared_ptr<async::async_queue<core::events::transport::in_t>> transport_out_queue_;
-  std::shared_ptr<async::async_queue<core::events::transport_event_variant_t>> main_out_queue_;
+  std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> presentation_out_queue_;
+  std::vector<discovered_bundle> discovered_bundles_;
 
   auto emit_transport_event(core::events::transport::in_t evt) -> void { transport_out_queue_->push(std::move(evt)); }
 
-  auto emit_main_event(core::events::transport_event_variant_t evt) -> void { main_out_queue_->push(std::move(evt)); }
+  auto emit_presentation_event(core::events::presentation_event_variant_t evt) -> void
+  {
+    presentation_out_queue_->push(std::move(evt));
+  }
 
   auto handle(const core::events::send &cmd) -> void
   {
@@ -95,9 +111,10 @@ private:
         try {
           auto ok_response =
             co_await self->tracker_->template async_track<nostr::protocol::ok>(event_id, self->default_timeout);
-          self->emit_main_event(core::events::message_sent{ cmd.peer, event_id, ok_response.accepted });
+          self->emit_presentation_event(core::events::message_sent{ cmd.peer, event_id, ok_response.accepted });
         } catch (const std::exception &) {
-          self->emit_main_event(core::events::message_sent{ .peer = cmd.peer, .event_id = "", .accepted = false });
+          self->emit_presentation_event(
+            core::events::message_sent{ .peer = cmd.peer, .event_id = "", .accepted = false });
         }
       },
       boost::asio::detached);
@@ -118,17 +135,30 @@ private:
         try {
           auto ok_response =
             co_await self->tracker_->template async_track<nostr::protocol::ok>(event_id, self->default_timeout);
-          self->emit_main_event(
+          self->emit_presentation_event(
             core::events::bundle_published{ .event_id = event_id, .accepted = ok_response.accepted });
         } catch (const std::exception &e) {
           spdlog::warn("[session_orchestrator] OK timeout for event: {} - {}", event_id, e.what());
-          self->emit_main_event(core::events::bundle_published{ .event_id = "", .accepted = false });
+          self->emit_presentation_event(core::events::bundle_published{ .event_id = "", .accepted = false });
         }
       },
       boost::asio::detached);
   }
 
-  auto handle(const core::events::trust &cmd) -> void { handler_.handle(cmd); }
+  auto handle(const core::events::trust &cmd) -> void
+  {
+    auto bundle_iter = std::ranges::find_if(
+      discovered_bundles_, [&cmd](const discovered_bundle &bundle) { return bundle.rdx_fingerprint == cmd.peer; });
+
+    if (bundle_iter != discovered_bundles_.end()) {
+      auto session_result =
+        handler_.handle(core::events::establish_session{ .bundle_data = bundle_iter->bundle_base64 });
+      if (session_result and not cmd.alias.empty()) { handler_.handle(cmd); }
+      if (session_result) { emit_presentation_event(*session_result); }
+    } else {
+      spdlog::error("Cannot establish session with {}: identity not found in discovered bundles", cmd.peer);
+    }
+  }
 
   auto handle(const core::events::subscribe &cmd) -> void
   {
@@ -145,10 +175,10 @@ private:
         try {
           auto eose = co_await self->tracker_->template async_track<nostr::protocol::eose>(
             subscription_id, self->default_timeout);
-          self->emit_main_event(core::events::subscription_established{ eose.subscription_id });
+          self->emit_presentation_event(core::events::subscription_established{ eose.subscription_id });
         } catch (const std::exception &e) {
           spdlog::warn("[session_orchestrator] EOSE timeout for subscription: {} - {}", subscription_id, e.what());
-          self->emit_main_event(core::events::subscription_established{ "" });
+          self->emit_presentation_event(core::events::subscription_established{ "" });
         }
       },
       boost::asio::detached);
@@ -164,6 +194,27 @@ private:
     const std::string subscription_json =
       R"(["REQ",")" + subscription_id + R"(",{"kinds":[)" + kind_value + R"(],"#d":["radix_prekey_bundle_v1"]}])";
     handle(core::events::subscribe{ .subscription_json = subscription_json });
+  }
+
+  auto handle(const core::events::bundle_announcement_received &event) -> void
+  {
+    auto rdx_fingerprint = bridge_->extract_rdx_from_bundle_base64(event.bundle_content);
+    discovered_bundles_.push_back(discovered_bundle{ .rdx_fingerprint = rdx_fingerprint,
+      .nostr_pubkey = event.pubkey,
+      .bundle_base64 = event.bundle_content,
+      .event_id = event.event_id });
+  }
+
+  auto handle(const core::events::list_identities & /*cmd*/) -> void
+  {
+    std::vector<core::events::discovered_identity> identities;
+    identities.reserve(discovered_bundles_.size());
+    std::ranges::transform(discovered_bundles_, std::back_inserter(identities), [](const auto &bundle) {
+      return core::events::discovered_identity{
+        .rdx_fingerprint = bundle.rdx_fingerprint, .nostr_pubkey = bundle.nostr_pubkey, .event_id = bundle.event_id
+      };
+    });
+    emit_presentation_event(core::events::identities_listed{ .identities = std::move(identities) });
   }
 
   auto handle(const core::events::subscribe_messages & /*cmd*/) -> void
@@ -226,7 +277,7 @@ private:
               .content = event_data["content"],
               .sig = event_data["sig"] } };
 
-            if (auto result = handler_.handle(evt_inner)) { emit_main_event(*result); }
+            if (auto result = handler_.handle(evt_inner)) { emit_presentation_event(*result); }
             break;
           }
           case nostr::protocol::kind::bundle_announcement: {
@@ -238,7 +289,10 @@ private:
               .content = event_data["content"],
               .sig = event_data["sig"] } };
 
-            if (auto result = handler_.handle(evt_inner)) { emit_main_event(*result); }
+            if (auto result = handler_.handle(evt_inner)) {
+              handle(*result);
+              emit_presentation_event(*result);
+            }
             break;
           }
           case nostr::protocol::kind::identity_announcement: {

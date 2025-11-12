@@ -80,8 +80,8 @@ add_catch_test(NAME raw_signal_bridge_tests SOURCES raw_signal_bridge_tests.cpp 
 add_catch_test(NAME scroll_state_tests SOURCES scroll_state_tests.cpp LIBS radix_relay::tui)
 add_catch_test(NAME session_orchestrator_tests SOURCES session_orchestrator_tests.cpp LIBS radix_relay::nostr;radix_relay::signal)
 add_catch_test(NAME signal_bridge_tests SOURCES signal_bridge_tests.cpp LIBS radix_relay::platform;radix_relay::signal;nlohmann_json::nlohmann_json PREFIX signal)
-add_catch_test(NAME transport_event_display_handler_tests SOURCES transport_event_display_handler_tests.cpp)
-add_catch_test(NAME transport_event_processor_tests SOURCES transport_event_processor_tests.cpp)
+add_catch_test(NAME presentation_handler_tests SOURCES presentation_handler_tests.cpp)
+add_catch_test(NAME presentation_processor_tests SOURCES presentation_processor_tests.cpp)
 add_catch_test(NAME tui_processor_tests SOURCES tui_processor_tests.cpp LIBS radix_relay::tui)
 
 if(WIN32 AND BUILD_SHARED_LIBS)

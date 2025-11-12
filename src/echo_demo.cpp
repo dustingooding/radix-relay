@@ -61,8 +61,8 @@ auto main() -> int
     auto alice_tracker = std::make_shared<radix_relay::nostr::request_tracker>(io_context);
     auto bob_tracker = std::make_shared<radix_relay::nostr::request_tracker>(io_context);
 
-    std::vector<radix_relay::core::events::transport_event_variant_t> alice_events;
-    std::vector<radix_relay::core::events::transport_event_variant_t> bob_events;
+    std::vector<radix_relay::core::events::presentation_event_variant_t> alice_events;
+    std::vector<radix_relay::core::events::presentation_event_variant_t> bob_events;
 
     std::string alice_peer_rdx;
     std::string bob_peer_rdx;
@@ -82,14 +82,14 @@ auto main() -> int
     auto alice_session_in_queue =
       std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
     auto alice_transport_in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
-    auto alice_main_event_queue =
-      std::make_shared<async::async_queue<core::events::transport_event_variant_t>>(io_context);
+    auto alice_presentation_event_queue =
+      std::make_shared<async::async_queue<core::events::presentation_event_variant_t>>(io_context);
 
     auto bob_session_in_queue =
       std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
     auto bob_transport_in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
-    auto bob_main_event_queue =
-      std::make_shared<async::async_queue<core::events::transport_event_variant_t>>(io_context);
+    auto bob_presentation_event_queue =
+      std::make_shared<async::async_queue<core::events::presentation_event_variant_t>>(io_context);
 
     std::cout << "\nCreating SessionOrchestrators and Transports...\n";
 
@@ -103,11 +103,11 @@ auto main() -> int
       io_context,
       alice_session_in_queue,
       alice_transport_in_queue,
-      alice_main_event_queue);
+      alice_presentation_event_queue);
 
     auto bob_orchestrator = std::make_shared<
       radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
-      bob_bridge, bob_tracker, io_context, bob_session_in_queue, bob_transport_in_queue, bob_main_event_queue);
+      bob_bridge, bob_tracker, io_context, bob_session_in_queue, bob_transport_in_queue, bob_presentation_event_queue);
 
     auto alice_transport = std::make_shared<radix_relay::nostr::transport<radix_relay::transport::websocket_stream>>(
       alice_ws, io_context, alice_transport_in_queue, alice_session_in_queue);
@@ -194,9 +194,9 @@ auto main() -> int
     spdlog::info("Waiting for bundles to be received and sessions established...");
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    while (not alice_main_event_queue->empty() or not bob_main_event_queue->empty()) {
-      while (not alice_main_event_queue->empty()) {
-        auto evt = alice_main_event_queue->try_pop();
+    while (not alice_presentation_event_queue->empty() or not bob_presentation_event_queue->empty()) {
+      while (not alice_presentation_event_queue->empty()) {
+        auto evt = alice_presentation_event_queue->try_pop();
         if (not evt) { break; }
 
         alice_events.push_back(*evt);
@@ -222,8 +222,8 @@ auto main() -> int
         }
       }
 
-      while (not bob_main_event_queue->empty()) {
-        auto evt = bob_main_event_queue->try_pop();
+      while (not bob_presentation_event_queue->empty()) {
+        auto evt = bob_presentation_event_queue->try_pop();
         if (not evt) { break; }
 
         bob_events.push_back(*evt);
@@ -271,9 +271,9 @@ auto main() -> int
 
       std::this_thread::sleep_for(message_wait_time);
 
-      while (not alice_main_event_queue->empty() or not bob_main_event_queue->empty()) {
-        while (not alice_main_event_queue->empty()) {
-          auto evt = alice_main_event_queue->try_pop();
+      while (not alice_presentation_event_queue->empty() or not bob_presentation_event_queue->empty()) {
+        while (not alice_presentation_event_queue->empty()) {
+          auto evt = alice_presentation_event_queue->try_pop();
           if (not evt) { break; }
           alice_events.push_back(*evt);
 
@@ -288,8 +288,8 @@ auto main() -> int
           }
         }
 
-        while (not bob_main_event_queue->empty()) {
-          auto evt = bob_main_event_queue->try_pop();
+        while (not bob_presentation_event_queue->empty()) {
+          auto evt = bob_presentation_event_queue->try_pop();
           if (not evt) { break; }
           bob_events.push_back(*evt);
 
@@ -308,9 +308,9 @@ auto main() -> int
 
       std::this_thread::sleep_for(message_wait_time);
 
-      while (not alice_main_event_queue->empty() or not bob_main_event_queue->empty()) {
-        while (not alice_main_event_queue->empty()) {
-          auto evt = alice_main_event_queue->try_pop();
+      while (not alice_presentation_event_queue->empty() or not bob_presentation_event_queue->empty()) {
+        while (not alice_presentation_event_queue->empty()) {
+          auto evt = alice_presentation_event_queue->try_pop();
           if (not evt) { break; }
           alice_events.push_back(*evt);
 
@@ -320,8 +320,8 @@ auto main() -> int
           }
         }
 
-        while (not bob_main_event_queue->empty()) {
-          auto evt = bob_main_event_queue->try_pop();
+        while (not bob_presentation_event_queue->empty()) {
+          auto evt = bob_presentation_event_queue->try_pop();
           if (not evt) { break; }
           bob_events.push_back(*evt);
 
@@ -374,10 +374,10 @@ auto main() -> int
     spdlog::debug("Closing all queues...");
     alice_session_in_queue->close();
     alice_transport_in_queue->close();
-    alice_main_event_queue->close();
+    alice_presentation_event_queue->close();
     bob_session_in_queue->close();
     bob_transport_in_queue->close();
-    bob_main_event_queue->close();
+    bob_presentation_event_queue->close();
 
     spdlog::debug("Resetting work guard...");
     work_guard.reset();

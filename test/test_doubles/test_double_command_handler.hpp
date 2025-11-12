@@ -80,6 +80,11 @@ private:
     called_commands.push_back("verify:" + command.peer);
   }
 
+  auto handle_impl(const radix_relay::core::events::identities & /*command*/) const -> void
+  {
+    called_commands.push_back("identities");
+  }
+
 public:
   auto was_called(const std::string &command) const -> bool
   {

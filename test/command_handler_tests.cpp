@@ -155,6 +155,23 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
         REQUIRE(fixture.get_all_output().find("Scanning") != std::string::npos);
       }
     }
+
+    WHEN("handling identities command")
+    {
+      auto identities_command = radix_relay::core::events::identities{};
+
+      THEN("handler pushes list_identities event to session queue")
+      {
+        const command_handler_fixture fixture;
+        fixture.handler.handle(identities_command);
+
+        auto session_event = fixture.session_out_queue->try_pop();
+        REQUIRE(session_event.has_value());
+        if (session_event) {
+          REQUIRE(std::holds_alternative<radix_relay::core::events::list_identities>(*session_event));
+        }
+      }
+    }
   }
 }
 
@@ -252,13 +269,23 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
 
     WHEN("handling trust command")
     {
-      auto trust_command = radix_relay::core::events::trust{ .peer = "alice", .alias = "" };
+      auto trust_command = radix_relay::core::events::trust{ .peer = "RDX:alice123", .alias = "Alice" };
 
-      THEN("handler outputs trust command confirmation with peer")
+      THEN("handler pushes trust event to session queue")
       {
         const command_handler_fixture fixture;
         fixture.handler.handle(trust_command);
-        REQUIRE(fixture.get_all_output().find("alice") != std::string::npos);
+
+        auto session_event = fixture.session_out_queue->try_pop();
+        REQUIRE(session_event.has_value());
+        if (session_event) {
+          REQUIRE(std::holds_alternative<radix_relay::core::events::trust>(*session_event));
+          const auto &trust = std::get<radix_relay::core::events::trust>(*session_event);
+          REQUIRE(trust.peer == "RDX:alice123");
+          REQUIRE(trust.alias == "Alice");
+        }
+
+        REQUIRE(fixture.get_all_output().find("RDX:alice123") != std::string::npos);
       }
     }
 

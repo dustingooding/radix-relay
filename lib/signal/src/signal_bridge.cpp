@@ -46,6 +46,12 @@ auto bridge::add_contact_and_establish_session_from_base64(const std::string &bu
   return std::string(peer_rdx);
 }
 
+auto bridge::extract_rdx_from_bundle_base64(const std::string &bundle_base64) const -> std::string
+{
+  auto rdx = radix_relay::extract_rdx_from_bundle_base64(*bridge_, bundle_base64.c_str());
+  return std::string(rdx);
+}
+
 auto bridge::generate_prekey_bundle_announcement(const std::string &version) const -> std::string
 {
   auto bundle_json = radix_relay::generate_prekey_bundle_announcement(*bridge_, version.c_str());

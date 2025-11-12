@@ -3,15 +3,15 @@
 
 #include <async/async_queue.hpp>
 #include <core/events.hpp>
-#include <core/transport_event_display_handler.hpp>
+#include <core/presentation_handler.hpp>
 
-struct transport_event_display_handler_fixture
+struct presentation_handler_fixture
 {
   std::shared_ptr<boost::asio::io_context> io_context;
   std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::display_message>> display_queue;
-  radix_relay::core::transport_event_display_handler handler;
+  radix_relay::core::presentation_handler handler;
 
-  transport_event_display_handler_fixture()
+  presentation_handler_fixture()
     : io_context(std::make_shared<boost::asio::io_context>()),
       display_queue(
         std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context)),
@@ -26,7 +26,7 @@ struct transport_event_display_handler_fixture
   }
 };
 
-SCENARIO("Transport event display handler formats events as display messages", "[transport_event_display_handler]")
+SCENARIO("Transport event display handler formats events as display messages", "[presentation_handler]")
 {
   GIVEN("A transport event display handler")
   {
@@ -39,7 +39,7 @@ SCENARIO("Transport event display handler formats events as display messages", "
 
       THEN("handler emits formatted display message")
       {
-        const transport_event_display_handler_fixture fixture;
+        const presentation_handler_fixture fixture;
         fixture.handler.handle(evt);
 
         const auto output = fixture.get_all_output();
@@ -54,7 +54,7 @@ SCENARIO("Transport event display handler formats events as display messages", "
 
       THEN("handler emits session established message")
       {
-        const transport_event_display_handler_fixture fixture;
+        const presentation_handler_fixture fixture;
         fixture.handler.handle(evt);
 
         const auto output = fixture.get_all_output();
@@ -69,7 +69,7 @@ SCENARIO("Transport event display handler formats events as display messages", "
 
       THEN("handler emits success message")
       {
-        const transport_event_display_handler_fixture fixture;
+        const presentation_handler_fixture fixture;
         fixture.handler.handle(evt);
 
         const auto output = fixture.get_all_output();
@@ -84,7 +84,7 @@ SCENARIO("Transport event display handler formats events as display messages", "
 
       THEN("handler emits failure message")
       {
-        const transport_event_display_handler_fixture fixture;
+        const presentation_handler_fixture fixture;
         fixture.handler.handle(evt);
 
         const auto output = fixture.get_all_output();
@@ -98,7 +98,7 @@ SCENARIO("Transport event display handler formats events as display messages", "
 
       THEN("handler emits bundle published message")
       {
-        const transport_event_display_handler_fixture fixture;
+        const presentation_handler_fixture fixture;
         fixture.handler.handle(evt);
 
         const auto output = fixture.get_all_output();
@@ -112,7 +112,7 @@ SCENARIO("Transport event display handler formats events as display messages", "
 
       THEN("handler logs subscription via spdlog (not display queue)")
       {
-        const transport_event_display_handler_fixture fixture;
+        const presentation_handler_fixture fixture;
         fixture.handler.handle(evt);
 
         const auto output = fixture.get_all_output();
@@ -128,11 +128,49 @@ SCENARIO("Transport event display handler formats events as display messages", "
 
       THEN("handler logs bundle announcement via spdlog (not display queue)")
       {
-        const transport_event_display_handler_fixture fixture;
+        const presentation_handler_fixture fixture;
         fixture.handler.handle(evt);
 
         const auto output = fixture.get_all_output();
         REQUIRE(output.empty());
+      }
+    }
+
+    WHEN("handling identities_listed event with no identities")
+    {
+      const radix_relay::core::events::identities_listed evt{ .identities = {} };
+
+      THEN("handler emits no identities message")
+      {
+        const presentation_handler_fixture fixture;
+        fixture.handler.handle(evt);
+
+        const auto output = fixture.get_all_output();
+        REQUIRE(output.find("No identities") != std::string::npos);
+      }
+    }
+
+    WHEN("handling identities_listed event with identities")
+    {
+      std::vector<radix_relay::core::events::discovered_identity> identities;
+      identities.push_back(radix_relay::core::events::discovered_identity{
+        .rdx_fingerprint = "RDX:abc123", .nostr_pubkey = "npub_alice", .event_id = "evt_alice" });
+      identities.push_back(radix_relay::core::events::discovered_identity{
+        .rdx_fingerprint = "RDX:def456", .nostr_pubkey = "npub_bob", .event_id = "evt_bob" });
+
+      const radix_relay::core::events::identities_listed evt{ .identities = identities };
+
+      THEN("handler emits formatted list of identities")
+      {
+        const presentation_handler_fixture fixture;
+        fixture.handler.handle(evt);
+
+        const auto output = fixture.get_all_output();
+        REQUIRE(output.find("Discovered identities") != std::string::npos);
+        REQUIRE(output.find("RDX:abc123") != std::string::npos);
+        REQUIRE(output.find("npub_alice") != std::string::npos);
+        REQUIRE(output.find("RDX:def456") != std::string::npos);
+        REQUIRE(output.find("npub_bob") != std::string::npos);
       }
     }
   }

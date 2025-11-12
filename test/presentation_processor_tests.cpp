@@ -7,11 +7,11 @@
 
 #include <async/async_queue.hpp>
 #include <core/events.hpp>
-#include <core/transport_event_processor.hpp>
+#include <core/presentation_processor.hpp>
 
-struct test_transport_event_handler
+struct test_presentation_event_handler
 {
-  std::vector<radix_relay::core::events::transport_event_variant_t> handled_events;
+  std::vector<radix_relay::core::events::presentation_event_variant_t> handled_events;
 
   auto handle(const radix_relay::core::events::message_received &evt) -> void { handled_events.emplace_back(evt); }
 
@@ -30,18 +30,20 @@ struct test_transport_event_handler
   {
     handled_events.emplace_back(evt);
   }
+
+  auto handle(const radix_relay::core::events::identities_listed &evt) -> void { handled_events.emplace_back(evt); }
 };
 
-SCENARIO("Transport event processor handles transport events", "[transport_event_processor]")
+SCENARIO("Transport event processor handles transport events", "[presentation_processor]")
 {
   GIVEN("A transport event processor")
   {
     auto io_context = std::make_shared<boost::asio::io_context>();
     auto event_queue =
-      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::transport_event_variant_t>>(
+      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::presentation_event_variant_t>>(
         io_context);
-    auto handler = std::make_shared<test_transport_event_handler>();
-    auto processor = radix_relay::core::transport_event_processor(io_context, event_queue, handler);
+    auto handler = std::make_shared<test_presentation_event_handler>();
+    auto processor = radix_relay::core::presentation_processor(io_context, event_queue, handler);
 
     WHEN("a message_received event is pushed to the queue")
     {
@@ -67,16 +69,16 @@ SCENARIO("Transport event processor handles transport events", "[transport_event
   }
 }
 
-SCENARIO("Transport event processor handles multiple event types", "[transport_event_processor]")
+SCENARIO("Transport event processor handles multiple event types", "[presentation_processor]")
 {
   GIVEN("A transport event processor")
   {
     auto io_context = std::make_shared<boost::asio::io_context>();
     auto event_queue =
-      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::transport_event_variant_t>>(
+      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::presentation_event_variant_t>>(
         io_context);
-    auto handler = std::make_shared<test_transport_event_handler>();
-    auto processor = radix_relay::core::transport_event_processor(io_context, event_queue, handler);
+    auto handler = std::make_shared<test_presentation_event_handler>();
+    auto processor = radix_relay::core::presentation_processor(io_context, event_queue, handler);
 
     WHEN("multiple different events are pushed")
     {
@@ -102,7 +104,47 @@ SCENARIO("Transport event processor handles multiple event types", "[transport_e
   }
 }
 
-SCENARIO("Transport event processor respects cancellation signal", "[transport_event_processor][cancellation]")
+SCENARIO("Transport event processor handles identities_listed events", "[presentation_processor]")
+{
+  GIVEN("A transport event processor")
+  {
+    auto io_context = std::make_shared<boost::asio::io_context>();
+    auto event_queue =
+      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::presentation_event_variant_t>>(
+        io_context);
+    auto handler = std::make_shared<test_presentation_event_handler>();
+    auto processor = radix_relay::core::presentation_processor(io_context, event_queue, handler);
+
+    WHEN("an identities_listed event is pushed to the queue")
+    {
+      std::vector<radix_relay::core::events::discovered_identity> identities;
+      identities.push_back(radix_relay::core::events::discovered_identity{
+        .rdx_fingerprint = "RDX:abc123", .nostr_pubkey = "npub_alice", .event_id = "evt_alice" });
+      identities.push_back(radix_relay::core::events::discovered_identity{
+        .rdx_fingerprint = "RDX:def456", .nostr_pubkey = "npub_bob", .event_id = "evt_bob" });
+
+      radix_relay::core::events::identities_listed evt{ .identities = identities };
+      event_queue->push(evt);
+
+      boost::asio::co_spawn(*io_context, processor.run_once(), boost::asio::detached);
+      io_context->run();
+
+      THEN("the handler processes the event")
+      {
+        REQUIRE(handler->handled_events.size() == 1);
+        REQUIRE(std::holds_alternative<radix_relay::core::events::identities_listed>(handler->handled_events[0]));
+        const auto &listed = std::get<radix_relay::core::events::identities_listed>(handler->handled_events[0]);
+        REQUIRE(listed.identities.size() == 2);
+        REQUIRE(listed.identities[0].rdx_fingerprint == "RDX:abc123");
+        REQUIRE(listed.identities[0].nostr_pubkey == "npub_alice");
+        REQUIRE(listed.identities[1].rdx_fingerprint == "RDX:def456");
+        REQUIRE(listed.identities[1].nostr_pubkey == "npub_bob");
+      }
+    }
+  }
+}
+
+SCENARIO("Transport event processor respects cancellation signal", "[presentation_processor][cancellation]")
 {
   struct test_state
   {
@@ -113,12 +155,12 @@ SCENARIO("Transport event processor respects cancellation signal", "[transport_e
   {
     auto io_context = std::make_shared<boost::asio::io_context>();
     auto event_queue =
-      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::transport_event_variant_t>>(
+      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::presentation_event_variant_t>>(
         io_context);
-    auto handler = std::make_shared<test_transport_event_handler>();
+    auto handler = std::make_shared<test_presentation_event_handler>();
     auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
     auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
-    auto processor = std::make_shared<radix_relay::core::transport_event_processor<test_transport_event_handler>>(
+    auto processor = std::make_shared<radix_relay::core::presentation_processor<test_presentation_event_handler>>(
       io_context, event_queue, handler);
 
     auto state = std::make_shared<test_state>();
@@ -127,7 +169,7 @@ SCENARIO("Transport event processor respects cancellation signal", "[transport_e
     {
       boost::asio::co_spawn(
         *io_context,
-        [](std::shared_ptr<radix_relay::core::transport_event_processor<test_transport_event_handler>> proc,
+        [](std::shared_ptr<radix_relay::core::presentation_processor<test_presentation_event_handler>> proc,
           std::shared_ptr<test_state> test_state_ptr,
           std::shared_ptr<boost::asio::cancellation_slot> c_slot) -> boost::asio::awaitable<void> {
           try {
