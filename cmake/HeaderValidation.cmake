@@ -30,18 +30,14 @@ function(add_header_validation_targets)
   foreach(INCLUDE_DIR ${INCLUDE_DIRS})
     # Skip any path with generator expressions
     if(INCLUDE_DIR MATCHES "\\$<")
-      # Try to extract BUILD_INTERFACE paths only
-      if(INCLUDE_DIR MATCHES "\\$<BUILD_INTERFACE:([^>]+)>")
+      # Try to extract BUILD_INTERFACE paths only - handle nested generator expressions
+      while(INCLUDE_DIR MATCHES "\\$<BUILD_INTERFACE:([^>]+)>")
         set(INCLUDE_DIR "${CMAKE_MATCH_1}")
-      else()
-        # Skip other generator expressions (INSTALL_INTERFACE, etc.)
+      endwhile()
+      # If it's still a generator expression after unwrapping, skip it
+      if(INCLUDE_DIR MATCHES "\\$<")
         continue()
       endif()
-    endif()
-
-    # Skip if still contains generator expression syntax
-    if(INCLUDE_DIR MATCHES "\\$<")
-      continue()
     endif()
 
     # Skip CPM dependency headers in _deps directory
@@ -146,12 +142,14 @@ function(add_header_validation_targets)
     # The first target to create the validation will win, which is acceptable since
     # all validation targets should be able to compile with their respective dependencies
     if(NOT TARGET ${TARGET_NAME})
-      add_library(${TARGET_NAME} OBJECT EXCLUDE_FROM_ALL "${VALIDATION_SOURCE}")
-      target_link_libraries(${TARGET_NAME} PRIVATE ${HEADER_VAL_TARGET})
+      add_library(${TARGET_NAME} OBJECT "${VALIDATION_SOURCE}")
+      # Link to the target - this should bring in all includes and dependencies
+      target_link_libraries(${TARGET_NAME} PUBLIC ${HEADER_VAL_TARGET})
+      # Ensure this target is excluded from ALL but still generates compile commands
+      set_target_properties(${TARGET_NAME} PROPERTIES EXCLUDE_FROM_ALL TRUE)
     else()
       # If target exists, add this library's dependencies to it as well
-      # This ensures headers have access to all necessary dependencies
-      target_link_libraries(${TARGET_NAME} PRIVATE ${HEADER_VAL_TARGET})
+      target_link_libraries(${TARGET_NAME} PUBLIC ${HEADER_VAL_TARGET})
     endif()
   endforeach()
 

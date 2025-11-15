@@ -5,19 +5,22 @@ find_program(CLANGD_TIDY clangd-tidy)
 if(CLANGD_TIDY)
   message(STATUS "Found clangd-tidy: ${CLANGD_TIDY}")
 
-  file(GLOB_RECURSE PROJECT_SOURCES
+  file(GLOB_RECURSE PROJECT_CPP_SOURCES
     ${CMAKE_SOURCE_DIR}/src/*.cpp
-    ${CMAKE_SOURCE_DIR}/src/*.hpp
-    ${CMAKE_SOURCE_DIR}/lib/*/include/*.hpp
     ${CMAKE_SOURCE_DIR}/lib/*/src/*.cpp
+  )
+
+  file(GLOB_RECURSE HEADER_VALIDATION_SOURCES
+    ${CMAKE_BINARY_DIR}/*/header_validation/*/*.cpp
   )
 
   add_custom_target(quality
     COMMAND ${CLANGD_TIDY}
       -p ${CMAKE_BINARY_DIR}
-      ${PROJECT_SOURCES}
+      ${PROJECT_CPP_SOURCES}
+      ${HEADER_VALIDATION_SOURCES}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Running clang-tidy on project sources"
+    COMMENT "Running clang-tidy on project sources and header validation files"
     VERBATIM
   )
 
