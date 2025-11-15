@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <rust/cxx.h>
-#include <signal/node_identity.hpp>
 #include <signal_bridge_cxx/lib.h>
 #include <string>
 #include <vector>

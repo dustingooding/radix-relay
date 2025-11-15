@@ -15,7 +15,6 @@
 #include <nostr/request_tracker.hpp>
 #include <nostr/session_orchestrator.hpp>
 #include <nostr/transport.hpp>
-#include <signal/node_identity.hpp>
 #include <signal/signal_bridge.hpp>
 #include <spdlog/spdlog.h>
 #include <string>

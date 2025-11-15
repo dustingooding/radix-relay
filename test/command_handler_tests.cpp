@@ -10,7 +10,6 @@
 #include <core/command_handler.hpp>
 #include <core/events.hpp>
 #include <platform/env_utils.hpp>
-#include <signal/node_identity.hpp>
 #include <signal/signal_bridge.hpp>
 
 struct command_handler_fixture
@@ -194,6 +193,21 @@ SCENARIO("Command handler processes parameterized commands correctly", "[command
     WHEN("handling send command")
     {
       auto send_command = radix_relay::core::events::send{ .peer = "alice", .message = "hello world" };
+
+      THEN("handler pushes send event to session queue")
+      {
+        const command_handler_fixture fixture;
+        fixture.handler.handle(send_command);
+
+        auto session_event = fixture.session_out_queue->try_pop();
+        REQUIRE(session_event.has_value());
+        if (session_event) {
+          REQUIRE(std::holds_alternative<radix_relay::core::events::send>(*session_event));
+          const auto &send_event = std::get<radix_relay::core::events::send>(*session_event);
+          REQUIRE(send_event.peer == "alice");
+          REQUIRE(send_event.message == "hello world");
+        }
+      }
 
       THEN("handler outputs send command confirmation with peer and message")
       {

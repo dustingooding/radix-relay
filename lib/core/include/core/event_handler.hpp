@@ -46,6 +46,10 @@ template<concepts::command_handler CmdHandler> struct event_handler
       command_handler_->handle(events::identities{});
       return;
     }
+    if (input == "publish") {
+      command_handler_->handle(events::publish_identity{});
+      return;
+    }
 
     constexpr auto mode_cmd = "mode ";
     if (input.starts_with(mode_cmd)) {
