@@ -42,6 +42,10 @@ template<concepts::command_handler CmdHandler> struct event_handler
       command_handler_->handle(events::version{});
       return;
     }
+    if (input == "identities") {
+      command_handler_->handle(events::identities{});
+      return;
+    }
 
     constexpr auto mode_cmd = "mode ";
     if (input.starts_with(mode_cmd)) {
@@ -81,8 +85,14 @@ template<concepts::command_handler CmdHandler> struct event_handler
 
     constexpr auto trust_cmd = "trust ";
     if (input.starts_with(trust_cmd)) {
-      command_handler_->handle(
-        events::trust{ .peer = input.substr(std::string_view(trust_cmd).length()), .alias = "" });
+      const auto args = input.substr(std::string_view(trust_cmd).length());
+      const auto first_space = args.find(' ');
+      if (first_space != std::string::npos and not args.empty()) {
+        command_handler_->handle(
+          events::trust{ .peer = args.substr(0, first_space), .alias = args.substr(first_space + 1) });
+      } else {
+        command_handler_->handle(events::trust{ .peer = args, .alias = "" });
+      }
       return;
     }
 

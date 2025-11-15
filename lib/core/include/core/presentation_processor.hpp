@@ -12,12 +12,12 @@
 
 namespace radix_relay::core {
 
-template<typename TransportEventHandler> class transport_event_processor
+template<typename PresentationEventHandler> class presentation_processor
 {
 public:
-  transport_event_processor(const std::shared_ptr<boost::asio::io_context> &io_context,
-    const std::shared_ptr<async::async_queue<events::transport_event_variant_t>> &in_queue,
-    const std::shared_ptr<TransportEventHandler> &event_handler)
+  presentation_processor(const std::shared_ptr<boost::asio::io_context> &io_context,
+    const std::shared_ptr<async::async_queue<events::presentation_event_variant_t>> &in_queue,
+    const std::shared_ptr<PresentationEventHandler> &event_handler)
     : io_context_(io_context), in_queue_(in_queue), event_handler_(event_handler)
   {}
 
@@ -38,10 +38,10 @@ public:
       if (e.code() == boost::asio::error::operation_aborted
           or e.code() == boost::asio::experimental::error::channel_cancelled
           or e.code() == boost::asio::experimental::error::channel_closed) {
-        spdlog::debug("[transport_event_processor] Cancelled, exiting run loop");
+        spdlog::debug("[presentation_processor] Cancelled, exiting run loop");
         co_return;
       } else {
-        spdlog::error("[transport_event_processor] Unexpected error in run loop: {}", e.what());
+        spdlog::error("[presentation_processor] Unexpected error in run loop: {}", e.what());
         throw;
       }
     }
@@ -49,8 +49,8 @@ public:
 
 private:
   std::shared_ptr<boost::asio::io_context> io_context_;
-  std::shared_ptr<async::async_queue<events::transport_event_variant_t>> in_queue_;
-  std::shared_ptr<TransportEventHandler> event_handler_;
+  std::shared_ptr<async::async_queue<events::presentation_event_variant_t>> in_queue_;
+  std::shared_ptr<PresentationEventHandler> event_handler_;
 };
 
 }// namespace radix_relay::core

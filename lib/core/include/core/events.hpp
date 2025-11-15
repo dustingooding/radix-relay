@@ -21,6 +21,9 @@ struct status
 struct sessions
 {
 };
+struct identities
+{
+};
 struct scan
 {
 };
@@ -110,6 +113,22 @@ struct bundle_announcement_received
   std::string event_id;
 };
 
+struct discovered_identity
+{
+  std::string rdx_fingerprint;
+  std::string nostr_pubkey;
+  std::string event_id;
+};
+
+struct list_identities
+{
+};
+
+struct identities_listed
+{
+  std::vector<discovered_identity> identities;
+};
+
 struct message_sent
 {
   std::string peer;
@@ -190,31 +209,33 @@ namespace transport {
 template<typename T>
 concept Command =
   std::same_as<T, help> or std::same_as<T, peers> or std::same_as<T, status> or std::same_as<T, sessions>
-  or std::same_as<T, scan> or std::same_as<T, version> or std::same_as<T, mode> or std::same_as<T, send>
-  or std::same_as<T, broadcast> or std::same_as<T, connect> or std::same_as<T, disconnect>
+  or std::same_as<T, identities> or std::same_as<T, scan> or std::same_as<T, version> or std::same_as<T, mode>
+  or std::same_as<T, send> or std::same_as<T, broadcast> or std::same_as<T, connect> or std::same_as<T, disconnect>
   or std::same_as<T, publish_identity> or std::same_as<T, trust> or std::same_as<T, verify>
   or std::same_as<T, subscribe> or std::same_as<T, subscribe_identities> or std::same_as<T, subscribe_messages>
   or std::same_as<T, establish_session>;
 
 template<typename T>
-concept TransportEvent = std::same_as<T, message_received> or std::same_as<T, session_established>
-                         or std::same_as<T, bundle_announcement_received> or std::same_as<T, message_sent>
-                         or std::same_as<T, bundle_published> or std::same_as<T, subscription_established>;
+concept PresentationEvent =
+  std::same_as<T, message_received> or std::same_as<T, session_established>
+  or std::same_as<T, bundle_announcement_received> or std::same_as<T, message_sent> or std::same_as<T, bundle_published>
+  or std::same_as<T, subscription_established> or std::same_as<T, identities_listed>;
 
-using transport_event_variant_t = std::variant<message_received,
+using presentation_event_variant_t = std::variant<message_received,
   session_established,
   bundle_announcement_received,
   message_sent,
   bundle_published,
-  subscription_established>;
+  subscription_established,
+  identities_listed>;
 
 template<typename T>
-concept Event = Command<T> or TransportEvent<T> or std::same_as<T, raw_command>;
+concept Event = Command<T> or PresentationEvent<T> or std::same_as<T, raw_command>;
 
 namespace session_orchestrator {
 
   using command_from_main_variant_t =
-    std::variant<send, publish_identity, trust, subscribe, subscribe_identities, subscribe_messages>;
+    std::variant<send, publish_identity, trust, subscribe, subscribe_identities, subscribe_messages, list_identities>;
 
   using in_t = std::variant<send,
     publish_identity,
@@ -222,13 +243,15 @@ namespace session_orchestrator {
     subscribe,
     subscribe_identities,
     subscribe_messages,
+    list_identities,
     connect,
     transport::bytes_received,
     transport::connected,
     transport::connect_failed,
     transport::sent,
     transport::send_failed,
-    transport::disconnected>;
+    transport::disconnected,
+    bundle_announcement_received>;
 
 }// namespace session_orchestrator
 

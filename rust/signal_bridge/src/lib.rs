@@ -877,6 +877,16 @@ mod ffi {
             bundle_base64: &str,
             user_alias: &str,
         ) -> Result<String>;
+
+        fn extract_rdx_from_bundle(
+            bridge: &mut SignalBridge,
+            bundle_bytes: &[u8],
+        ) -> Result<String>;
+
+        fn extract_rdx_from_bundle_base64(
+            bridge: &mut SignalBridge,
+            bundle_base64: &str,
+        ) -> Result<String>;
     }
 }
 
@@ -1139,6 +1149,49 @@ pub fn add_contact_and_establish_session_from_base64(
         })?;
 
     add_contact_and_establish_session(bridge, &bundle_bytes, user_alias)
+}
+
+pub fn extract_rdx_from_bundle(
+    _bridge: &mut SignalBridge,
+    bundle_bytes: &[u8],
+) -> Result<String, Box<dyn std::error::Error>> {
+    use libsignal_protocol::IdentityKey;
+
+    let bundle: SerializablePreKeyBundle =
+        bincode::deserialize(bundle_bytes).map_err(|e| -> Box<dyn std::error::Error> {
+            Box::new(SignalBridgeError::InvalidInput(format!(
+                "Failed to deserialize bundle: {}",
+                e
+            )))
+        })?;
+
+    let identity_key =
+        IdentityKey::decode(&bundle.identity_key).map_err(|e| -> Box<dyn std::error::Error> {
+            Box::new(SignalBridgeError::Protocol(e.to_string()))
+        })?;
+
+    let mut hasher = Sha256::new();
+    hasher.update(identity_key.serialize());
+    hasher.update(b"radix-identity-fingerprint");
+    let result = hasher.finalize();
+    Ok(format!("RDX:{:x}", result))
+}
+
+pub fn extract_rdx_from_bundle_base64(
+    bridge: &mut SignalBridge,
+    bundle_base64: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    use base64::Engine;
+    let bundle_bytes = base64::engine::general_purpose::STANDARD
+        .decode(bundle_base64)
+        .map_err(|e| -> Box<dyn std::error::Error> {
+            Box::new(SignalBridgeError::Protocol(format!(
+                "Base64 decode error: {}",
+                e
+            )))
+        })?;
+
+    extract_rdx_from_bundle(bridge, &bundle_bytes)
 }
 
 #[cfg(test)]
@@ -2214,6 +2267,81 @@ mod tests {
         let plaintext = b"Hello Bob!";
         let ciphertext = alice.encrypt_message(&bob_rdx, plaintext).await.unwrap();
         assert!(!ciphertext.is_empty());
+
+        let _ = std::fs::remove_file(&alice_db);
+        let _ = std::fs::remove_file(&bob_db);
+    }
+
+    #[tokio::test]
+    async fn test_extract_rdx_from_bundle_without_establishing_session() {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db = temp_dir.join(format!("test_extract_rdx_alice_{}.db", timestamp));
+        let bob_db = temp_dir.join(format!("test_extract_rdx_bob_{}.db", timestamp));
+
+        let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
+        let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
+
+        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+
+        let extracted_rdx = extract_rdx_from_bundle(&mut alice, &bob_bundle).unwrap();
+
+        assert!(extracted_rdx.starts_with("RDX:"));
+
+        let result = alice.encrypt_message(&extracted_rdx, b"test").await;
+        assert!(
+            result.is_err(),
+            "Should not be able to encrypt without establishing session"
+        );
+
+        let bob_rdx = alice
+            .add_contact_and_establish_session(&bob_bundle, Some("bob"))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            extracted_rdx, bob_rdx,
+            "RDX extracted before session should match RDX after session establishment"
+        );
+
+        let _ = std::fs::remove_file(&alice_db);
+        let _ = std::fs::remove_file(&bob_db);
+    }
+
+    #[tokio::test]
+    async fn test_extract_rdx_from_bundle_base64() {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db = temp_dir.join(format!("test_extract_rdx_base64_alice_{}.db", timestamp));
+        let bob_db = temp_dir.join(format!("test_extract_rdx_base64_bob_{}.db", timestamp));
+
+        let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
+        let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
+
+        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+        let bob_bundle_base64 = base64::engine::general_purpose::STANDARD.encode(&bob_bundle);
+
+        let extracted_rdx = extract_rdx_from_bundle_base64(&mut alice, &bob_bundle_base64).unwrap();
+
+        assert!(extracted_rdx.starts_with("RDX:"));
+
+        let bob_rdx = alice
+            .add_contact_and_establish_session(&bob_bundle, Some("bob"))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            extracted_rdx, bob_rdx,
+            "RDX extracted from base64 should match RDX after session establishment"
+        );
 
         let _ = std::fs::remove_file(&alice_db);
         let _ = std::fs::remove_file(&bob_db);

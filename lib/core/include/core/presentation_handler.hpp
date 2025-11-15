@@ -8,10 +8,9 @@
 
 namespace radix_relay::core {
 
-struct transport_event_display_handler
+struct presentation_handler
 {
-  explicit transport_event_display_handler(
-    const std::shared_ptr<async::async_queue<events::display_message>> &display_out_queue)
+  explicit presentation_handler(const std::shared_ptr<async::async_queue<events::display_message>> &display_out_queue)
     : display_out_queue_(display_out_queue)
   {}
 
@@ -51,6 +50,18 @@ struct transport_event_display_handler
   static auto handle(const events::subscription_established &evt) -> void
   {
     spdlog::debug("Subscription established: {}", evt.subscription_id);
+  }
+
+  auto handle(const events::identities_listed &evt) const -> void
+  {
+    if (evt.identities.empty()) {
+      emit("No identities discovered yet\n");
+    } else {
+      emit("Discovered identities:\n");
+      for (const auto &identity : evt.identities) {
+        emit("  {} (nostr: {})\n", identity.rdx_fingerprint, identity.nostr_pubkey);
+      }
+    }
   }
 
 private:

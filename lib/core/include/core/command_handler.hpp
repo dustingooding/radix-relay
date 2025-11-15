@@ -40,11 +40,12 @@ private:
     emit("  peers                     List discovered peers\n");
     emit("  status                    Show network status\n");
     emit("  sessions                  Show encrypted sessions\n");
+    emit("  identities                List discovered identities\n");
     emit("  mode <internet|mesh|hybrid>  Switch transport mode\n");
     emit("  scan                      Force peer discovery\n");
     emit("  connect <relay>           Add Nostr relay\n");
     emit("  disconnect                Disconnect from Nostr relay\n");
-    emit("  trust <peer>              Mark peer as trusted\n");
+    emit("  trust <peer> [alias]      Establish session with peer\n");
     emit("  verify <peer>             Show safety numbers\n");
     emit("  version                   Show version information\n");
     emit("  quit                      Exit interactive mode\n");
@@ -88,6 +89,12 @@ private:
         emit("  {} ({})\n", contact.user_alias, contact.rdx_fingerprint);
       }
     }
+  }
+
+  auto handle_impl(const events::identities & /*command*/) const -> void
+  {
+    std::ignore = initialized_;
+    session_out_queue_->push(events::list_identities{});
   }
 
   auto handle_impl(const events::scan & /*command*/) const -> void
@@ -155,9 +162,10 @@ private:
   {
     std::ignore = initialized_;
     if (not command.peer.empty()) {
-      emit("Marking {} as trusted (not implemented)\n", command.peer);
+      session_out_queue_->push(command);
+      emit("Establishing session with {}...\n", command.peer);
     } else {
-      emit("Usage: trust <peer>\n");
+      emit("Usage: trust <peer> [alias]\n");
     }
   }
 

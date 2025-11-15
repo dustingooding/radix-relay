@@ -38,6 +38,8 @@ public:
   [[nodiscard]] auto add_contact_and_establish_session_from_base64(const std::string &bundle,
     const std::string &alias) const -> std::string;
 
+  [[nodiscard]] auto extract_rdx_from_bundle_base64(const std::string &bundle_base64) const -> std::string;
+
   [[nodiscard]] auto generate_prekey_bundle_announcement(const std::string &version) const -> std::string;
 
   auto assign_contact_alias(const std::string &rdx, const std::string &alias) const -> void;

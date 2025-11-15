@@ -16,6 +16,7 @@ SCENARIO("Event handler processes raw command events correctly", "[events][handl
       auto help_event = radix_relay::core::events::raw_command{ .input = "help" };
       auto version_event = radix_relay::core::events::raw_command{ .input = "version" };
       auto peers_event = radix_relay::core::events::raw_command{ .input = "peers" };
+      auto identities_event = radix_relay::core::events::raw_command{ .input = "identities" };
 
       THEN("handler should parse and route commands correctly")
       {
@@ -30,7 +31,10 @@ SCENARIO("Event handler processes raw command events correctly", "[events][handl
         event_handler.handle(peers_event);
         REQUIRE(test_cmd_handler->was_called("peers"));
 
-        REQUIRE(test_cmd_handler->get_call_count() == 3);
+        event_handler.handle(identities_event);
+        REQUIRE(test_cmd_handler->was_called("identities"));
+
+        REQUIRE(test_cmd_handler->get_call_count() == 4);
       }
     }
 

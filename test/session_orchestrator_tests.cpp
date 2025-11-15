@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <nostr/request_tracker.hpp>
 #include <nostr/session_orchestrator.hpp>
+#include <platform/env_utils.hpp>
 #include <ranges>
 #include <signal/signal_bridge.hpp>
 #include <spdlog/spdlog.h>
@@ -32,7 +33,7 @@ struct queue_based_fixture
   std::shared_ptr<radix_relay::nostr::request_tracker> tracker;
   std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> in_queue;
   std::shared_ptr<async::async_queue<core::events::transport::in_t>> transport_out_queue;
-  std::shared_ptr<async::async_queue<core::events::transport_event_variant_t>> main_out_queue;
+  std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> presentation_out_queue;
   std::shared_ptr<
     radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
     orchestrator;
@@ -45,10 +46,11 @@ struct queue_based_fixture
     tracker = std::make_shared<radix_relay::nostr::request_tracker>(io_context);
     in_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
     transport_out_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
-    main_out_queue = std::make_shared<async::async_queue<core::events::transport_event_variant_t>>(io_context);
+    presentation_out_queue =
+      std::make_shared<async::async_queue<core::events::presentation_event_variant_t>>(io_context);
     orchestrator = std::make_shared<
       radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
-      bridge, tracker, io_context, in_queue, transport_out_queue, main_out_queue);
+      bridge, tracker, io_context, in_queue, transport_out_queue, presentation_out_queue);
   }
 
   // NOLINTNEXTLINE(bugprone-exception-escape)
@@ -80,7 +82,7 @@ struct two_bridge_fixture
   std::shared_ptr<boost::asio::io_context> alice_io;
   std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> alice_in;
   std::shared_ptr<async::async_queue<core::events::transport::in_t>> alice_transport_out;
-  std::shared_ptr<async::async_queue<core::events::transport_event_variant_t>> alice_main_out;
+  std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> alice_presentation_out;
   std::shared_ptr<radix_relay::nostr::request_tracker> alice_tracker;
   std::shared_ptr<
     radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
@@ -89,7 +91,7 @@ struct two_bridge_fixture
   std::shared_ptr<boost::asio::io_context> bob_io;
   std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> bob_in;
   std::shared_ptr<async::async_queue<core::events::transport::in_t>> bob_transport_out;
-  std::shared_ptr<async::async_queue<core::events::transport_event_variant_t>> bob_main_out;
+  std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> bob_presentation_out;
   std::shared_ptr<radix_relay::nostr::request_tracker> bob_tracker;
   std::shared_ptr<
     radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
@@ -118,20 +120,20 @@ struct two_bridge_fixture
     alice_io = std::make_shared<boost::asio::io_context>();
     alice_in = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(alice_io);
     alice_transport_out = std::make_shared<async::async_queue<core::events::transport::in_t>>(alice_io);
-    alice_main_out = std::make_shared<async::async_queue<core::events::transport_event_variant_t>>(alice_io);
+    alice_presentation_out = std::make_shared<async::async_queue<core::events::presentation_event_variant_t>>(alice_io);
     alice_tracker = std::make_shared<radix_relay::nostr::request_tracker>(alice_io);
     alice_orch = std::make_shared<
       radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
-      alice_bridge, alice_tracker, alice_io, alice_in, alice_transport_out, alice_main_out);
+      alice_bridge, alice_tracker, alice_io, alice_in, alice_transport_out, alice_presentation_out);
 
     bob_io = std::make_shared<boost::asio::io_context>();
     bob_in = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(bob_io);
     bob_transport_out = std::make_shared<async::async_queue<core::events::transport::in_t>>(bob_io);
-    bob_main_out = std::make_shared<async::async_queue<core::events::transport_event_variant_t>>(bob_io);
+    bob_presentation_out = std::make_shared<async::async_queue<core::events::presentation_event_variant_t>>(bob_io);
     bob_tracker = std::make_shared<radix_relay::nostr::request_tracker>(bob_io);
     bob_orch = std::make_shared<
       radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
-      bob_bridge, bob_tracker, bob_io, bob_in, bob_transport_out, bob_main_out);
+      bob_bridge, bob_tracker, bob_io, bob_in, bob_transport_out, bob_presentation_out);
   }
 
   // NOLINTNEXTLINE(bugprone-exception-escape)
@@ -205,7 +207,7 @@ SCENARIO("Queue-based session_orchestrator processes trust command", "[core][ses
 
       THEN("No output events are generated (trust is stored internally)")
       {
-        REQUIRE(fixture.main_out_queue->empty());
+        REQUIRE(fixture.presentation_out_queue->empty());
         REQUIRE(fixture.transport_out_queue->empty());
       }
     }
@@ -234,7 +236,7 @@ SCENARIO("Queue-based session_orchestrator processes bytes_received with unknown
 
       THEN("Session orchestrator processes the message without crashing")
       {
-        REQUIRE(fixture.main_out_queue->empty());
+        REQUIRE(fixture.presentation_out_queue->empty());
         REQUIRE(fixture.transport_out_queue->empty());
       }
     }
@@ -261,7 +263,7 @@ SCENARIO("Queue-based session_orchestrator processes bytes_received with OK mess
 
       THEN("Session orchestrator processes the OK message")
       {
-        REQUIRE(fixture.main_out_queue->empty());
+        REQUIRE(fixture.presentation_out_queue->empty());
         REQUIRE(fixture.transport_out_queue->empty());
       }
     }
@@ -288,7 +290,7 @@ SCENARIO("Queue-based session_orchestrator processes bytes_received with EOSE me
 
       THEN("Session orchestrator processes the EOSE message")
       {
-        REQUIRE(fixture.main_out_queue->empty());
+        REQUIRE(fixture.presentation_out_queue->empty());
         REQUIRE(fixture.transport_out_queue->empty());
       }
     }
@@ -314,7 +316,7 @@ SCENARIO("Queue-based session_orchestrator processes transport disconnected even
 
       THEN("Event is processed without output")
       {
-        REQUIRE(fixture.main_out_queue->empty());
+        REQUIRE(fixture.presentation_out_queue->empty());
         REQUIRE(fixture.transport_out_queue->empty());
       }
     }
@@ -337,7 +339,7 @@ SCENARIO("Queue-based session_orchestrator processes transport sent event", "[co
 
       THEN("Event is processed without output")
       {
-        REQUIRE(fixture.main_out_queue->empty());
+        REQUIRE(fixture.presentation_out_queue->empty());
         REQUIRE(fixture.transport_out_queue->empty());
       }
     }
@@ -364,7 +366,7 @@ SCENARIO("Queue-based session_orchestrator processes transport send_failed event
 
       THEN("Event is processed without output")
       {
-        REQUIRE(fixture.main_out_queue->empty());
+        REQUIRE(fixture.presentation_out_queue->empty());
         REQUIRE(fixture.transport_out_queue->empty());
       }
     }
@@ -391,7 +393,7 @@ SCENARIO("Queue-based session_orchestrator processes transport connect_failed ev
 
       THEN("Event is processed without output")
       {
-        REQUIRE(fixture.main_out_queue->empty());
+        REQUIRE(fixture.presentation_out_queue->empty());
         REQUIRE(fixture.transport_out_queue->empty());
       }
     }
@@ -434,11 +436,12 @@ SCENARIO("Queue-based session_orchestrator Alice encrypts and Bob decrypts end-t
 
       THEN("Bob decrypts and receives the correct plaintext message")
       {
-        REQUIRE_FALSE(fixture.bob_main_out->empty());
-        REQUIRE(fixture.bob_main_out->size() == 1);
+        REQUIRE_FALSE(fixture.bob_presentation_out->empty());
+        REQUIRE(fixture.bob_presentation_out->size() == 1);
 
         fixture.bob_io->restart();
-        auto main_future = boost::asio::co_spawn(*fixture.bob_io, fixture.bob_main_out->pop(), boost::asio::use_future);
+        auto main_future =
+          boost::asio::co_spawn(*fixture.bob_io, fixture.bob_presentation_out->pop(), boost::asio::use_future);
         fixture.bob_io->run();
         auto main_event = main_future.get();
 
@@ -456,7 +459,8 @@ TEST_CASE("session_orchestrator handles subscribe_identities command", "[session
 {
   GIVEN("A session orchestrator")
   {
-    const queue_based_fixture fixture("/tmp/test_subscribe_identities.db");
+    const queue_based_fixture fixture(
+      (std::filesystem::temp_directory_path() / "test_subscribe_identities.db").string());
 
     WHEN("subscribe_identities command is sent")
     {
@@ -505,7 +509,7 @@ TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_o
 {
   GIVEN("A session orchestrator")
   {
-    const queue_based_fixture fixture("/tmp/test_subscribe_messages.db");
+    const queue_based_fixture fixture((std::filesystem::temp_directory_path() / "test_subscribe_messages.db").string());
 
     WHEN("subscribe_messages command is sent")
     {
@@ -554,7 +558,7 @@ TEST_CASE("session_orchestrator handles connect command and manages connection l
 {
   GIVEN("A session orchestrator")
   {
-    const queue_based_fixture fixture("/tmp/test_connect_lifecycle.db");
+    const queue_based_fixture fixture((std::filesystem::temp_directory_path() / "test_connect_lifecycle.db").string());
 
     WHEN("connect command is sent")
     {
@@ -585,7 +589,8 @@ TEST_CASE("session_orchestrator sends subscriptions when transport connects", "[
 {
   GIVEN("A session orchestrator")
   {
-    const queue_based_fixture fixture("/tmp/test_transport_connected.db");
+    const queue_based_fixture fixture(
+      (std::filesystem::temp_directory_path() / "test_transport_connected.db").string());
 
     WHEN("transport connected event is received")
     {
@@ -658,6 +663,170 @@ SCENARIO("session_orchestrator respects cancellation signal", "[core][session_or
       fixture.io_context->run();
 
       THEN("the session_orchestrator should be cancelled") { REQUIRE(state->coroutine_done); }
+    }
+  }
+}
+
+SCENARIO("session_orchestrator stores discovered bundle identities", "[session_orchestrator][bundles]")
+{
+  GIVEN("Alice and Bob orchestrators")
+  {
+    const auto timestamp =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    const auto alice_db_path =
+      (std::filesystem::temp_directory_path() / ("test_bundle_storage_alice_" + std::to_string(timestamp) + ".db"))
+        .string();
+    const auto bob_db_path =
+      (std::filesystem::temp_directory_path() / ("test_bundle_storage_bob_" + std::to_string(timestamp) + ".db"))
+        .string();
+    const queue_based_fixture alice(alice_db_path);
+    const queue_based_fixture bob(bob_db_path);
+
+    WHEN("list_identities command is sent initially")
+    {
+      alice.in_queue->push(core::events::list_identities{});
+
+      boost::asio::co_spawn(
+        *alice.io_context,
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+        [&alice]() -> boost::asio::awaitable<void> { co_await alice.orchestrator->run_once(); },
+        boost::asio::detached);
+
+      alice.io_context->run();
+
+      auto response = alice.presentation_out_queue->try_pop();
+      REQUIRE(response.has_value());
+
+      THEN("it returns an empty identities list")
+      {
+        if (response.has_value()) {
+          REQUIRE(std::holds_alternative<core::events::identities_listed>(*response));
+          const auto &listed = std::get<core::events::identities_listed>(*response);
+          REQUIRE(listed.identities.empty());
+        }
+      }
+    }
+
+    WHEN("a bundle_announcement_received event is sent to Alice's orchestrator")
+    {
+      auto bob_announcement = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_announcement_json = nlohmann::json::parse(bob_announcement);
+      auto bob_bundle_base64 = bob_announcement_json["content"].template get<std::string>();
+      auto bob_pubkey = bob_announcement_json["pubkey"].template get<std::string>();
+      auto bob_event_id = bob_announcement_json["id"].template get<std::string>();
+
+      const core::events::session_orchestrator::in_t event = core::events::bundle_announcement_received{
+        .pubkey = bob_pubkey, .bundle_content = bob_bundle_base64, .event_id = bob_event_id
+      };
+
+      alice.in_queue->push(event);
+
+      boost::asio::co_spawn(
+        *alice.io_context,
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+        [&alice]() -> boost::asio::awaitable<void> { co_await alice.orchestrator->run_once(); },
+        boost::asio::detached);
+
+      alice.io_context->run();
+      alice.io_context->restart();
+
+      alice.in_queue->push(core::events::list_identities{});
+
+      boost::asio::co_spawn(
+        *alice.io_context,
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+        [&alice]() -> boost::asio::awaitable<void> { co_await alice.orchestrator->run_once(); },
+        boost::asio::detached);
+
+      alice.io_context->run();
+
+      auto response = alice.presentation_out_queue->try_pop();
+      REQUIRE(response.has_value());
+
+      THEN("the bundle is stored and returned in identities list")
+      {
+        if (response.has_value()) {
+          REQUIRE(std::holds_alternative<core::events::identities_listed>(*response));
+          const auto &listed = std::get<core::events::identities_listed>(*response);
+          REQUIRE(listed.identities.size() == 1);
+          REQUIRE(listed.identities[0].nostr_pubkey == bob_pubkey);
+          REQUIRE(listed.identities[0].event_id == bob_event_id);
+          REQUIRE(listed.identities[0].rdx_fingerprint.starts_with("RDX:"));
+          REQUIRE(listed.identities[0].rdx_fingerprint.length() == 68);
+        }
+      }
+    }
+  }
+}
+
+SCENARIO("session_orchestrator establishes session when trusting discovered identity",
+  "[session_orchestrator][trust][bundles]")
+{
+  GIVEN("Alice and Bob orchestrators")
+  {
+    const auto timestamp =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    const auto alice_db_path =
+      (std::filesystem::temp_directory_path() / ("test_trust_alice_" + std::to_string(timestamp) + ".db")).string();
+    const auto bob_db_path =
+      (std::filesystem::temp_directory_path() / ("test_trust_bob_" + std::to_string(timestamp) + ".db")).string();
+    const queue_based_fixture alice(alice_db_path);
+    const queue_based_fixture bob(bob_db_path);
+
+    auto bob_announcement = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    auto bob_announcement_json = nlohmann::json::parse(bob_announcement);
+    auto bob_bundle_base64 = bob_announcement_json["content"].template get<std::string>();
+    auto bob_pubkey = bob_announcement_json["pubkey"].template get<std::string>();
+    auto bob_event_id = bob_announcement_json["id"].template get<std::string>();
+    auto bob_rdx = alice.bridge->extract_rdx_from_bundle_base64(bob_bundle_base64);
+
+    const core::events::session_orchestrator::in_t bundle_event = core::events::bundle_announcement_received{
+      .pubkey = bob_pubkey, .bundle_content = bob_bundle_base64, .event_id = bob_event_id
+    };
+
+    alice.in_queue->push(bundle_event);
+
+    boost::asio::co_spawn(
+      *alice.io_context,
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+      [&alice]() -> boost::asio::awaitable<void> { co_await alice.orchestrator->run_once(); },
+      boost::asio::detached);
+
+    alice.io_context->run();
+    alice.io_context->restart();
+
+    WHEN("trust command is sent with the peer's RDX fingerprint")
+    {
+      alice.in_queue->push(core::events::trust{ .peer = bob_rdx, .alias = "Bob" });
+
+      boost::asio::co_spawn(
+        *alice.io_context,
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+        [&alice]() -> boost::asio::awaitable<void> { co_await alice.orchestrator->run_once(); },
+        boost::asio::detached);
+
+      alice.io_context->run();
+
+      auto response = alice.presentation_out_queue->try_pop();
+
+      THEN("it establishes a session with the peer")
+      {
+        REQUIRE(response.has_value());
+        if (response.has_value()) {
+          REQUIRE(std::holds_alternative<core::events::session_established>(*response));
+          const auto &session = std::get<core::events::session_established>(*response);
+          REQUIRE(session.peer_rdx == bob_rdx);
+        }
+      }
+
+      AND_THEN("the peer appears in the contacts list with the alias")
+      {
+        const auto contacts = alice.bridge->list_contacts();
+        REQUIRE(contacts.size() == 1);
+        REQUIRE(contacts[0].rdx_fingerprint == bob_rdx);
+        REQUIRE(contacts[0].user_alias == "Bob");
+        REQUIRE(contacts[0].has_active_session);
+      }
     }
   }
 }

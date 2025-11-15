@@ -60,6 +60,32 @@ TEST_CASE("signal::bridge contact management", "[signal][wrapper][contacts]")
     std::filesystem::remove(alice_db);
   }
 
+  SECTION("Extract RDX from bundle without establishing session")
+  {
+    {
+      auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
+      auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
+
+      auto bob_bundle = bob->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_bundle_json = nlohmann::json::parse(bob_bundle);
+      auto bob_bundle_base64 = bob_bundle_json["content"].template get<std::string>();
+
+      auto extracted_rdx = alice->extract_rdx_from_bundle_base64(bob_bundle_base64);
+
+      REQUIRE(extracted_rdx.starts_with("RDX:"));
+      REQUIRE(extracted_rdx.length() == 68);
+
+      auto contacts = alice->list_contacts();
+      REQUIRE(contacts.empty());
+
+      auto bob_rdx = alice->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob");
+
+      REQUIRE(extracted_rdx == bob_rdx);
+    }
+    std::filesystem::remove(alice_db);
+    std::filesystem::remove(bob_db);
+  }
+
   SECTION("Session establishment and contact listing")
   {
     {
