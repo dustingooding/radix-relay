@@ -3,7 +3,6 @@
 #include <filesystem>
 #include <nlohmann/json.hpp>
 #include <nostr/message_handler.hpp>
-#include <signal/node_identity.hpp>
 #include <signal/signal_bridge.hpp>
 
 TEST_CASE("message_handler handles incoming encrypted_message", "[message_handler]")

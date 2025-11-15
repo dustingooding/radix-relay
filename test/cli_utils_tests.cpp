@@ -12,11 +12,10 @@
 #include <cli_utils/app_init.hpp>
 #include <cli_utils/cli_parser.hpp>
 #include <platform/env_utils.hpp>
-#include <signal/node_identity.hpp>
 
 TEST_CASE("cli_args default values", "[cli_utils][cli_parser]")
 {
-  radix_relay::cli_utils::cli_args args;
+  const radix_relay::cli_utils::cli_args args;
 
   REQUIRE(args.identity_path == "~/.radix/identity.db");
   REQUIRE(args.mode == "hybrid");

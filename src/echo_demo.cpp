@@ -123,7 +123,8 @@ auto main() -> int
       [](const std::shared_ptr<boost::asio::io_context> &ctx,
         std::shared_ptr<radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge,
           radix_relay::nostr::request_tracker>> orch,
-        std::shared_ptr<boost::asio::cancellation_slot> c_slot) {
+        std::shared_ptr<boost::asio::cancellation_slot>
+          c_slot) {// NOLINT(performance-unnecessary-value-param) - c_slot reused across calls
         boost::asio::co_spawn(
           *ctx,
           [](std::shared_ptr<radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge,
@@ -145,7 +146,8 @@ auto main() -> int
     auto spawn_transport_loop =
       [](const std::shared_ptr<boost::asio::io_context> &ctx,
         std::shared_ptr<radix_relay::nostr::transport<radix_relay::transport::websocket_stream>> trans,
-        std::shared_ptr<boost::asio::cancellation_slot> c_slot) {
+        std::shared_ptr<boost::asio::cancellation_slot>
+          c_slot) {// NOLINT(performance-unnecessary-value-param) - c_slot reused across calls
         boost::asio::co_spawn(
           *ctx,
           [](std::shared_ptr<radix_relay::nostr::transport<radix_relay::transport::websocket_stream>> transport,

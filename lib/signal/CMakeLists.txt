@@ -1,6 +1,5 @@
 add_library(radix_relay_signal
   src/signal_bridge.cpp
-  src/node_identity.cpp
 )
 
 add_library(radix_relay::signal ALIAS radix_relay_signal)

@@ -48,7 +48,7 @@ impl ContactManager {
 
         let nostr_pubkey = NostrIdentity::derive_public_key_from_peer_identity(&identity_key)?;
 
-        let rdx = self.generate_identity_fingerprint_from_key(&identity_key)?;
+        let rdx = Self::generate_identity_fingerprint_from_key(&identity_key);
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
         let conn_lock = self.storage.lock().unwrap();
@@ -195,14 +195,11 @@ impl ContactManager {
         Ok(result)
     }
 
-    fn generate_identity_fingerprint_from_key(
-        &self,
-        identity_key: &IdentityKey,
-    ) -> Result<String, SignalBridgeError> {
+    pub fn generate_identity_fingerprint_from_key(identity_key: &IdentityKey) -> String {
         let mut hasher = Sha256::new();
         hasher.update(identity_key.serialize());
         hasher.update(b"radix-identity-fingerprint");
         let result = hasher.finalize();
-        Ok(format!("RDX:{:x}", result))
+        format!("RDX:{:x}", result)
     }
 }

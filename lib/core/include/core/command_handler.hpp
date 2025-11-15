@@ -41,6 +41,7 @@ private:
     emit("  status                    Show network status\n");
     emit("  sessions                  Show encrypted sessions\n");
     emit("  identities                List discovered identities\n");
+    emit("  publish                   Publish identity to network\n");
     emit("  mode <internet|mesh|hybrid>  Switch transport mode\n");
     emit("  scan                      Force peer discovery\n");
     emit("  connect <relay>           Add Nostr relay\n");
@@ -97,6 +98,13 @@ private:
     session_out_queue_->push(events::list_identities{});
   }
 
+  auto handle_impl(const events::publish_identity & /*command*/) const -> void
+  {
+    std::ignore = initialized_;
+    session_out_queue_->push(events::publish_identity{});
+    emit("Publishing identity to network...\n");
+  }
+
   auto handle_impl(const events::scan & /*command*/) const -> void
   {
     std::ignore = initialized_;
@@ -124,7 +132,8 @@ private:
   {
     std::ignore = initialized_;
     if (not command.peer.empty() and not command.message.empty()) {
-      emit("Sending '{}' to '{}' via hybrid transport (not implemented)\n", command.message, command.peer);
+      session_out_queue_->push(command);
+      emit("Sending '{}' to '{}'...\n", command.message, command.peer);
     } else {
       emit("Usage: send <peer> <message>\n");
     }

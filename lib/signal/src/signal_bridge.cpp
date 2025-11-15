@@ -5,7 +5,10 @@
 
 namespace radix_relay::signal {
 
-auto bridge::get_node_fingerprint() const -> std::string { return radix_relay::signal::get_node_fingerprint(*bridge_); }
+auto bridge::get_node_fingerprint() const -> std::string
+{
+  return std::string(radix_relay::generate_node_fingerprint(*bridge_));
+}
 
 auto bridge::list_contacts() const -> std::vector<core::contact_info>
 {

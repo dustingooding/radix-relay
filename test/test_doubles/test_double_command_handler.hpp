@@ -85,6 +85,11 @@ private:
     called_commands.push_back("identities");
   }
 
+  auto handle_impl(const radix_relay::core::events::publish_identity & /*command*/) const -> void
+  {
+    called_commands.push_back("publish_identity");
+  }
+
 public:
   auto was_called(const std::string &command) const -> bool
   {

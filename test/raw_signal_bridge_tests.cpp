@@ -22,13 +22,9 @@ TEST_CASE("SignalBridge Node Fingerprint Integration", "[signal][fingerprint][cx
     {
       auto bridge = radix_relay::new_signal_bridge(db_path.c_str());
 
-      auto identity = radix_relay::NodeIdentity{
-        .hostname = "testhost", .username = "testuser", .platform = "linux", .mac_address = "", .install_id = ""
-      };
-
-      auto fingerprint1 = radix_relay::generate_node_fingerprint(*bridge, identity);
-      auto fingerprint2 = radix_relay::generate_node_fingerprint(*bridge, identity);
-      auto fingerprint3 = radix_relay::generate_node_fingerprint(*bridge, identity);
+      auto fingerprint1 = radix_relay::generate_node_fingerprint(*bridge);
+      auto fingerprint2 = radix_relay::generate_node_fingerprint(*bridge);
+      auto fingerprint3 = radix_relay::generate_node_fingerprint(*bridge);
 
       REQUIRE(std::string(fingerprint1).starts_with("RDX:"));
       REQUIRE(std::string(fingerprint1).length() == 68);

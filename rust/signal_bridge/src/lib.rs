@@ -32,17 +32,7 @@ use libsignal_protocol::{
 };
 use nostr::{EventBuilder, Keys, Kind, Tag};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct NodeIdentity {
-    pub hostname: String,
-    pub username: String,
-    pub platform: String,
-    pub mac_address: String,
-    pub install_id: String,
-}
 
 #[derive(Serialize, Deserialize, Clone)]
 struct SerializablePreKeyBundle {
@@ -647,36 +637,16 @@ impl SignalBridge {
         ))
     }
 
-    pub async fn generate_node_fingerprint(
-        &mut self,
-        node_identity: &NodeIdentity,
-    ) -> Result<String, SignalBridgeError> {
+    pub async fn generate_node_fingerprint(&mut self) -> Result<String, SignalBridgeError> {
         let identity_key_pair = self
             .storage
             .identity_store()
             .get_identity_key_pair()
             .await?;
-        let registration_id = self
-            .storage
-            .identity_store()
-            .get_local_registration_id()
-            .await?;
 
-        let mut hasher = Sha256::new();
-
-        hasher.update(identity_key_pair.identity_key().serialize());
-        hasher.update(registration_id.to_be_bytes());
-
-        hasher.update(node_identity.hostname.as_bytes());
-        hasher.update(node_identity.username.as_bytes());
-        hasher.update(node_identity.platform.as_bytes());
-        hasher.update(node_identity.mac_address.as_bytes());
-        hasher.update(node_identity.install_id.as_bytes());
-
-        hasher.update(b"radix-node-fingerprint");
-
-        let result = hasher.finalize();
-        Ok(format!("RDX:{:x}", result))
+        Ok(ContactManager::generate_identity_fingerprint_from_key(
+            identity_key_pair.identity_key(),
+        ))
     }
 
     pub async fn add_contact_from_bundle(
@@ -787,15 +757,6 @@ impl From<std::io::Error> for SignalBridgeError {
 
 #[cxx::bridge(namespace = "radix_relay")]
 mod ffi {
-    #[derive(Debug)]
-    pub struct NodeIdentity {
-        pub hostname: String,
-        pub username: String,
-        pub platform: String,
-        pub mac_address: String,
-        pub install_id: String,
-    }
-
     #[derive(Clone, Debug)]
     pub struct ContactInfo {
         pub rdx_fingerprint: String,
@@ -831,10 +792,7 @@ mod ffi {
 
         fn reset_identity(bridge: &mut SignalBridge) -> Result<()>;
 
-        fn generate_node_fingerprint(
-            bridge: &mut SignalBridge,
-            identity: NodeIdentity,
-        ) -> Result<String>;
+        fn generate_node_fingerprint(bridge: &mut SignalBridge) -> Result<String>;
 
         fn sign_nostr_event(bridge: &mut SignalBridge, event_json: &str) -> Result<String>;
 
@@ -967,19 +925,10 @@ pub fn reset_identity(bridge: &mut SignalBridge) -> Result<(), Box<dyn std::erro
 
 pub fn generate_node_fingerprint(
     bridge: &mut SignalBridge,
-    identity: ffi::NodeIdentity,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let node_identity = NodeIdentity {
-        hostname: identity.hostname,
-        username: identity.username,
-        platform: identity.platform,
-        mac_address: identity.mac_address,
-        install_id: identity.install_id,
-    };
-
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-    rt.block_on(bridge.generate_node_fingerprint(&node_identity))
+    rt.block_on(bridge.generate_node_fingerprint())
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
@@ -1170,11 +1119,9 @@ pub fn extract_rdx_from_bundle(
             Box::new(SignalBridgeError::Protocol(e.to_string()))
         })?;
 
-    let mut hasher = Sha256::new();
-    hasher.update(identity_key.serialize());
-    hasher.update(b"radix-identity-fingerprint");
-    let result = hasher.finalize();
-    Ok(format!("RDX:{:x}", result))
+    Ok(ContactManager::generate_identity_fingerprint_from_key(
+        &identity_key,
+    ))
 }
 
 pub fn extract_rdx_from_bundle_base64(
