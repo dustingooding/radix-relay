@@ -21,7 +21,6 @@
 #include <string>
 #include <thread>
 #include <transport/websocket_stream.hpp>
-#include <tui/printer.hpp>
 #include <tui/processor.hpp>
 
 namespace radix_relay {

@@ -42,11 +42,11 @@ function(radix_relay_setup_dependencies)
     )
   endif()
 
-  if(NOT TARGET ftxui::screen)
+  if(NOT TARGET replxx::replxx)
     cpmaddpackage(
-      NAME FTXUI
-      GITHUB_REPOSITORY ArthurSonzogni/FTXUI
-      VERSION 6.0.2
+      NAME replxx
+      GITHUB_REPOSITORY AmokHuginnsson/replxx
+      GIT_TAG release-0.0.4
       SYSTEM YES
     )
   endif()

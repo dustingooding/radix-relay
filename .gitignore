@@ -8,6 +8,9 @@ conan-cache/
 # Rust build artifacts
 rust/target/
 
+# UI History
+.radix_relay_history
+
 # User spesific settings
 CMakeUserPresets.json
 spack.yaml
