@@ -41,6 +41,8 @@ public:
 
   [[nodiscard]] auto generate_prekey_bundle_announcement(const std::string &version) const -> std::string;
 
+  [[nodiscard]] auto generate_empty_bundle_announcement(const std::string &version) const -> std::string;
+
   auto assign_contact_alias(const std::string &rdx, const std::string &alias) const -> void;
 
   [[nodiscard]] auto create_and_sign_encrypted_message(const std::string &rdx,

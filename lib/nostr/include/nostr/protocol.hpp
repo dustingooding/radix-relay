@@ -10,6 +10,8 @@
 
 namespace radix_relay::nostr::protocol {
 
+inline constexpr auto bundle_announcement_minimum_version = "0.4.0";
+
 enum class kind : std::uint16_t {
   profile_metadata = 0,
   text_note = 1,

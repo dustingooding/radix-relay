@@ -567,6 +567,40 @@ impl SignalBridge {
         serde_json::to_string(&event).map_err(|e| SignalBridgeError::Serialization(e.to_string()))
     }
 
+    pub async fn generate_empty_bundle_announcement(
+        &mut self,
+        project_version: &str,
+    ) -> Result<String, SignalBridgeError> {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| SignalBridgeError::Protocol(e.to_string()))?
+            .as_secs();
+
+        let tags = vec![
+            vec!["d".to_string(), "radix_prekey_bundle_v1".to_string()],
+            vec!["radix_version".to_string(), project_version.to_string()],
+        ];
+
+        let (pubkey, event_id, signature) = self
+            .sign_nostr_event(timestamp, 30078, tags.clone(), "")
+            .await?;
+
+        let event = serde_json::json!({
+            "id": event_id,
+            "pubkey": pubkey,
+            "created_at": timestamp,
+            "kind": 30078,
+            "tags": [
+                ["d", "radix_prekey_bundle_v1"],
+                ["radix_version", project_version],
+            ],
+            "content": "",
+            "sig": signature,
+        });
+
+        serde_json::to_string(&event).map_err(|e| SignalBridgeError::Serialization(e.to_string()))
+    }
+
     pub async fn add_contact_and_establish_session(
         &mut self,
         bundle_bytes: &[u8],
@@ -824,6 +858,11 @@ mod ffi {
             project_version: &str,
         ) -> Result<String>;
 
+        fn generate_empty_bundle_announcement(
+            bridge: &mut SignalBridge,
+            project_version: &str,
+        ) -> Result<String>;
+
         fn add_contact_and_establish_session(
             bridge: &mut SignalBridge,
             bundle_bytes: &[u8],
@@ -1064,6 +1103,15 @@ pub fn generate_prekey_bundle_announcement(
 ) -> Result<String, Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(bridge.generate_prekey_bundle_announcement(project_version))
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
+}
+
+pub fn generate_empty_bundle_announcement(
+    bridge: &mut SignalBridge,
+    project_version: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(bridge.generate_empty_bundle_announcement(project_version))
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
@@ -2292,5 +2340,41 @@ mod tests {
 
         let _ = std::fs::remove_file(&alice_db);
         let _ = std::fs::remove_file(&bob_db);
+    }
+
+    #[tokio::test]
+    async fn test_generate_empty_bundle_announcement() {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let db_path = temp_dir.join(format!("test_empty_bundle_{}.db", timestamp));
+        let mut bridge = SignalBridge::new(db_path.to_str().unwrap()).await.unwrap();
+
+        let announcement_json = bridge
+            .generate_empty_bundle_announcement("0.4.0")
+            .await
+            .unwrap();
+
+        let event: serde_json::Value = serde_json::from_str(&announcement_json).unwrap();
+
+        assert_eq!(event["kind"].as_u64().unwrap(), 30078);
+        assert_eq!(event["content"].as_str().unwrap(), "");
+
+        let tags = event["tags"].as_array().unwrap();
+        let d_tag = tags.iter().find(|t| t[0] == "d").unwrap();
+        assert_eq!(d_tag[1].as_str().unwrap(), "radix_prekey_bundle_v1");
+
+        let version_tag = tags.iter().find(|t| t[0] == "radix_version").unwrap();
+        assert_eq!(version_tag[1].as_str().unwrap(), "0.4.0");
+
+        assert!(
+            !tags.iter().any(|t| t[0] == "rdx"),
+            "Empty bundle should not contain rdx tag"
+        );
+
+        let _ = std::fs::remove_file(&db_path);
     }
 }

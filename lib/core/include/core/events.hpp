@@ -60,6 +60,10 @@ struct publish_identity
 {
 };
 
+struct unpublish_identity
+{
+};
+
 struct trust
 {
   std::string peer;
@@ -110,6 +114,12 @@ struct bundle_announcement_received
 {
   std::string pubkey;
   std::string bundle_content;
+  std::string event_id;
+};
+
+struct bundle_announcement_removed
+{
+  std::string pubkey;
   std::string event_id;
 };
 
@@ -211,19 +221,21 @@ concept Command =
   std::same_as<T, help> or std::same_as<T, peers> or std::same_as<T, status> or std::same_as<T, sessions>
   or std::same_as<T, identities> or std::same_as<T, scan> or std::same_as<T, version> or std::same_as<T, mode>
   or std::same_as<T, send> or std::same_as<T, broadcast> or std::same_as<T, connect> or std::same_as<T, disconnect>
-  or std::same_as<T, publish_identity> or std::same_as<T, trust> or std::same_as<T, verify>
-  or std::same_as<T, subscribe> or std::same_as<T, subscribe_identities> or std::same_as<T, subscribe_messages>
-  or std::same_as<T, establish_session>;
+  or std::same_as<T, publish_identity> or std::same_as<T, unpublish_identity> or std::same_as<T, trust>
+  or std::same_as<T, verify> or std::same_as<T, subscribe> or std::same_as<T, subscribe_identities>
+  or std::same_as<T, subscribe_messages> or std::same_as<T, establish_session>;
 
 template<typename T>
 concept PresentationEvent =
   std::same_as<T, message_received> or std::same_as<T, session_established>
-  or std::same_as<T, bundle_announcement_received> or std::same_as<T, message_sent> or std::same_as<T, bundle_published>
-  or std::same_as<T, subscription_established> or std::same_as<T, identities_listed>;
+  or std::same_as<T, bundle_announcement_received> or std::same_as<T, bundle_announcement_removed>
+  or std::same_as<T, message_sent> or std::same_as<T, bundle_published> or std::same_as<T, subscription_established>
+  or std::same_as<T, identities_listed>;
 
 using presentation_event_variant_t = std::variant<message_received,
   session_established,
   bundle_announcement_received,
+  bundle_announcement_removed,
   message_sent,
   bundle_published,
   subscription_established,
@@ -234,11 +246,18 @@ concept Event = Command<T> or PresentationEvent<T> or std::same_as<T, raw_comman
 
 namespace session_orchestrator {
 
-  using command_from_main_variant_t =
-    std::variant<send, publish_identity, trust, subscribe, subscribe_identities, subscribe_messages, list_identities>;
+  using command_from_main_variant_t = std::variant<send,
+    publish_identity,
+    unpublish_identity,
+    trust,
+    subscribe,
+    subscribe_identities,
+    subscribe_messages,
+    list_identities>;
 
   using in_t = std::variant<send,
     publish_identity,
+    unpublish_identity,
     trust,
     subscribe,
     subscribe_identities,
@@ -251,7 +270,8 @@ namespace session_orchestrator {
     transport::sent,
     transport::send_failed,
     transport::disconnected,
-    bundle_announcement_received>;
+    bundle_announcement_received,
+    bundle_announcement_removed>;
 
 }// namespace session_orchestrator
 

@@ -23,7 +23,8 @@ target_link_system_libraries(
           Boost::uuid
           fmt::fmt
           CLI11::CLI11
-          spdlog::spdlog)
+          spdlog::spdlog
+          semver::semver)
 
 target_include_directories(radix_relay_core ${WARNING_GUARD} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

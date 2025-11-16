@@ -148,4 +148,13 @@ function(radix_relay_setup_dependencies)
     )
   endif()
 
+  if(NOT TARGET semver::semver)
+    cpmaddpackage(
+      NAME semver
+      GITHUB_REPOSITORY z4kn4fein/cpp-semver
+      GIT_TAG v0.3.3
+      SYSTEM YES
+    )
+  endif()
+
 endfunction()
