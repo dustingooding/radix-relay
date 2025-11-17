@@ -145,6 +145,31 @@ private:
       boost::asio::detached);
   }
 
+  auto handle(const core::events::unpublish_identity &cmd) -> void
+  {
+    boost::asio::co_spawn(
+      *io_context_,
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+      [self = this->shared_from_this(), cmd]() -> boost::asio::awaitable<void> {
+        auto [event_id, bytes] = self->handler_.handle(cmd);
+
+        core::events::transport::send transport_cmd{ .message_id = core::uuid_generator::generate(),
+          .bytes = std::move(bytes) };
+        self->emit_transport_event(transport_cmd);
+
+        try {
+          auto ok_response =
+            co_await self->tracker_->template async_track<nostr::protocol::ok>(event_id, self->default_timeout);
+          self->emit_presentation_event(
+            core::events::bundle_published{ .event_id = event_id, .accepted = ok_response.accepted });
+        } catch (const std::exception &e) {
+          spdlog::warn("[session_orchestrator] OK timeout for event: {} - {}", event_id, e.what());
+          self->emit_presentation_event(core::events::bundle_published{ .event_id = "", .accepted = false });
+        }
+      },
+      boost::asio::detached);
+  }
+
   auto handle(const core::events::trust &cmd) -> void
   {
     auto bundle_iter = std::ranges::find_if(
@@ -199,10 +224,25 @@ private:
   auto handle(const core::events::bundle_announcement_received &event) -> void
   {
     auto rdx_fingerprint = bridge_->extract_rdx_from_bundle_base64(event.bundle_content);
-    discovered_bundles_.push_back(discovered_bundle{ .rdx_fingerprint = rdx_fingerprint,
-      .nostr_pubkey = event.pubkey,
-      .bundle_base64 = event.bundle_content,
-      .event_id = event.event_id });
+
+    auto existing = std::ranges::find_if(
+      discovered_bundles_, [&event](const auto &bundle) { return bundle.nostr_pubkey == event.pubkey; });
+
+    if (existing != discovered_bundles_.end()) {
+      existing->rdx_fingerprint = rdx_fingerprint;
+      existing->bundle_base64 = event.bundle_content;
+      existing->event_id = event.event_id;
+    } else {
+      discovered_bundles_.push_back(discovered_bundle{ .rdx_fingerprint = rdx_fingerprint,
+        .nostr_pubkey = event.pubkey,
+        .bundle_base64 = event.bundle_content,
+        .event_id = event.event_id });
+    }
+  }
+
+  auto handle(const core::events::bundle_announcement_removed &event) -> void
+  {
+    std::erase_if(discovered_bundles_, [&event](const auto &bundle) { return bundle.nostr_pubkey == event.pubkey; });
   }
 
   auto handle(const core::events::list_identities & /*cmd*/) -> void
@@ -290,8 +330,12 @@ private:
               .sig = event_data["sig"] } };
 
             if (auto result = handler_.handle(evt_inner)) {
-              handle(*result);
-              emit_presentation_event(*result);
+              std::visit(
+                [this](auto &&inner_evt) {
+                  handle(inner_evt);
+                  emit_presentation_event(inner_evt);
+                },
+                *result);
             }
             break;
           }

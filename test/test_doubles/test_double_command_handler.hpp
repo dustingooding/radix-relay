@@ -90,6 +90,11 @@ private:
     called_commands.push_back("publish_identity");
   }
 
+  auto handle_impl(const radix_relay::core::events::unpublish_identity & /*command*/) const -> void
+  {
+    called_commands.push_back("unpublish_identity");
+  }
+
 public:
   auto was_called(const std::string &command) const -> bool
   {

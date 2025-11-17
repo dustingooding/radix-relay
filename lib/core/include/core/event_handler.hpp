@@ -50,6 +50,10 @@ template<concepts::command_handler CmdHandler> struct event_handler
       command_handler_->handle(events::publish_identity{});
       return;
     }
+    if (input == "unpublish") {
+      command_handler_->handle(events::unpublish_identity{});
+      return;
+    }
 
     constexpr auto mode_cmd = "mode ";
     if (input.starts_with(mode_cmd)) {

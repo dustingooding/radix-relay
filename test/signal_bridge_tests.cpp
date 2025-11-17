@@ -183,3 +183,43 @@ TEST_CASE("signal::bridge alias management", "[signal][wrapper][alias]")
     std::filesystem::remove(bob_db);
   }
 }
+
+TEST_CASE("signal::bridge generate_empty_bundle_announcement creates valid empty event", "[signal][wrapper][bundle]")
+{
+  auto timestamp =
+    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  auto db_path = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                  / ("test_empty_bundle_" + std::to_string(timestamp) + ".db"))
+                   .string();
+
+  {
+    auto wrapper = radix_relay::signal::bridge(db_path);
+    auto announcement_json = wrapper.generate_empty_bundle_announcement("0.4.0");
+    auto event = nlohmann::json::parse(announcement_json);
+
+    REQUIRE(event["kind"].template get<int>() == 30078);
+    REQUIRE(event["content"].template get<std::string>().empty());
+
+    const auto tags = event["tags"];
+    bool found_d_tag = false;
+    bool found_version_tag = false;
+    bool found_rdx_tag = false;
+
+    for (const auto &tag : tags) {
+      if (tag[0] == "d") {
+        found_d_tag = true;
+        REQUIRE(tag[1] == "radix_prekey_bundle_v1");
+      } else if (tag[0] == "radix_version") {
+        found_version_tag = true;
+        REQUIRE(tag[1] == "0.4.0");
+      } else if (tag[0] == "rdx") {
+        found_rdx_tag = true;
+      }
+    }
+
+    REQUIRE(found_d_tag);
+    REQUIRE(found_version_tag);
+    REQUIRE_FALSE(found_rdx_tag);
+  }
+  std::filesystem::remove(db_path);
+}

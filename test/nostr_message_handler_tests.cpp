@@ -85,6 +85,8 @@ TEST_CASE("message_handler handles incoming bundle_announcement without establis
     event_data.created_at = test_timestamp;
     event_data.id = "bundle_event_id";
     event_data.sig = "bundle_signature";
+    event_data.tags.push_back({ "d", "radix_prekey_bundle_v1" });
+    event_data.tags.push_back({ "radix_version", "0.4.0" });
 
     const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
 
@@ -93,14 +95,97 @@ TEST_CASE("message_handler handles incoming bundle_announcement without establis
 
     REQUIRE(result.has_value());
     if (result.has_value()) {
-      CHECK(result->pubkey == "alice_nostr_pubkey");
-      CHECK(result->bundle_content == alice_bundle_base64);
-      CHECK(result->event_id == "bundle_event_id");
+      REQUIRE(std::holds_alternative<radix_relay::core::events::bundle_announcement_received>(*result));
+      const auto &announcement = std::get<radix_relay::core::events::bundle_announcement_received>(*result);
+      CHECK(announcement.pubkey == "alice_nostr_pubkey");
+      CHECK(announcement.bundle_content == alice_bundle_base64);
+      CHECK(announcement.event_id == "bundle_event_id");
     }
   }
 
   std::filesystem::remove(alice_path);
   std::filesystem::remove(bob_path);
+}
+
+TEST_CASE("message_handler filters old version bundle announcements", "[message_handler]")
+{
+  const std::string alice_path = "/tmp/nostr_handler_version_filter_alice.db";
+  constexpr std::uint64_t test_timestamp = 1234567890;
+
+  std::filesystem::remove(alice_path);
+
+  {
+    auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
+
+    auto alice_bundle_json = alice_bridge->generate_prekey_bundle_announcement("0.4.0");
+    auto alice_event_json = nlohmann::json::parse(alice_bundle_json);
+    const std::string alice_bundle_base64 = alice_event_json["content"].get<std::string>();
+
+    SECTION("rejects bundle announcements with version < 0.4.0")
+    {
+      radix_relay::nostr::protocol::event_data event_data;
+      event_data.pubkey = "old_client_pubkey";
+      event_data.kind = radix_relay::nostr::protocol::kind::bundle_announcement;
+      event_data.content = alice_bundle_base64;
+      event_data.created_at = test_timestamp;
+      event_data.id = "old_bundle_event_id";
+      event_data.sig = "old_bundle_signature";
+      event_data.tags.push_back({ "d", "radix_prekey_bundle_v1" });
+      event_data.tags.push_back({ "radix_version", "0.3.9" });
+
+      const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
+      const radix_relay::nostr::message_handler<radix_relay::signal::bridge> handler(alice_bridge);
+      auto result = handler.handle(event);
+
+      REQUIRE_FALSE(result.has_value());
+    }
+
+    SECTION("accepts bundle announcements with version >= 0.4.0")
+    {
+      radix_relay::nostr::protocol::event_data event_data;
+      event_data.pubkey = "new_client_pubkey";
+      event_data.kind = radix_relay::nostr::protocol::kind::bundle_announcement;
+      event_data.content = alice_bundle_base64;
+      event_data.created_at = test_timestamp;
+      event_data.id = "new_bundle_event_id";
+      event_data.sig = "new_bundle_signature";
+      event_data.tags.push_back({ "d", "radix_prekey_bundle_v1" });
+      event_data.tags.push_back({ "radix_version", "0.4.0" });
+
+      const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
+      const radix_relay::nostr::message_handler<radix_relay::signal::bridge> handler(alice_bridge);
+      auto result = handler.handle(event);
+
+      REQUIRE(result.has_value());
+      if (result.has_value()) {
+        REQUIRE(std::holds_alternative<radix_relay::core::events::bundle_announcement_received>(*result));
+        const auto &announcement = std::get<radix_relay::core::events::bundle_announcement_received>(*result);
+        CHECK(announcement.pubkey == "new_client_pubkey");
+        CHECK(announcement.bundle_content == alice_bundle_base64);
+        CHECK(announcement.event_id == "new_bundle_event_id");
+      }
+    }
+
+    SECTION("rejects bundle announcements with missing version tag")
+    {
+      radix_relay::nostr::protocol::event_data event_data;
+      event_data.pubkey = "no_version_pubkey";
+      event_data.kind = radix_relay::nostr::protocol::kind::bundle_announcement;
+      event_data.content = alice_bundle_base64;
+      event_data.created_at = test_timestamp;
+      event_data.id = "no_version_event_id";
+      event_data.sig = "no_version_signature";
+      event_data.tags.push_back({ "d", "radix_prekey_bundle_v1" });
+
+      const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
+      const radix_relay::nostr::message_handler<radix_relay::signal::bridge> handler(alice_bridge);
+      auto result = handler.handle(event);
+
+      REQUIRE_FALSE(result.has_value());
+    }
+  }
+
+  std::filesystem::remove(alice_path);
 }
 
 TEST_CASE("message_handler handles send command", "[message_handler]")
@@ -250,4 +335,175 @@ TEST_CASE("message_handler handles trust command", "[message_handler]")
 
   std::filesystem::remove(alice_path);
   std::filesystem::remove(bob_path);
+}
+
+TEST_CASE("message_handler filters bundle announcements by version", "[message_handler][version]")
+{
+  const std::string test_path = "/tmp/nostr_handler_version_filter.db";
+  std::filesystem::remove(test_path);
+
+  {
+    auto bridge = std::make_shared<radix_relay::signal::bridge>(test_path);
+    const radix_relay::nostr::message_handler<radix_relay::signal::bridge> handler(bridge);
+
+    SECTION("ignores bundles with version < 0.4.0")
+    {
+      constexpr std::uint64_t test_timestamp = 1234567890;
+      radix_relay::nostr::protocol::event_data event_data;
+      event_data.pubkey = "test_pubkey";
+      event_data.kind = radix_relay::nostr::protocol::kind::bundle_announcement;
+      event_data.content = "test_bundle_content";
+      event_data.created_at = test_timestamp;
+      event_data.id = "test_event_id";
+      event_data.sig = "test_signature";
+      event_data.tags.push_back({ "d", "radix_prekey_bundle_v1" });
+      event_data.tags.push_back({ "radix_version", "0.3.0" });
+
+      const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
+      auto result = handler.handle(event);
+
+      REQUIRE_FALSE(result.has_value());
+    }
+
+    SECTION("accepts bundles with version == 0.4.0")
+    {
+      auto bundle_json = bridge->generate_prekey_bundle_announcement("0.4.0");
+      auto event_json = nlohmann::json::parse(bundle_json);
+
+      radix_relay::nostr::protocol::event_data event_data;
+      event_data.id = event_json["id"];
+      event_data.pubkey = event_json["pubkey"];
+      event_data.created_at = event_json["created_at"];
+      event_data.kind = radix_relay::nostr::protocol::kind::bundle_announcement;
+      event_data.content = event_json["content"];
+      event_data.sig = event_json["sig"];
+
+      for (const auto &tag : event_json["tags"]) {
+        std::vector<std::string> tag_vec;
+        std::ranges::transform(
+          tag, std::back_inserter(tag_vec), [](const auto &item) { return item.template get<std::string>(); });
+        event_data.tags.push_back(tag_vec);
+      }
+
+      const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
+      auto result = handler.handle(event);
+
+      REQUIRE(result.has_value());
+    }
+
+    SECTION("accepts bundles with version > 0.4.0")
+    {
+      auto bundle_json = bridge->generate_prekey_bundle_announcement("0.5.0");
+      auto event_json = nlohmann::json::parse(bundle_json);
+
+      radix_relay::nostr::protocol::event_data event_data;
+      event_data.id = event_json["id"];
+      event_data.pubkey = event_json["pubkey"];
+      event_data.created_at = event_json["created_at"];
+      event_data.kind = radix_relay::nostr::protocol::kind::bundle_announcement;
+      event_data.content = event_json["content"];
+      event_data.sig = event_json["sig"];
+
+      for (const auto &tag : event_json["tags"]) {
+        std::vector<std::string> tag_vec;
+        std::ranges::transform(
+          tag, std::back_inserter(tag_vec), [](const auto &item) { return item.template get<std::string>(); });
+        event_data.tags.push_back(tag_vec);
+      }
+
+      const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
+      auto result = handler.handle(event);
+
+      REQUIRE(result.has_value());
+    }
+
+    SECTION("ignores bundles without version tag")
+    {
+      constexpr std::uint64_t test_timestamp = 1234567890;
+      radix_relay::nostr::protocol::event_data event_data;
+      event_data.pubkey = "test_pubkey";
+      event_data.kind = radix_relay::nostr::protocol::kind::bundle_announcement;
+      event_data.content = "test_bundle_content";
+      event_data.created_at = test_timestamp;
+      event_data.id = "test_event_id";
+      event_data.sig = "test_signature";
+      event_data.tags.push_back({ "d", "radix_prekey_bundle_v1" });
+
+      const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
+      auto result = handler.handle(event);
+
+      REQUIRE_FALSE(result.has_value());
+    }
+  }
+
+  std::filesystem::remove(test_path);
+}
+
+TEST_CASE("message_handler filters bundle announcements by content", "[message_handler][content]")
+{
+  const std::string test_path = "/tmp/nostr_handler_content_filter.db";
+  std::filesystem::remove(test_path);
+
+  {
+    auto bridge = std::make_shared<radix_relay::signal::bridge>(test_path);
+    const radix_relay::nostr::message_handler<radix_relay::signal::bridge> handler(bridge);
+
+    SECTION("returns bundle_announcement_removed for empty content")
+    {
+      constexpr std::uint64_t test_timestamp = 1234567890;
+      radix_relay::nostr::protocol::event_data event_data;
+      event_data.pubkey = "test_pubkey";
+      event_data.kind = radix_relay::nostr::protocol::kind::bundle_announcement;
+      event_data.content = "";
+      event_data.created_at = test_timestamp;
+      event_data.id = "test_event_id";
+      event_data.sig = "test_signature";
+      event_data.tags.push_back({ "d", "radix_prekey_bundle_v1" });
+      event_data.tags.push_back({ "radix_version", "0.4.0" });
+
+      const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
+      auto result = handler.handle(event);
+
+      REQUIRE(result.has_value());
+      if (result.has_value()) {
+        REQUIRE(std::holds_alternative<radix_relay::core::events::bundle_announcement_removed>(*result));
+        const auto &removed = std::get<radix_relay::core::events::bundle_announcement_removed>(*result);
+        CHECK(removed.pubkey == "test_pubkey");
+        CHECK(removed.event_id == "test_event_id");
+      }
+    }
+
+    SECTION("accepts bundles with non-empty content")
+    {
+      auto bundle_json = bridge->generate_prekey_bundle_announcement("0.4.0");
+      auto event_json = nlohmann::json::parse(bundle_json);
+
+      radix_relay::nostr::protocol::event_data event_data;
+      event_data.id = event_json["id"];
+      event_data.pubkey = event_json["pubkey"];
+      event_data.created_at = event_json["created_at"];
+      event_data.kind = radix_relay::nostr::protocol::kind::bundle_announcement;
+      event_data.content = event_json["content"];
+      event_data.sig = event_json["sig"];
+
+      for (const auto &tag : event_json["tags"]) {
+        std::vector<std::string> tag_vec;
+        std::ranges::transform(
+          tag, std::back_inserter(tag_vec), [](const auto &item) { return item.template get<std::string>(); });
+        event_data.tags.push_back(tag_vec);
+      }
+
+      const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
+      auto result = handler.handle(event);
+
+      REQUIRE(result.has_value());
+      if (result.has_value()) {
+        REQUIRE(std::holds_alternative<radix_relay::core::events::bundle_announcement_received>(*result));
+        const auto &announcement = std::get<radix_relay::core::events::bundle_announcement_received>(*result);
+        CHECK_FALSE(announcement.bundle_content.empty());
+      }
+    }
+  }
+
+  std::filesystem::remove(test_path);
 }

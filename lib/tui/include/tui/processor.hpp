@@ -102,7 +102,7 @@ private:
       replxx::Replxx::completions_t completions;
 
       std::vector<std::string> commands = {
-        "connect", "send", "trust", "list", "publish", "subscribe", "help", "mode", "quit", "exit"
+        "connect", "send", "trust", "list", "publish", "unpublish", "subscribe", "help", "mode", "quit", "exit"
       };
 
       std::copy_if(commands.begin(), commands.end(), std::back_inserter(completions), [&input](const std::string &cmd) {

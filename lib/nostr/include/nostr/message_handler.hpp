@@ -4,13 +4,16 @@
 #include <bit>
 #include <concepts/signal_bridge.hpp>
 #include <core/events.hpp>
+#include <core/semver_utils.hpp>
 #include <ctime>
 #include <fmt/format.h>
+#include <internal_use_only/config.hpp>
 #include <iterator>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <nostr/events.hpp>
 #include <nostr/protocol.hpp>
+#include <nostr/semver_utils.hpp>
 #include <optional>
 #include <spdlog/spdlog.h>
 #include <string>
@@ -51,9 +54,20 @@ public:
     };
   }
 
-  [[nodiscard]] static auto handle(const nostr::events::incoming::bundle_announcement &event)
-    -> std::optional<core::events::bundle_announcement_received>
+  [[nodiscard]] static auto handle(const nostr::events::incoming::bundle_announcement &event) -> std::optional<
+    std::variant<core::events::bundle_announcement_received, core::events::bundle_announcement_removed>>
   {
+    auto version = nostr::extract_version_from_tags(event.tags);
+    if (not version.has_value()) { return std::nullopt; }
+
+    if (not core::is_version_compatible(version.value(), protocol::bundle_announcement_minimum_version)) {
+      return std::nullopt;
+    }
+
+    if (event.content.empty()) {
+      return core::events::bundle_announcement_removed{ .pubkey = event.pubkey, .event_id = event.id };
+    }
+
     return core::events::bundle_announcement_received{
       .pubkey = event.pubkey, .bundle_content = event.content, .event_id = event.id
     };
@@ -103,8 +117,42 @@ public:
   [[nodiscard]] auto handle(const core::events::publish_identity & /*command*/)
     -> std::pair<std::string, std::vector<std::byte>>
   {
-    const std::string version_str = "0.1.0";
+    const std::string version_str{ radix_relay::cmake::project_version };
     auto bundle_json = bridge_->generate_prekey_bundle_announcement(version_str);
+    auto event_json = nlohmann::json::parse(bundle_json);
+
+    const std::string event_id = event_json["id"].template get<std::string>();
+
+    nostr::protocol::event_data event_data;
+    event_data.id = event_id;
+    event_data.pubkey = event_json["pubkey"].template get<std::string>();
+    event_data.created_at = event_json["created_at"].template get<std::uint64_t>();
+    event_data.kind = event_json["kind"].template get<nostr::protocol::kind>();
+    event_data.content = event_json["content"].template get<std::string>();
+    event_data.sig = event_json["sig"].template get<std::string>();
+
+    for (const auto &tag : event_json["tags"]) {
+      std::vector<std::string> tag_vec;
+      std::ranges::transform(
+        tag, std::back_inserter(tag_vec), [](const auto &item) { return item.template get<std::string>(); });
+      event_data.tags.push_back(tag_vec);
+    }
+
+    auto protocol_event = nostr::protocol::event::from_event_data(event_data);
+    auto json_str = protocol_event.serialize();
+
+    std::vector<std::byte> bytes;
+    bytes.resize(json_str.size());
+    std::ranges::transform(json_str, bytes.begin(), [](char character) { return std::bit_cast<std::byte>(character); });
+
+    return { event_id, bytes };
+  }
+
+  [[nodiscard]] auto handle(const core::events::unpublish_identity & /*command*/)
+    -> std::pair<std::string, std::vector<std::byte>>
+  {
+    const std::string version_str{ radix_relay::cmake::project_version };
+    auto bundle_json = bridge_->generate_empty_bundle_announcement(version_str);
     auto event_json = nlohmann::json::parse(bundle_json);
 
     const std::string event_id = event_json["id"].template get<std::string>();

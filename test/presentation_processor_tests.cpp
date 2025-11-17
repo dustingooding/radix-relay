@@ -22,6 +22,11 @@ struct test_presentation_event_handler
     handled_events.emplace_back(evt);
   }
 
+  auto handle(const radix_relay::core::events::bundle_announcement_removed &evt) -> void
+  {
+    handled_events.emplace_back(evt);
+  }
+
   auto handle(const radix_relay::core::events::message_sent &evt) -> void { handled_events.emplace_back(evt); }
 
   auto handle(const radix_relay::core::events::bundle_published &evt) -> void { handled_events.emplace_back(evt); }

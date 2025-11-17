@@ -29,6 +29,11 @@ struct presentation_handler
     spdlog::debug("Received bundle announcement from {}", evt.pubkey);
   }
 
+  static auto handle(const events::bundle_announcement_removed &evt) -> void
+  {
+    spdlog::debug("Bundle announcement removed for {}", evt.pubkey);
+  }
+
   auto handle(const events::message_sent &evt) const -> void
   {
     if (evt.accepted) {

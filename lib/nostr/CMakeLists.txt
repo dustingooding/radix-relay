@@ -16,6 +16,7 @@ target_link_system_libraries(
   radix_relay_nostr
   PUBLIC
           nlohmann_json::nlohmann_json
+          semver::semver
   PRIVATE
           fmt::fmt)
 

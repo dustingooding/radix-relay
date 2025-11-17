@@ -61,6 +61,12 @@ auto bridge::generate_prekey_bundle_announcement(const std::string &version) con
   return std::string(bundle_json);
 }
 
+auto bridge::generate_empty_bundle_announcement(const std::string &version) const -> std::string
+{
+  auto bundle_json = radix_relay::generate_empty_bundle_announcement(*bridge_, version.c_str());
+  return std::string(bundle_json);
+}
+
 auto bridge::assign_contact_alias(const std::string &rdx, const std::string &alias) const -> void
 {
   radix_relay::assign_contact_alias(*bridge_, rdx.c_str(), alias.c_str());

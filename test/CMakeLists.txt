@@ -77,6 +77,7 @@ add_catch_test(NAME nostr_request_tracker_tests SOURCES nostr_request_tracker_te
 add_catch_test(NAME nostr_signing_tests SOURCES nostr_signing_tests.cpp LIBS radix_relay::nostr;radix_relay::platform;radix_relay::signal)
 add_catch_test(NAME nostr_transport_tests SOURCES nostr_transport_tests.cpp LIBS radix_relay::nostr;radix_relay::transport)
 add_catch_test(NAME raw_signal_bridge_tests SOURCES raw_signal_bridge_tests.cpp LIBS radix_relay::platform;signal_bridge_cxx PREFIX signal)
+add_catch_test(NAME semver_utils_tests SOURCES semver_utils_tests.cpp LIBS radix_relay::nostr;semver::semver)
 add_catch_test(NAME session_orchestrator_tests SOURCES session_orchestrator_tests.cpp LIBS radix_relay::nostr;radix_relay::signal)
 add_catch_test(NAME signal_bridge_tests SOURCES signal_bridge_tests.cpp LIBS radix_relay::platform;radix_relay::signal;nlohmann_json::nlohmann_json PREFIX signal)
 add_catch_test(NAME presentation_handler_tests SOURCES presentation_handler_tests.cpp)

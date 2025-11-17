@@ -105,6 +105,13 @@ private:
     emit("Publishing identity to network...\n");
   }
 
+  auto handle_impl(const events::unpublish_identity & /*command*/) const -> void
+  {
+    std::ignore = initialized_;
+    session_out_queue_->push(events::unpublish_identity{});
+    emit("Unpublishing identity from network...\n");
+  }
+
   auto handle_impl(const events::scan & /*command*/) const -> void
   {
     std::ignore = initialized_;
