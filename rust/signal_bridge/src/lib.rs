@@ -506,20 +506,48 @@ impl SignalBridge {
     pub async fn create_subscription_for_self(
         &mut self,
         subscription_id: &str,
+        since_timestamp: u64,
     ) -> Result<String, SignalBridgeError> {
         let keys = self.derive_nostr_keypair().await?;
         let our_pubkey = keys.public_key().to_hex();
 
-        let subscription = serde_json::json!([
-            "REQ",
-            subscription_id,
-            {
-                "kinds": [40001],
-                "#p": [our_pubkey]
-            }
-        ]);
+        let since = if since_timestamp > 0 {
+            since_timestamp
+        } else {
+            self.storage.get_last_message_timestamp().map_err(|e| {
+                SignalBridgeError::Protocol(format!("Failed to get last message timestamp: {}", e))
+            })?
+        };
+
+        let mut filter = serde_json::json!({
+            "kinds": [40001],
+            "#p": [our_pubkey]
+        });
+
+        if since > 0 {
+            filter
+                .as_object_mut()
+                .unwrap()
+                .insert("since".to_string(), serde_json::json!(since));
+        }
+
+        let subscription = serde_json::json!(["REQ", subscription_id, filter]);
 
         Ok(subscription.to_string())
+    }
+
+    pub async fn update_last_message_timestamp(
+        &mut self,
+        timestamp: u64,
+    ) -> Result<(), SignalBridgeError> {
+        self.storage
+            .set_last_message_timestamp(timestamp)
+            .map_err(|e| {
+                SignalBridgeError::Protocol(format!(
+                    "Failed to update last message timestamp: {}",
+                    e
+                ))
+            })
     }
 
     pub async fn generate_prekey_bundle_announcement(
@@ -841,7 +869,10 @@ mod ffi {
         fn create_subscription_for_self(
             bridge: &mut SignalBridge,
             subscription_id: &str,
+            since_timestamp: u64,
         ) -> Result<String>;
+
+        fn update_last_message_timestamp(bridge: &mut SignalBridge, timestamp: u64) -> Result<()>;
 
         fn lookup_contact(bridge: &mut SignalBridge, identifier: &str) -> Result<ContactInfo>;
 
@@ -1050,10 +1081,21 @@ pub fn create_and_sign_encrypted_message(
 pub fn create_subscription_for_self(
     bridge: &mut SignalBridge,
     subscription_id: &str,
+    since_timestamp: u64,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-    rt.block_on(bridge.create_subscription_for_self(subscription_id))
+    rt.block_on(bridge.create_subscription_for_self(subscription_id, since_timestamp))
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
+}
+
+pub fn update_last_message_timestamp(
+    bridge: &mut SignalBridge,
+    timestamp: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+    rt.block_on(bridge.update_last_message_timestamp(timestamp))
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 

@@ -54,7 +54,10 @@ public:
 
   [[nodiscard]] auto sign_nostr_event(const std::string &event_json) const -> std::string;
 
-  [[nodiscard]] auto create_subscription_for_self(const std::string &subscription_id) const -> std::string;
+  [[nodiscard]] auto create_subscription_for_self(const std::string &subscription_id,
+    std::uint64_t since_timestamp = 0) const -> std::string;
+
+  auto update_last_message_timestamp(std::uint64_t timestamp) const -> void;
 
 private:
   mutable rust::Box<SignalBridge> bridge_;
