@@ -101,6 +101,7 @@ struct raw_command
 struct message_received
 {
   std::string sender_rdx;
+  std::string sender_alias;
   std::string content;
   std::uint64_t timestamp;
 };

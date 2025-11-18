@@ -34,15 +34,21 @@ TEST_CASE("message_handler handles incoming encrypted_message", "[message_handle
     std::string hex_content;
     for (const auto &byte : encrypted_bytes) { hex_content += fmt::format("{:02x}", byte); }
 
+    auto alice_contact = bob_bridge->lookup_contact(alice_rdx);
+    const std::string alice_nostr_pubkey = alice_contact.nostr_pubkey;
+
+    auto bob_contact = alice_bridge->lookup_contact(bob_rdx);
+    const std::string bob_nostr_pubkey = bob_contact.nostr_pubkey;
+
     constexpr std::uint64_t test_timestamp = 1234567890;
     radix_relay::nostr::protocol::event_data event_data;
     event_data.id = "test_event_id";
-    event_data.pubkey = "alice_pubkey";
+    event_data.pubkey = alice_nostr_pubkey;
     event_data.created_at = test_timestamp;
     event_data.kind = radix_relay::nostr::protocol::kind::encrypted_message;
     event_data.content = hex_content;
     event_data.sig = "signature";
-    event_data.tags.push_back({ "p", alice_rdx });
+    event_data.tags.push_back({ "p", bob_nostr_pubkey });
 
     const radix_relay::nostr::events::incoming::encrypted_message event{ event_data };
 
@@ -52,6 +58,7 @@ TEST_CASE("message_handler handles incoming encrypted_message", "[message_handle
     REQUIRE(result.has_value());
     if (result.has_value()) {
       CHECK(result->sender_rdx == alice_rdx);
+      CHECK(result->sender_alias == "alice");
       CHECK(result->content == plaintext);
       CHECK(result->timestamp == test_timestamp);
     }
@@ -231,12 +238,9 @@ TEST_CASE("message_handler handles send command", "[message_handler]")
     const auto &tags = parsed[1]["tags"];
     const bool found_p_tag =
       std::ranges::any_of(tags, [](const auto &tag) { return tag.size() >= 2 and tag[0] == "p"; });
-    const bool found_peer_tag =
-      std::ranges::any_of(tags, [](const auto &tag) { return tag.size() >= 2 and tag[0] == "radix_peer"; });
     const bool found_version_tag =
       std::ranges::any_of(tags, [](const auto &tag) { return tag.size() >= 2 and tag[0] == "radix_version"; });
     CHECK(found_p_tag);
-    CHECK(found_peer_tag);
     CHECK(found_version_tag);
   }
 

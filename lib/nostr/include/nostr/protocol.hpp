@@ -56,8 +56,7 @@ struct event_data
 
   [[nodiscard]] static auto create_encrypted_message(std::uint64_t timestamp,
     const std::string &recipient_pubkey,
-    const std::string &encrypted_payload,
-    const std::string &session_id) -> event_data;
+    const std::string &encrypted_payload) -> event_data;
 
   [[nodiscard]] static auto create_session_request(const std::string &sender_pubkey,
     std::uint64_t timestamp,

@@ -31,11 +31,7 @@ public:
   [[nodiscard]] auto handle(const nostr::events::incoming::encrypted_message &event)
     -> std::optional<core::events::message_received>
   {
-    auto p_tag = std::ranges::find_if(event.tags, [](const auto &tag) { return tag.size() >= 2 and tag[0] == "p"; });
-
-    if (p_tag == event.tags.end()) { return std::nullopt; }
-
-    const std::string sender_rdx = (*p_tag)[1];
+    auto sender_contact = bridge_->lookup_contact(event.pubkey);
 
     std::vector<uint8_t> encrypted_bytes;
     constexpr int hex_base = 16;
@@ -45,15 +41,16 @@ public:
       encrypted_bytes.push_back(byte_value);
     }
 
-    auto decrypted_bytes = bridge_->decrypt_message(sender_rdx, encrypted_bytes);
+    auto decrypted_bytes = bridge_->decrypt_message(sender_contact.rdx_fingerprint, encrypted_bytes);
 
     const std::string decrypted_content(decrypted_bytes.begin(), decrypted_bytes.end());
 
     bridge_->update_last_message_timestamp(event.created_at);
 
-    return core::events::message_received{
-      .sender_rdx = sender_rdx, .content = decrypted_content, .timestamp = event.created_at
-    };
+    return core::events::message_received{ .sender_rdx = sender_contact.rdx_fingerprint,
+      .sender_alias = sender_contact.user_alias,
+      .content = decrypted_content,
+      .timestamp = event.created_at };
   }
 
   [[nodiscard]] static auto handle(const nostr::events::incoming::bundle_announcement &event) -> std::optional<

@@ -24,8 +24,7 @@ TEST_CASE("protocol::event_data can be parsed from JSON", "[nostr][parse]")
       "created_at": 1234567890,
       "kind": 40001,
       "tags": [
-        ["p", "recipient_pubkey"],
-        ["radix_peer", "signal_session_id"]
+        ["p", "recipient_pubkey"]
       ],
       "content": "encrypted_signal_payload",
       "sig": "signature_hex"
@@ -42,9 +41,8 @@ TEST_CASE("protocol::event_data can be parsed from JSON", "[nostr][parse]")
       CHECK(evt.kind == radix_kind);
       CHECK(evt.content == "encrypted_signal_payload");
       CHECK(evt.sig == "signature_hex");
-      CHECK(evt.tags.size() == 2);
+      CHECK(evt.tags.size() == 1);
       CHECK(evt.tags[0] == std::vector<std::string>{ "p", "recipient_pubkey" });
-      CHECK(evt.tags[1] == std::vector<std::string>{ "radix_peer", "signal_session_id" });
     }
   }
 
@@ -159,7 +157,7 @@ TEST_CASE("protocol::event_data can be serialized to JSON", "[nostr][serialize]"
       .pubkey = "test_pubkey",
       .created_at = test_timestamp,
       .kind = radix_kind,
-      .tags = { { "p", "recipient" }, { "radix_peer", "session_id" } },
+      .tags = { { "p", "recipient" } },
       .content = "test content",
       .sig = "test_signature" };
 
@@ -214,7 +212,6 @@ TEST_CASE("protocol::event_data round-trip serialization", "[nostr][roundtrip]")
       .kind = radix_kind,
       .tags = { { "p", "recipient_pubkey_1" },
         { "p", "recipient_pubkey_2" },
-        { "radix_peer", "signal_session_id" },
         { "radix_version", "1.0" },
         { "e", "referenced_event_id" } },
       .content = "base64_encoded_signal_ciphertext",
@@ -265,20 +262,18 @@ TEST_CASE("protocol::event_data factory methods create correct message types", "
     const auto timestamp = 1234567890U;
     const std::string recipient_pubkey = "test_recipient_pubkey";
     const std::string encrypted_payload = "encrypted_signal_payload";
-    const std::string session_id = "test_session_id";
 
     auto event = radix_relay::nostr::protocol::event_data::create_encrypted_message(
-      timestamp, recipient_pubkey, encrypted_payload, session_id);
+      timestamp, recipient_pubkey, encrypted_payload);
 
     CHECK(event.pubkey.empty());// Not provided to create_encrypted_message
     CHECK(event.created_at == timestamp);
     CHECK(event.kind == radix_relay::nostr::protocol::kind::encrypted_message);
     CHECK(event.content == encrypted_payload);
-    CHECK(event.tags.size() == 3);
+    CHECK(event.tags.size() == 2);
     CHECK(event.tags[0] == std::vector<std::string>{ "p", recipient_pubkey });
-    CHECK(event.tags[1] == std::vector<std::string>{ "radix_peer", session_id });
     CHECK(
-      event.tags[2] == std::vector<std::string>{ "radix_version", std::string{ radix_relay::cmake::project_version } });
+      event.tags[1] == std::vector<std::string>{ "radix_version", std::string{ radix_relay::cmake::project_version } });
   }
 
   SECTION("create session request message")

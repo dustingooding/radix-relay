@@ -54,7 +54,7 @@ SCENARIO("Transport event processor handles transport events", "[presentation_pr
     {
       constexpr std::uint64_t test_timestamp = 12345;
       radix_relay::core::events::message_received evt{
-        .sender_rdx = "RDX:alice123", .content = "hello", .timestamp = test_timestamp
+        .sender_rdx = "RDX:alice123", .sender_alias = "", .content = "hello", .timestamp = test_timestamp
       };
       event_queue->push(evt);
 

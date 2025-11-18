@@ -907,4 +907,123 @@ TEST_CASE("session_orchestrator includes since filter when subscribing to messag
   }
 }
 
+TEST_CASE("encrypted message event structure contains correct sender and recipient information",
+  "[session_orchestrator][messages][structure]")
+{
+  const two_bridge_fixture fixture{ (std::filesystem::temp_directory_path() / "test_msg_structure_alice.db").string(),
+    (std::filesystem::temp_directory_path() / "test_msg_structure_bob.db").string() };
+
+  const std::string plaintext = "Test message structure";
+  const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
+
+  auto encrypted_bytes = fixture.alice_bridge->encrypt_message(fixture.bob_rdx, message_bytes);
+
+  std::string hex_content;
+  for (const auto &byte : encrypted_bytes) { hex_content += std::format("{:02x}", byte); }
+
+  constexpr std::uint32_t test_timestamp = 1234567890;
+  const auto signed_event_json =
+    fixture.alice_bridge->create_and_sign_encrypted_message(fixture.bob_rdx, hex_content, test_timestamp, "test-0.1.0");
+
+  auto event_parsed = nlohmann::json::parse(signed_event_json);
+
+  REQUIRE(event_parsed.contains("pubkey"));
+  const std::string sender_nostr_pubkey = event_parsed["pubkey"].template get<std::string>();
+  REQUIRE(sender_nostr_pubkey.length() == 64);
+
+  REQUIRE(event_parsed.contains("tags"));
+  REQUIRE(event_parsed["tags"].is_array());
+
+  auto p_tag =
+    std::ranges::find_if(event_parsed["tags"], [](const auto &tag) { return tag.is_array() and tag[0] == "p"; });
+  REQUIRE(p_tag != event_parsed["tags"].end());
+
+  const std::string recipient_nostr_pubkey = (*p_tag)[1].template get<std::string>();
+  REQUIRE(recipient_nostr_pubkey.length() == 64);
+  REQUIRE(recipient_nostr_pubkey != sender_nostr_pubkey);
+}
+
+TEST_CASE("received encrypted message can be decrypted using sender's RDX identity",
+  "[session_orchestrator][messages][decrypt]")
+{
+  const two_bridge_fixture fixture{ (std::filesystem::temp_directory_path() / "test_decrypt_rdx_alice.db").string(),
+    (std::filesystem::temp_directory_path() / "test_decrypt_rdx_bob.db").string() };
+
+  const std::string plaintext = "Decrypt test message";
+  const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
+
+  auto encrypted_bytes = fixture.alice_bridge->encrypt_message(fixture.bob_rdx, message_bytes);
+
+  std::string hex_content;
+  for (const auto &byte : encrypted_bytes) { hex_content += std::format("{:02x}", byte); }
+
+  constexpr std::uint32_t test_timestamp = 1234567890;
+  const auto signed_event_json =
+    fixture.alice_bridge->create_and_sign_encrypted_message(fixture.bob_rdx, hex_content, test_timestamp, "test-0.1.0");
+
+  auto event_parsed = nlohmann::json::parse(signed_event_json);
+  const std::string alice_nostr_pubkey = event_parsed["pubkey"].template get<std::string>();
+
+  auto alice_contact = fixture.bob_bridge->lookup_contact(alice_nostr_pubkey);
+  REQUIRE(alice_contact.rdx_fingerprint == fixture.alice_rdx);
+  REQUIRE(alice_contact.user_alias == "alice");
+
+  std::vector<uint8_t> encrypted_bytes_from_event;
+  const std::string content_hex = event_parsed["content"].template get<std::string>();
+  constexpr int hex_base = 16;
+  for (size_t i = 0; i < content_hex.length(); i += 2) {
+    auto byte_string = content_hex.substr(i, 2);
+    auto byte_value = static_cast<uint8_t>(std::stoul(byte_string, nullptr, hex_base));
+    encrypted_bytes_from_event.push_back(byte_value);
+  }
+
+  auto decrypted_bytes = fixture.bob_bridge->decrypt_message(fixture.alice_rdx, encrypted_bytes_from_event);
+
+  const std::string decrypted_content(decrypted_bytes.begin(), decrypted_bytes.end());
+  REQUIRE(decrypted_content == plaintext);
+}
+
+TEST_CASE("received encrypted message produces message_received event with correct sender identification",
+  "[session_orchestrator][messages][sender]")
+{
+  const two_bridge_fixture fixture{ (std::filesystem::temp_directory_path() / "test_sender_id_alice.db").string(),
+    (std::filesystem::temp_directory_path() / "test_sender_id_bob.db").string() };
+
+  const std::string plaintext = "Sender identification test";
+  const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
+
+  auto encrypted_bytes = fixture.alice_bridge->encrypt_message(fixture.bob_rdx, message_bytes);
+
+  std::string hex_content;
+  for (const auto &byte : encrypted_bytes) { hex_content += std::format("{:02x}", byte); }
+
+  constexpr std::uint32_t test_timestamp = 1234567890;
+  const auto signed_event_json =
+    fixture.alice_bridge->create_and_sign_encrypted_message(fixture.bob_rdx, hex_content, test_timestamp, "test-0.1.0");
+
+  auto event_parsed = nlohmann::json::parse(signed_event_json);
+
+  const nlohmann::json nostr_event_message = nlohmann::json::array({ "EVENT", "test_sub_id", event_parsed });
+  const std::string nostr_message_json = nostr_event_message.dump();
+
+  fixture.bob_in->push(core::events::transport::bytes_received{ .bytes = string_to_bytes(nostr_message_json) });
+  boost::asio::co_spawn(*fixture.bob_io, fixture.bob_orch->run_once(), boost::asio::detached);
+  fixture.bob_io->run();
+
+  REQUIRE_FALSE(fixture.bob_presentation_out->empty());
+  REQUIRE(fixture.bob_presentation_out->size() == 1);
+
+  fixture.bob_io->restart();
+  auto main_future =
+    boost::asio::co_spawn(*fixture.bob_io, fixture.bob_presentation_out->pop(), boost::asio::use_future);
+  fixture.bob_io->run();
+  auto main_event = main_future.get();
+
+  REQUIRE(std::holds_alternative<events::message_received>(main_event));
+
+  const auto &msg = std::get<events::message_received>(main_event);
+  REQUIRE(msg.content == plaintext);
+  REQUIRE(msg.sender_rdx == fixture.alice_rdx);
+}
+
 }// namespace radix_relay::core::test

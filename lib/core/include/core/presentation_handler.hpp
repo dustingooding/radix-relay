@@ -16,7 +16,8 @@ struct presentation_handler
 
   auto handle(const events::message_received &evt) const -> void
   {
-    emit("Message from {}: {}\n", evt.sender_rdx, evt.content);
+    const auto &sender_display = evt.sender_alias.empty() ? evt.sender_rdx : evt.sender_alias;
+    emit("Message from {}: {}\n", sender_display, evt.content);
   }
 
   auto handle(const events::session_established &evt) const -> void
