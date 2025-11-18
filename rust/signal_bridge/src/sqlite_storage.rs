@@ -87,6 +87,15 @@ impl SqliteStorage {
                  ON contacts(nostr_pubkey)",
                 [],
             )?;
+
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+                )",
+                [],
+            )?;
         }
 
         self.session_store = Some(SqliteSessionStore::new(self.connection.clone()));
@@ -107,6 +116,30 @@ impl SqliteStorage {
 
     pub fn connection(&self) -> Arc<Mutex<Connection>> {
         self.connection.clone()
+    }
+
+    pub fn get_last_message_timestamp(&self) -> Result<u64, Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        let mut stmt =
+            conn.prepare("SELECT value FROM settings WHERE key = 'last_message_timestamp'")?;
+
+        match stmt.query_row([], |row| row.get::<_, String>(0)) {
+            Ok(value_str) => Ok(value_str.parse::<u64>()?),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0),
+            Err(e) => Err(Box::new(e)),
+        }
+    }
+
+    pub fn set_last_message_timestamp(
+        &mut self,
+        timestamp: u64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('last_message_timestamp', ?1, strftime('%s', 'now'))",
+            [timestamp.to_string()],
+        )?;
+        Ok(())
     }
 }
 

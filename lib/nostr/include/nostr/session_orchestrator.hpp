@@ -262,7 +262,7 @@ private:
     const auto subscription_id = core::uuid_generator::generate();
     nostr::protocol::validate_subscription_id(subscription_id);
 
-    auto subscription_json = bridge_->create_subscription_for_self(subscription_id);
+    auto subscription_json = bridge_->create_subscription_for_self(subscription_id, 0);
     handle(core::events::subscribe{ .subscription_json = subscription_json });
   }
 
@@ -394,9 +394,27 @@ private:
           handler_.handle(evt_inner);
         }
       } catch (const std::exception &e) {
-        spdlog::warn("[session_orchestrator] Failed to parse message: {} - Raw: {}", e.what(), json_str);
-        nostr::events::incoming::unknown_protocol evt_inner{ json_str };
-        handler_.handle(evt_inner);
+        std::string error_msg(e.what());
+        if (error_msg.find("old counter") != std::string::npos
+            or error_msg.find("message with old") != std::string::npos) {
+          try {
+            auto parsed = nlohmann::json::parse(json_str);
+            if (parsed.is_array() and parsed.size() >= 3 and parsed[2].contains("pubkey")
+                and parsed[2].contains("id")) {
+              spdlog::debug("[session_orchestrator] Ignored duplicate message from {} (event: {})",
+                parsed[2]["pubkey"].get<std::string>().substr(0, 16),
+                parsed[2]["id"].get<std::string>().substr(0, 16));
+            } else {
+              spdlog::debug("[session_orchestrator] Ignored duplicate message: {}", error_msg);
+            }
+          } catch (...) {
+            spdlog::debug("[session_orchestrator] Ignored duplicate message: {}", error_msg);
+          }
+        } else {
+          spdlog::warn("[session_orchestrator] Failed to parse message: {} - Raw: {}", error_msg, json_str);
+          nostr::events::incoming::unknown_protocol evt_inner{ json_str };
+          handler_.handle(evt_inner);
+        }
       }
     } catch (const std::bad_alloc &e) {
       spdlog::error("[session_orchestrator] Failed to process bytes_received event: {}", e.what());

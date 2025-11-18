@@ -49,6 +49,8 @@ public:
 
     const std::string decrypted_content(decrypted_bytes.begin(), decrypted_bytes.end());
 
+    bridge_->update_last_message_timestamp(event.created_at);
+
     return core::events::message_received{
       .sender_rdx = sender_rdx, .content = decrypted_content, .timestamp = event.created_at
     };
@@ -84,7 +86,7 @@ public:
     for (const auto &byte : encrypted_bytes) { hex_content += fmt::format("{:02x}", byte); }
 
     auto signed_event_json = bridge_->create_and_sign_encrypted_message(
-      cmd.peer, hex_content, static_cast<std::uint32_t>(std::time(nullptr)), "0.1.0");
+      cmd.peer, hex_content, static_cast<std::uint32_t>(std::time(nullptr)), std::string{ cmake::project_version });
 
     auto event_json = nlohmann::json::parse(signed_event_json);
     const std::string event_id = event_json["id"].template get<std::string>();

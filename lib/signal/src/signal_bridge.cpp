@@ -99,10 +99,17 @@ auto bridge::sign_nostr_event(const std::string &event_json) const -> std::strin
   return std::string(signed_event);
 }
 
-auto bridge::create_subscription_for_self(const std::string &subscription_id) const -> std::string
+auto bridge::create_subscription_for_self(const std::string &subscription_id, std::uint64_t since_timestamp) const
+  -> std::string
 {
-  auto subscription_json = radix_relay::create_subscription_for_self(*bridge_, subscription_id.c_str());
+  auto subscription_json =
+    radix_relay::create_subscription_for_self(*bridge_, subscription_id.c_str(), since_timestamp);
   return std::string(subscription_json);
+}
+
+auto bridge::update_last_message_timestamp(std::uint64_t timestamp) const -> void
+{
+  radix_relay::update_last_message_timestamp(*bridge_, timestamp);
 }
 
 }// namespace radix_relay::signal

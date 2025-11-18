@@ -832,4 +832,79 @@ TEST_CASE("session_orchestrator establishes session when trusting discovered ide
   REQUIRE(contacts[0].has_active_session);
 }
 
+TEST_CASE("session_orchestrator ignores duplicate encrypted messages", "[session_orchestrator][messages][duplicate]")
+{
+  const two_bridge_fixture fixture{ (std::filesystem::temp_directory_path() / "test_duplicate_msg_alice.db").string(),
+    (std::filesystem::temp_directory_path() / "test_duplicate_msg_bob.db").string() };
+
+  const std::string plaintext = "Test message";
+  const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
+
+  auto encrypted_bytes = fixture.alice_bridge->encrypt_message(fixture.bob_rdx, message_bytes);
+
+  std::string hex_content;
+  for (const auto &byte : encrypted_bytes) { hex_content += std::format("{:02x}", byte); }
+
+  constexpr std::uint64_t test_timestamp = 1234567890;
+  constexpr std::uint32_t encrypted_message_kind = 40001;
+  const nlohmann::json event_json = { { "id", "duplicate_test_event_id" },
+    { "pubkey", fixture.alice_rdx },
+    { "created_at", test_timestamp },
+    { "kind", encrypted_message_kind },
+    { "content", hex_content },
+    { "sig", "signature" },
+    { "tags", nlohmann::json::array({ nlohmann::json::array({ "p", fixture.alice_rdx }) }) } };
+
+  const std::string nostr_message_json = nlohmann::json::array({ "EVENT", "sub_id", event_json }).dump();
+
+  fixture.bob_in->push(core::events::transport::bytes_received{ .bytes = string_to_bytes(nostr_message_json) });
+  boost::asio::co_spawn(*fixture.bob_io, fixture.bob_orch->run_once(), boost::asio::detached);
+  fixture.bob_io->run();
+  fixture.bob_io->restart();
+
+  REQUIRE_FALSE(fixture.bob_presentation_out->empty());
+  auto first_response = fixture.bob_presentation_out->try_pop();
+  REQUIRE(first_response.has_value());
+  if (first_response.has_value()) { REQUIRE(std::holds_alternative<events::message_received>(*first_response)); }
+
+  fixture.bob_in->push(core::events::transport::bytes_received{ .bytes = string_to_bytes(nostr_message_json) });
+  boost::asio::co_spawn(*fixture.bob_io, fixture.bob_orch->run_once(), boost::asio::detached);
+  fixture.bob_io->run();
+
+  REQUIRE(fixture.bob_presentation_out->empty());
+}
+
+TEST_CASE("session_orchestrator includes since filter when subscribing to messages",
+  "[session_orchestrator][subscribe][since]")
+{
+  const queue_based_fixture fixture((std::filesystem::temp_directory_path() / "test_subscribe_since.db").string());
+
+  constexpr std::uint64_t test_timestamp = 1700000000;
+
+  fixture.bridge->update_last_message_timestamp(test_timestamp);
+
+  fixture.in_queue->push(events::subscribe_messages{});
+  boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
+  fixture.io_context->run();
+  fixture.io_context->restart();
+  fixture.io_context->run();
+
+  REQUIRE(not fixture.transport_out_queue->empty());
+  auto transport_cmd = fixture.transport_out_queue->try_pop();
+  REQUIRE(transport_cmd.has_value());
+
+  if (transport_cmd.has_value()) {
+    REQUIRE(std::holds_alternative<core::events::transport::send>(transport_cmd.value()));
+
+    const auto &send_cmd = std::get<core::events::transport::send>(transport_cmd.value());
+    const std::string json_str = bytes_to_string(send_cmd.bytes);
+
+    auto parsed = nlohmann::json::parse(json_str);
+    REQUIRE(parsed.is_array());
+    REQUIRE(parsed[0] == "REQ");
+    REQUIRE(parsed[2].contains("since"));
+    REQUIRE(parsed[2]["since"] == test_timestamp);
+  }
+}
+
 }// namespace radix_relay::core::test
