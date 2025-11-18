@@ -115,16 +115,13 @@ auto event_data::create_bundle_announcement(const std::string &sender_pubkey,
 
 auto event_data::create_encrypted_message(std::uint64_t timestamp,
   const std::string &recipient_pubkey,
-  const std::string &encrypted_payload,
-  const std::string &session_id) -> event_data
+  const std::string &encrypted_payload) -> event_data
 {
   return { .id = "",
     .pubkey = "",
     .created_at = timestamp,
     .kind = kind::encrypted_message,
-    .tags = { { "p", recipient_pubkey },
-      { "radix_peer", session_id },
-      { "radix_version", std::string{ radix_relay::cmake::project_version } } },
+    .tags = { { "p", recipient_pubkey }, { "radix_version", std::string{ radix_relay::cmake::project_version } } },
     .content = encrypted_payload,
     .sig = "" };
 }

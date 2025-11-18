@@ -19,6 +19,11 @@ namespace incoming {
   struct encrypted_message : protocol::event_data
   {
     explicit encrypted_message(const protocol::event_data &event) : protocol::event_data(event) {}
+
+    // Nostr Event (kind 40001):
+    // pubkey: Sender's Nostr public key (32-byte hex)
+    // tags.p: Recipient's Nostr public key
+    // content: Hex-encoded encrypted message bytes
   };
 
   struct session_request : protocol::event_data

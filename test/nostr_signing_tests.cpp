@@ -26,7 +26,7 @@ TEST_CASE("Nostr Event Signing via Signal Bridge", "[nostr][signing]")
       auto signal_bridge = std::make_shared<radix_relay::signal::bridge>(db_path);
 
       auto event = radix_relay::nostr::protocol::event_data::create_encrypted_message(
-        test_timestamp, "test_recipient", "encrypted_test_content", "test_session");
+        test_timestamp, "test_recipient", "encrypted_test_content");
 
       auto json_bytes = event.serialize();
       std::string event_json;
@@ -67,9 +67,9 @@ TEST_CASE("Nostr Event Signing via Signal Bridge", "[nostr][signing]")
       auto signal_bridge = std::make_shared<radix_relay::signal::bridge>(db_path);
 
       auto event1 = radix_relay::nostr::protocol::event_data::create_encrypted_message(
-        test_timestamp, "test_recipient", "test_content", "test_session");
+        test_timestamp, "test_recipient", "test_content");
       auto event2 = radix_relay::nostr::protocol::event_data::create_encrypted_message(
-        test_timestamp, "test_recipient", "test_content", "test_session");
+        test_timestamp, "test_recipient", "test_content");
 
       auto json1_bytes = event1.serialize();
       auto json2_bytes = event2.serialize();

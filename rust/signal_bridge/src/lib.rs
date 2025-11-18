@@ -1063,7 +1063,6 @@ pub fn create_and_sign_encrypted_message(
         "kind": 40001,
         "tags": [
             ["p", recipient_pubkey],
-            ["radix_peer", session_id],
             ["radix_version", project_version]
         ],
         "content": encrypted_content,
@@ -1918,8 +1917,7 @@ mod tests {
             "created_at": 1234567890,
             "kind": 40001,
             "tags": [
-                ["p", "recipient_pubkey"],
-                ["radix_peer", "session_id"]
+                ["p", "recipient_pubkey"]
             ],
             "content": "encrypted_content_here",
             "sig": ""
@@ -1929,10 +1927,7 @@ mod tests {
             .sign_nostr_event(
                 1234567890,
                 40001,
-                vec![
-                    vec!["p".to_string(), "recipient_pubkey".to_string()],
-                    vec!["radix_peer".to_string(), "session_id".to_string()],
-                ],
+                vec![vec!["p".to_string(), "recipient_pubkey".to_string()]],
                 "encrypted_content_here",
             )
             .await;
