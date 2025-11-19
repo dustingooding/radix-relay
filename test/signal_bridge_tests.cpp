@@ -223,3 +223,33 @@ TEST_CASE("signal::bridge generate_empty_bundle_announcement creates valid empty
   }
   std::filesystem::remove(db_path);
 }
+
+TEST_CASE("signal::bridge key maintenance", "[signal][wrapper][maintenance]")
+{
+  auto timestamp =
+    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  auto db_path = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                  / ("test_maintenance_" + std::to_string(timestamp) + ".db"))
+                   .string();
+
+  SECTION("perform_key_maintenance returns correct flags")
+  {
+    {
+      auto wrapper = radix_relay::signal::bridge(db_path);
+
+      // First call - bridge initializes with 100 pre-keys (>= 50 MIN_PRE_KEY_COUNT)
+      // and fresh signed/kyber keys, so no action is needed
+      auto result = wrapper.perform_key_maintenance();
+      REQUIRE_FALSE(result.signed_pre_key_rotated);
+      REQUIRE_FALSE(result.kyber_pre_key_rotated);
+      REQUIRE_FALSE(result.pre_keys_replenished);
+
+      // Second call should also not need any action
+      auto result2 = wrapper.perform_key_maintenance();
+      REQUIRE_FALSE(result2.signed_pre_key_rotated);
+      REQUIRE_FALSE(result2.kyber_pre_key_rotated);
+      REQUIRE_FALSE(result2.pre_keys_replenished);
+    }
+    std::filesystem::remove(db_path);
+  }
+}

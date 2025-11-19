@@ -18,8 +18,13 @@ pub struct MemorySessionStore {
     sessions: Arc<Mutex<HashMap<String, SessionRecord>>>,
 }
 
+impl Default for MemorySessionStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemorySessionStore {
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -79,8 +84,13 @@ pub struct MemoryIdentityStore {
     local_registration_id: Arc<Mutex<Option<u32>>>,
 }
 
+impl Default for MemoryIdentityStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryIdentityStore {
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             identity_keys: Arc::new(Mutex::new(HashMap::new())),
@@ -217,8 +227,13 @@ pub struct MemoryPreKeyStore {
     pre_keys: Arc<Mutex<HashMap<u32, KeyPair>>>,
 }
 
+impl Default for MemoryPreKeyStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryPreKeyStore {
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             pre_keys: Arc::new(Mutex::new(HashMap::new())),
@@ -266,14 +281,30 @@ impl ExtendedPreKeyStore for MemoryPreKeyStore {
         store.clear();
         Ok(())
     }
+
+    async fn get_max_pre_key_id(&self) -> Result<Option<u32>, Box<dyn std::error::Error>> {
+        let store = self.pre_keys.lock().await;
+        Ok(store.keys().max().copied())
+    }
+
+    async fn delete_pre_key(&mut self, id: PreKeyId) -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = self.pre_keys.lock().await;
+        store.remove(&u32::from(id));
+        Ok(())
+    }
 }
 
 pub struct MemorySignedPreKeyStore {
     signed_pre_keys: Arc<Mutex<HashMap<u32, SignedPreKeyRecord>>>,
 }
 
+impl Default for MemorySignedPreKeyStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemorySignedPreKeyStore {
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             signed_pre_keys: Arc::new(Mutex::new(HashMap::new())),
@@ -317,14 +348,49 @@ impl ExtendedSignedPreKeyStore for MemorySignedPreKeyStore {
         store.clear();
         Ok(())
     }
+
+    async fn get_max_signed_pre_key_id(&self) -> Result<Option<u32>, Box<dyn std::error::Error>> {
+        let store = self.signed_pre_keys.lock().await;
+        Ok(store.keys().max().copied())
+    }
+
+    async fn delete_signed_pre_key(
+        &mut self,
+        id: SignedPreKeyId,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = self.signed_pre_keys.lock().await;
+        store.remove(&u32::from(id));
+        Ok(())
+    }
+
+    async fn get_signed_pre_keys_older_than(
+        &self,
+        timestamp_millis: u64,
+    ) -> Result<Vec<SignedPreKeyId>, Box<dyn std::error::Error>> {
+        let store = self.signed_pre_keys.lock().await;
+        let mut expired = Vec::new();
+        for (id, record) in store.iter() {
+            if let Ok(ts) = record.timestamp() {
+                if ts.epoch_millis() < timestamp_millis {
+                    expired.push(SignedPreKeyId::from(*id));
+                }
+            }
+        }
+        Ok(expired)
+    }
 }
 
 pub struct MemoryKyberPreKeyStore {
     kyber_pre_keys: Arc<Mutex<HashMap<u32, KyberPreKeyRecord>>>,
 }
 
+impl Default for MemoryKyberPreKeyStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryKyberPreKeyStore {
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             kyber_pre_keys: Arc::new(Mutex::new(HashMap::new())),
@@ -377,9 +443,38 @@ impl ExtendedKyberPreKeyStore for MemoryKyberPreKeyStore {
         store.clear();
         Ok(())
     }
+
+    async fn get_max_kyber_pre_key_id(&self) -> Result<Option<u32>, Box<dyn std::error::Error>> {
+        let store = self.kyber_pre_keys.lock().await;
+        Ok(store.keys().max().copied())
+    }
+
+    async fn delete_kyber_pre_key(
+        &mut self,
+        id: KyberPreKeyId,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut store = self.kyber_pre_keys.lock().await;
+        store.remove(&u32::from(id));
+        Ok(())
+    }
+
+    async fn get_kyber_pre_keys_older_than(
+        &self,
+        timestamp_millis: u64,
+    ) -> Result<Vec<KyberPreKeyId>, Box<dyn std::error::Error>> {
+        let store = self.kyber_pre_keys.lock().await;
+        let mut expired = Vec::new();
+        for (id, record) in store.iter() {
+            if let Ok(ts) = record.timestamp() {
+                if ts.epoch_millis() < timestamp_millis {
+                    expired.push(KyberPreKeyId::from(*id));
+                }
+            }
+        }
+        Ok(expired)
+    }
 }
 
-#[allow(dead_code)]
 pub struct MemoryStorage {
     pub session_store: MemorySessionStore,
     pub identity_store: MemoryIdentityStore,
@@ -388,8 +483,13 @@ pub struct MemoryStorage {
     pub kyber_pre_key_store: MemoryKyberPreKeyStore,
 }
 
+impl Default for MemoryStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryStorage {
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             session_store: MemorySessionStore::new(),
@@ -469,7 +569,6 @@ impl ExtendedStorageOps for MemoryStorage {
 }
 
 impl MemoryStorage {
-    #[allow(dead_code)]
     pub async fn establish_session_from_bundle(
         &mut self,
         address: &ProtocolAddress,
@@ -492,7 +591,6 @@ impl MemoryStorage {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub async fn encrypt_message(
         &mut self,
         remote_address: &ProtocolAddress,
@@ -511,7 +609,6 @@ impl MemoryStorage {
         .await
     }
 
-    #[allow(dead_code)]
     pub async fn decrypt_message(
         &mut self,
         remote_address: &ProtocolAddress,

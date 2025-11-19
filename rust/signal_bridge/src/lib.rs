@@ -5,12 +5,13 @@
 
 mod contact_manager;
 mod encryption_trait;
+pub mod key_rotation;
 mod keys;
-mod memory_storage;
+pub mod memory_storage;
 mod nostr_identity;
 mod session_trait;
-mod sqlite_storage;
-mod storage_trait;
+pub mod sqlite_storage;
+pub mod storage_trait;
 
 #[cfg(test)]
 mod session;
@@ -19,13 +20,31 @@ mod session;
 mod encryption;
 
 pub use contact_manager::{ContactInfo, ContactManager};
-pub use nostr_identity::NostrIdentity;
+pub use key_rotation::{
+    cleanup_expired_kyber_pre_keys, cleanup_expired_signed_pre_keys, consume_pre_key,
+    kyber_pre_key_needs_rotation, replenish_pre_keys, rotate_kyber_pre_key, rotate_signed_pre_key,
+    signed_pre_key_needs_rotation, GRACE_PERIOD_SECS, MIN_PRE_KEY_COUNT, REPLENISH_COUNT,
+    ROTATION_INTERVAL_SECS,
+};
 
-use crate::sqlite_storage::SqliteStorage;
-use crate::storage_trait::{
+/// Result of key maintenance operations indicating which keys were rotated/replenished
+#[derive(Debug, Clone, Default)]
+pub struct KeyMaintenanceResult {
+    /// True if a new signed pre-key was generated
+    pub signed_pre_key_rotated: bool,
+    /// True if a new Kyber pre-key was generated
+    pub kyber_pre_key_rotated: bool,
+    /// True if one-time pre-keys were replenished
+    pub pre_keys_replenished: bool,
+}
+pub use memory_storage::MemoryStorage;
+pub use nostr_identity::NostrIdentity;
+pub use sqlite_storage::SqliteStorage;
+pub use storage_trait::{
     ExtendedIdentityStore, ExtendedKyberPreKeyStore, ExtendedPreKeyStore, ExtendedSessionStore,
     ExtendedSignedPreKeyStore, ExtendedStorageOps, SignalStorageContainer,
 };
+
 use base64::Engine;
 use libsignal_protocol::{
     CiphertextMessage, DeviceId, IdentityKeyPair, IdentityKeyStore, ProtocolAddress, SessionStore,
@@ -50,7 +69,7 @@ struct SerializablePreKeyBundle {
 }
 
 pub struct SignalBridge {
-    storage: SqliteStorage,
+    pub(crate) storage: SqliteStorage,
     contact_manager: ContactManager,
 }
 
@@ -86,7 +105,8 @@ impl SignalBridge {
 
         let current_pre_key_count = storage.pre_key_store().pre_key_count().await;
         if current_pre_key_count < 5 {
-            let pre_keys = generate_pre_keys(1, 10).await?;
+            // Generate 100 pre-keys (2x MIN_PRE_KEY_COUNT) to provide a comfortable buffer
+            let pre_keys = generate_pre_keys(1, 100).await?;
             for (key_id, key_pair) in &pre_keys {
                 let record = PreKeyRecord::new((*key_id).into(), key_pair);
                 storage
@@ -745,6 +765,59 @@ impl SignalBridge {
             .list_contacts(self.storage.session_store())
             .await
     }
+
+    /// Perform periodic key maintenance including rotation, cleanup, and replenishment.
+    ///
+    /// This should be called periodically (e.g., hourly) to maintain proper key hygiene.
+    /// It will:
+    /// - Rotate signed pre-keys if they are older than the rotation interval
+    /// - Rotate Kyber pre-keys if they are older than the rotation interval
+    /// - Clean up expired signed pre-keys past the grace period
+    /// - Replenish one-time pre-keys if the count drops below the threshold
+    ///
+    /// Returns a `KeyMaintenanceResult` indicating which keys were rotated/replenished.
+    pub async fn perform_key_maintenance(
+        &mut self,
+    ) -> Result<KeyMaintenanceResult, SignalBridgeError> {
+        use crate::key_rotation::{
+            cleanup_expired_kyber_pre_keys, cleanup_expired_signed_pre_keys,
+            kyber_pre_key_needs_rotation, replenish_pre_keys, rotate_kyber_pre_key,
+            rotate_signed_pre_key, signed_pre_key_needs_rotation, MIN_PRE_KEY_COUNT,
+        };
+
+        let mut result = KeyMaintenanceResult::default();
+
+        let identity_key_pair = self
+            .storage
+            .identity_store()
+            .get_identity_key_pair()
+            .await?;
+
+        // Check and rotate signed pre-key if needed
+        if signed_pre_key_needs_rotation(&mut self.storage).await? {
+            rotate_signed_pre_key(&mut self.storage, &identity_key_pair).await?;
+            result.signed_pre_key_rotated = true;
+        }
+
+        // Check and rotate Kyber pre-key if needed (independently)
+        if kyber_pre_key_needs_rotation(&mut self.storage).await? {
+            rotate_kyber_pre_key(&mut self.storage, &identity_key_pair).await?;
+            result.kyber_pre_key_rotated = true;
+        }
+
+        // Clean up expired keys past grace period
+        cleanup_expired_signed_pre_keys(&mut self.storage).await?;
+        cleanup_expired_kyber_pre_keys(&mut self.storage).await?;
+
+        // Replenish one-time pre-keys if count is low
+        let pre_key_count = self.storage.pre_key_store().pre_key_count().await;
+        if pre_key_count < MIN_PRE_KEY_COUNT {
+            replenish_pre_keys(&mut self.storage).await?;
+            result.pre_keys_replenished = true;
+        }
+
+        Ok(result)
+    }
 }
 
 impl Drop for SignalBridge {
@@ -825,6 +898,13 @@ mod ffi {
         pub nostr_pubkey: String,
         pub user_alias: String,
         pub has_active_session: bool,
+    }
+
+    #[derive(Clone, Debug, Default)]
+    pub struct KeyMaintenanceResult {
+        pub signed_pre_key_rotated: bool,
+        pub kyber_pre_key_rotated: bool,
+        pub pre_keys_replenished: bool,
     }
 
     extern "Rust" {
@@ -915,6 +995,8 @@ mod ffi {
             bridge: &mut SignalBridge,
             bundle_base64: &str,
         ) -> Result<String>;
+
+        fn perform_key_maintenance(bridge: &mut SignalBridge) -> Result<KeyMaintenanceResult>;
     }
 }
 
@@ -991,6 +1073,21 @@ pub fn reset_identity(bridge: &mut SignalBridge) -> Result<(), Box<dyn std::erro
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     rt.block_on(bridge.reset_identity())
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
+}
+
+pub fn perform_key_maintenance(
+    bridge: &mut SignalBridge,
+) -> Result<ffi::KeyMaintenanceResult, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+    let result = rt
+        .block_on(bridge.perform_key_maintenance())
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+    Ok(ffi::KeyMaintenanceResult {
+        signed_pre_key_rotated: result.signed_pre_key_rotated,
+        kyber_pre_key_rotated: result.kyber_pre_key_rotated,
+        pre_keys_replenished: result.pre_keys_replenished,
+    })
 }
 
 pub fn generate_node_fingerprint(
@@ -2413,5 +2510,310 @@ mod tests {
         );
 
         let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[tokio::test]
+    async fn test_perform_key_maintenance_replenishes_pre_keys(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::key_rotation::MIN_PRE_KEY_COUNT;
+        use crate::SignalBridge;
+
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let db_path = temp_dir.join(format!("test_maintenance_prekeys_{}.db", timestamp));
+        let mut bridge = SignalBridge::new(db_path.to_str().unwrap()).await?;
+
+        // Get initial pre-key count
+        let initial_count = bridge.storage.pre_key_store().pre_key_count().await;
+
+        // Perform maintenance - should not change count if above threshold
+        bridge.perform_key_maintenance().await?;
+
+        let after_maintenance_count = bridge.storage.pre_key_store().pre_key_count().await;
+        assert!(
+            after_maintenance_count >= initial_count,
+            "Pre-key count should not decrease after maintenance"
+        );
+
+        // Clear pre-keys to below threshold and verify replenishment
+        bridge.storage.pre_key_store().clear_all_pre_keys().await?;
+        let empty_count = bridge.storage.pre_key_store().pre_key_count().await;
+        assert_eq!(empty_count, 0, "Pre-keys should be cleared");
+
+        // Perform maintenance - should replenish
+        bridge.perform_key_maintenance().await?;
+
+        let replenished_count = bridge.storage.pre_key_store().pre_key_count().await;
+        assert!(
+            replenished_count >= MIN_PRE_KEY_COUNT,
+            "Pre-keys should be replenished to at least MIN_PRE_KEY_COUNT ({}), got {}",
+            MIN_PRE_KEY_COUNT,
+            replenished_count
+        );
+
+        let _ = std::fs::remove_file(&db_path);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_perform_key_maintenance_no_rotation_for_fresh_keys(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::SignalBridge;
+
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let db_path = temp_dir.join(format!("test_maintenance_fresh_{}.db", timestamp));
+        let mut bridge = SignalBridge::new(db_path.to_str().unwrap()).await?;
+
+        // Get initial signed pre-key count
+        let initial_signed_count = bridge
+            .storage
+            .signed_pre_key_store()
+            .signed_pre_key_count()
+            .await;
+        let initial_kyber_count = bridge
+            .storage
+            .kyber_pre_key_store()
+            .kyber_pre_key_count()
+            .await;
+
+        // Perform maintenance - fresh keys should not be rotated
+        bridge.perform_key_maintenance().await?;
+
+        let after_signed_count = bridge
+            .storage
+            .signed_pre_key_store()
+            .signed_pre_key_count()
+            .await;
+        let after_kyber_count = bridge
+            .storage
+            .kyber_pre_key_store()
+            .kyber_pre_key_count()
+            .await;
+
+        // Fresh keys should not be rotated
+        assert_eq!(
+            initial_signed_count, after_signed_count,
+            "Fresh signed pre-keys should not be rotated"
+        );
+        assert_eq!(
+            initial_kyber_count, after_kyber_count,
+            "Fresh Kyber pre-keys should not be rotated"
+        );
+
+        let _ = std::fs::remove_file(&db_path);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_perform_key_maintenance_idempotent() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::SignalBridge;
+
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let db_path = temp_dir.join(format!("test_maintenance_idempotent_{}.db", timestamp));
+        let mut bridge = SignalBridge::new(db_path.to_str().unwrap()).await?;
+
+        // Perform maintenance multiple times
+        bridge.perform_key_maintenance().await?;
+
+        let first_pre_key_count = bridge.storage.pre_key_store().pre_key_count().await;
+        let first_signed_count = bridge
+            .storage
+            .signed_pre_key_store()
+            .signed_pre_key_count()
+            .await;
+
+        bridge.perform_key_maintenance().await?;
+
+        let second_pre_key_count = bridge.storage.pre_key_store().pre_key_count().await;
+        let second_signed_count = bridge
+            .storage
+            .signed_pre_key_store()
+            .signed_pre_key_count()
+            .await;
+
+        // Consecutive maintenance calls should not change counts (idempotent)
+        assert_eq!(
+            first_pre_key_count, second_pre_key_count,
+            "Pre-key count should be stable between maintenance calls"
+        );
+        assert_eq!(
+            first_signed_count, second_signed_count,
+            "Signed pre-key count should be stable between maintenance calls"
+        );
+
+        let _ = std::fs::remove_file(&db_path);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_perform_key_maintenance_rotates_kyber_keys(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::key_rotation::ROTATION_INTERVAL_SECS;
+        use crate::SignalBridge;
+        use libsignal_protocol::{
+            kem, GenericSignedPreKey, KyberPreKeyId, KyberPreKeyRecord, KyberPreKeyStore, Timestamp,
+        };
+
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let db_path = temp_dir.join(format!("test_maintenance_kyber_{}.db", timestamp));
+        let mut bridge = SignalBridge::new(db_path.to_str().unwrap()).await?;
+
+        // Get initial Kyber key count
+        let initial_kyber_count = bridge
+            .storage
+            .kyber_pre_key_store()
+            .kyber_pre_key_count()
+            .await;
+        assert!(initial_kyber_count >= 1, "Should have initial Kyber key");
+
+        // Create an old Kyber key to simulate needing rotation
+        let identity_key_pair = bridge
+            .storage
+            .identity_store()
+            .get_identity_key_pair()
+            .await?;
+
+        let old_timestamp =
+            SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() - (ROTATION_INTERVAL_SECS + 1);
+
+        let mut rng = rand::rng();
+        let kyber_keypair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
+        let kyber_signature = identity_key_pair
+            .private_key()
+            .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
+        let old_kyber_key = KyberPreKeyRecord::new(
+            KyberPreKeyId::from(999u32),
+            Timestamp::from_epoch_millis(old_timestamp * 1000),
+            &kyber_keypair,
+            &kyber_signature,
+        );
+
+        // Save the old key as the "current" one by giving it a high ID
+        bridge
+            .storage
+            .kyber_pre_key_store()
+            .save_kyber_pre_key(KyberPreKeyId::from(999u32), &old_kyber_key)
+            .await?;
+
+        // Get the max ID before maintenance
+        let max_id_before = bridge
+            .storage
+            .kyber_pre_key_store()
+            .get_max_kyber_pre_key_id()
+            .await?
+            .unwrap();
+
+        // Perform maintenance - should rotate Kyber key
+        bridge.perform_key_maintenance().await?;
+
+        // Get the max ID after maintenance
+        let max_id_after = bridge
+            .storage
+            .kyber_pre_key_store()
+            .get_max_kyber_pre_key_id()
+            .await?
+            .unwrap();
+
+        // The max ID should have increased (new key was generated)
+        assert!(
+            max_id_after > max_id_before,
+            "Max Kyber key ID should increase after rotation (before: {}, after: {})",
+            max_id_before,
+            max_id_after
+        );
+
+        let _ = std::fs::remove_file(&db_path);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_perform_key_maintenance_cleans_up_expired_kyber_keys(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use crate::key_rotation::GRACE_PERIOD_SECS;
+        use crate::SignalBridge;
+        use libsignal_protocol::{
+            kem, GenericSignedPreKey, KyberPreKeyId, KyberPreKeyRecord, KyberPreKeyStore, Timestamp,
+        };
+
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let db_path = temp_dir.join(format!("test_maintenance_kyber_cleanup_{}.db", timestamp));
+        let mut bridge = SignalBridge::new(db_path.to_str().unwrap()).await?;
+
+        let identity_key_pair = bridge
+            .storage
+            .identity_store()
+            .get_identity_key_pair()
+            .await?;
+
+        // Create an expired Kyber key (past grace period) with low ID so it won't trigger rotation check
+        let expired_timestamp =
+            SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() - (GRACE_PERIOD_SECS + 1);
+
+        let mut rng = rand::rng();
+        let kyber_keypair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
+        let kyber_signature = identity_key_pair
+            .private_key()
+            .calculate_signature(&kyber_keypair.public_key.serialize(), &mut rng)?;
+        let expired_kyber_key = KyberPreKeyRecord::new(
+            KyberPreKeyId::from(0u32), // Use ID 0 so it's not the max and won't trigger rotation
+            Timestamp::from_epoch_millis(expired_timestamp * 1000),
+            &kyber_keypair,
+            &kyber_signature,
+        );
+
+        bridge
+            .storage
+            .kyber_pre_key_store()
+            .save_kyber_pre_key(KyberPreKeyId::from(0u32), &expired_kyber_key)
+            .await?;
+
+        let before_count = bridge
+            .storage
+            .kyber_pre_key_store()
+            .kyber_pre_key_count()
+            .await;
+        assert!(
+            before_count >= 2,
+            "Should have at least 2 Kyber keys (fresh + expired)"
+        );
+
+        // Perform maintenance - should clean up expired Kyber key
+        bridge.perform_key_maintenance().await?;
+
+        let after_count = bridge
+            .storage
+            .kyber_pre_key_store()
+            .kyber_pre_key_count()
+            .await;
+
+        // Should have fewer Kyber keys after cleanup (expired one removed)
+        assert!(
+            after_count < before_count,
+            "Kyber key count should decrease after cleanup (before: {}, after: {})",
+            before_count,
+            after_count
+        );
+
+        let _ = std::fs::remove_file(&db_path);
+        Ok(())
     }
 }
