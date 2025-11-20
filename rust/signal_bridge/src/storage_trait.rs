@@ -88,16 +88,36 @@ pub trait ExtendedIdentityStore {
 pub trait ExtendedPreKeyStore {
     async fn pre_key_count(&self) -> usize;
     async fn clear_all_pre_keys(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    async fn get_max_pre_key_id(&self) -> Result<Option<u32>, Box<dyn std::error::Error>>;
+    async fn delete_pre_key(&mut self, id: PreKeyId) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 #[async_trait(?Send)]
 pub trait ExtendedSignedPreKeyStore {
     async fn signed_pre_key_count(&self) -> usize;
     async fn clear_all_signed_pre_keys(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    async fn get_max_signed_pre_key_id(&self) -> Result<Option<u32>, Box<dyn std::error::Error>>;
+    async fn delete_signed_pre_key(
+        &mut self,
+        id: SignedPreKeyId,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    async fn get_signed_pre_keys_older_than(
+        &self,
+        timestamp_millis: u64,
+    ) -> Result<Vec<SignedPreKeyId>, Box<dyn std::error::Error>>;
 }
 
 #[async_trait(?Send)]
 pub trait ExtendedKyberPreKeyStore {
     async fn kyber_pre_key_count(&self) -> usize;
     async fn clear_all_kyber_pre_keys(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+    async fn get_max_kyber_pre_key_id(&self) -> Result<Option<u32>, Box<dyn std::error::Error>>;
+    async fn delete_kyber_pre_key(
+        &mut self,
+        id: KyberPreKeyId,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    async fn get_kyber_pre_keys_older_than(
+        &self,
+        timestamp_millis: u64,
+    ) -> Result<Vec<KyberPreKeyId>, Box<dyn std::error::Error>>;
 }

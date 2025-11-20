@@ -774,6 +774,19 @@ impl ExtendedPreKeyStore for SqlitePreKeyStore {
         conn.execute("DELETE FROM pre_keys", [])?;
         Ok(())
     }
+
+    async fn get_max_pre_key_id(&self) -> Result<Option<u32>, Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT MAX(id) FROM pre_keys")?;
+        let max_id: Option<u32> = stmt.query_row([], |row| row.get(0)).ok();
+        Ok(max_id)
+    }
+
+    async fn delete_pre_key(&mut self, id: PreKeyId) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        conn.execute("DELETE FROM pre_keys WHERE id = ?", [u32::from(id)])?;
+        Ok(())
+    }
 }
 
 pub struct SqliteSignedPreKeyStore {
@@ -856,22 +869,24 @@ impl SignedPreKeyStore for SqliteSignedPreKeyStore {
             )
         })?;
 
-        // Set expiration to 30 days from now (Signal Protocol recommendation)
-        let expires_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let record_timestamp_secs = record
+            .timestamp()
             .map_err(|e| {
                 SignalProtocolError::InvalidState(
                     "storage",
-                    format!("Failed to get timestamp: {}", e),
+                    format!("Failed to get record timestamp: {}", e),
                 )
             })?
-            .as_secs()
-            + (30 * 24 * 60 * 60); // 30 days in seconds
+            .epoch_millis()
+            / 1000;
+
+        // Set expiration to 30 days from record creation (Signal Protocol recommendation)
+        let expires_at = record_timestamp_secs + (30 * 24 * 60 * 60); // 30 days in seconds
 
         conn.execute(
             "INSERT OR REPLACE INTO signed_pre_keys (id, key_data, signature, created_at, expires_at, is_current)
-             VALUES (?, ?, ?, strftime('%s', 'now'), ?, FALSE)",
-            rusqlite::params![u32::from(signed_prekey_id), &serialized, &record.signature().map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to get signature: {}", e)))?, expires_at],
+             VALUES (?, ?, ?, ?, ?, FALSE)",
+            rusqlite::params![u32::from(signed_prekey_id), &serialized, &record.signature().map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to get signature: {}", e)))?, record_timestamp_secs as i64, expires_at],
         ).map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to store signed pre key: {}", e)))?;
 
         Ok(())
@@ -896,6 +911,38 @@ impl ExtendedSignedPreKeyStore for SqliteSignedPreKeyStore {
         let conn = self.connection.lock().unwrap();
         conn.execute("DELETE FROM signed_pre_keys", [])?;
         Ok(())
+    }
+
+    async fn get_max_signed_pre_key_id(&self) -> Result<Option<u32>, Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT MAX(id) FROM signed_pre_keys")?;
+        let max_id: Option<u32> = stmt.query_row([], |row| row.get(0)).ok();
+        Ok(max_id)
+    }
+
+    async fn delete_signed_pre_key(
+        &mut self,
+        id: SignedPreKeyId,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        conn.execute("DELETE FROM signed_pre_keys WHERE id = ?", [u32::from(id)])?;
+        Ok(())
+    }
+
+    async fn get_signed_pre_keys_older_than(
+        &self,
+        timestamp_millis: u64,
+    ) -> Result<Vec<SignedPreKeyId>, Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        let timestamp_secs = (timestamp_millis / 1000) as i64;
+        let mut stmt = conn.prepare("SELECT id FROM signed_pre_keys WHERE created_at < ?")?;
+        let ids = stmt
+            .query_map([timestamp_secs], |row| {
+                let id: u32 = row.get(0)?;
+                Ok(SignedPreKeyId::from(id))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
     }
 }
 
@@ -979,22 +1026,25 @@ impl KyberPreKeyStore for SqliteKyberPreKeyStore {
             )
         })?;
 
-        // Set expiration to 30 days from now (Signal Protocol recommendation)
-        let expires_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        // Use the record's timestamp for created_at
+        let record_timestamp_secs = record
+            .timestamp()
             .map_err(|e| {
                 SignalProtocolError::InvalidState(
                     "storage",
                     format!("Failed to get timestamp: {}", e),
                 )
             })?
-            .as_secs()
-            + (30 * 24 * 60 * 60); // 30 days in seconds
+            .epoch_millis()
+            / 1000;
+
+        // Set expiration to 30 days from record creation (Signal Protocol recommendation)
+        let expires_at = record_timestamp_secs + (30 * 24 * 60 * 60); // 30 days in seconds
 
         conn.execute(
             "INSERT OR REPLACE INTO kyber_pre_keys (id, key_data, signature, created_at, expires_at, is_current)
-             VALUES (?, ?, ?, strftime('%s', 'now'), ?, FALSE)",
-            rusqlite::params![u32::from(kyber_prekey_id), &serialized, &record.signature().map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to get signature: {}", e)))?, expires_at],
+             VALUES (?, ?, ?, ?, ?, FALSE)",
+            rusqlite::params![u32::from(kyber_prekey_id), &serialized, &record.signature().map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to get signature: {}", e)))?, record_timestamp_secs as i64, expires_at],
         ).map_err(|e| SignalProtocolError::InvalidState("storage", format!("Failed to store kyber pre key: {}", e)))?;
 
         Ok(())
@@ -1035,6 +1085,38 @@ impl ExtendedKyberPreKeyStore for SqliteKyberPreKeyStore {
         let conn = self.connection.lock().unwrap();
         conn.execute("DELETE FROM kyber_pre_keys", [])?;
         Ok(())
+    }
+
+    async fn get_max_kyber_pre_key_id(&self) -> Result<Option<u32>, Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT MAX(id) FROM kyber_pre_keys")?;
+        let max_id: Option<u32> = stmt.query_row([], |row| row.get(0)).ok();
+        Ok(max_id)
+    }
+
+    async fn delete_kyber_pre_key(
+        &mut self,
+        id: KyberPreKeyId,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        conn.execute("DELETE FROM kyber_pre_keys WHERE id = ?", [u32::from(id)])?;
+        Ok(())
+    }
+
+    async fn get_kyber_pre_keys_older_than(
+        &self,
+        timestamp_millis: u64,
+    ) -> Result<Vec<KyberPreKeyId>, Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        let timestamp_secs = (timestamp_millis / 1000) as i64;
+        let mut stmt = conn.prepare("SELECT id FROM kyber_pre_keys WHERE created_at < ?")?;
+        let ids = stmt
+            .query_map([timestamp_secs], |row| {
+                let id: u32 = row.get(0)?;
+                Ok(KyberPreKeyId::from(id))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
     }
 }
 

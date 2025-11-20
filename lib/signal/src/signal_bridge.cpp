@@ -112,4 +112,14 @@ auto bridge::update_last_message_timestamp(std::uint64_t timestamp) const -> voi
   radix_relay::update_last_message_timestamp(*bridge_, timestamp);
 }
 
+auto bridge::perform_key_maintenance() const -> signal::key_maintenance_result
+{
+  const radix_relay::KeyMaintenanceResult rust_result = radix_relay::perform_key_maintenance(*bridge_);
+  return {
+    .signed_pre_key_rotated = rust_result.signed_pre_key_rotated,
+    .kyber_pre_key_rotated = rust_result.kyber_pre_key_rotated,
+    .pre_keys_replenished = rust_result.pre_keys_replenished,
+  };
+}
+
 }// namespace radix_relay::signal

@@ -10,6 +10,13 @@
 
 namespace radix_relay::signal {
 
+struct key_maintenance_result
+{
+  bool signed_pre_key_rotated;
+  bool kyber_pre_key_rotated;
+  bool pre_keys_replenished;
+};
+
 class bridge
 {
 public:
@@ -58,6 +65,8 @@ public:
     std::uint64_t since_timestamp = 0) const -> std::string;
 
   auto update_last_message_timestamp(std::uint64_t timestamp) const -> void;
+
+  [[nodiscard]] auto perform_key_maintenance() const -> key_maintenance_result;
 
 private:
   mutable rust::Box<SignalBridge> bridge_;
