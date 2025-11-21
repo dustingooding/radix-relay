@@ -31,12 +31,18 @@ This project is in active Phase 1 development. See [CONTRIBUTING.md](CONTRIBUTIN
 
 For security issues, please email <radix-relay@proton.me> or create a private security advisory on GitHub.
 
-## More Details
+## Documentation
+
+### Getting Started
 
 - [Dependency Setup](README_dependencies.md)
 - [Building Details](README_building.md)
 - [Troubleshooting](README_troubleshooting.md)
 - [Docker](README_docker.md)
+
+### Architecture & Security
+
+- [Signal Protocol Integration](docs/SIGNAL_PROTOCOL.md) - End-to-end encryption, key management, and bundle republishing
 
 ## Acknowledgments
 

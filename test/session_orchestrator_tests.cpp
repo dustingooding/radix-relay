@@ -1,3 +1,4 @@
+#include "test_doubles/test_double_signal_bridge.hpp"
 #include <algorithm>
 #include <async/async_queue.hpp>
 #include <bit>
@@ -6,6 +7,7 @@
 #include <filesystem>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <nostr/protocol.hpp>
 #include <nostr/request_tracker.hpp>
 #include <nostr/session_orchestrator.hpp>
 #include <platform/env_utils.hpp>
@@ -25,50 +27,58 @@ auto string_to_bytes(const std::string &str) -> std::vector<std::byte>
   return bytes;
 }
 
-struct queue_based_fixture
+template<typename Bridge> struct orchestrator_fixture
 {
   std::shared_ptr<boost::asio::io_context> io_context;
-  std::string db_path;
-  std::shared_ptr<radix_relay::signal::bridge> bridge;
+  std::shared_ptr<Bridge> bridge;
   std::shared_ptr<radix_relay::nostr::request_tracker> tracker;
   std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> in_queue;
   std::shared_ptr<async::async_queue<core::events::transport::in_t>> transport_out_queue;
   std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> presentation_out_queue;
-  std::shared_ptr<
-    radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
-    orchestrator;
+  std::shared_ptr<radix_relay::nostr::session_orchestrator<Bridge, radix_relay::nostr::request_tracker>> orchestrator;
+  std::string db_path;
 
-  explicit queue_based_fixture(std::string path) : db_path(std::move(path))
+  explicit orchestrator_fixture(std::string path = "") : db_path(std::move(path))
   {
-    std::filesystem::remove(db_path);
+    if (not db_path.empty()) { std::filesystem::remove(db_path); }
+
     io_context = std::make_shared<boost::asio::io_context>();
-    bridge = std::make_shared<radix_relay::signal::bridge>(db_path);
+    if constexpr (std::is_same_v<Bridge, radix_relay::signal::bridge>) {
+      bridge = std::make_shared<Bridge>(db_path);
+    } else {
+      bridge = std::make_shared<Bridge>();
+    }
     tracker = std::make_shared<radix_relay::nostr::request_tracker>(io_context);
     in_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
     transport_out_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
     presentation_out_queue =
       std::make_shared<async::async_queue<core::events::presentation_event_variant_t>>(io_context);
-    orchestrator = std::make_shared<
-      radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
-      bridge, tracker, io_context, in_queue, transport_out_queue, presentation_out_queue);
+    orchestrator =
+      std::make_shared<radix_relay::nostr::session_orchestrator<Bridge, radix_relay::nostr::request_tracker>>(
+        bridge, tracker, io_context, in_queue, transport_out_queue, presentation_out_queue);
   }
 
   // NOLINTNEXTLINE(bugprone-exception-escape)
-  ~queue_based_fixture()
+  ~orchestrator_fixture()
   {
     orchestrator.reset();
     io_context->run();
     bridge.reset();
     tracker.reset();
-    std::error_code error_code;
-    std::filesystem::remove(db_path, error_code);
+    if (not db_path.empty()) {
+      std::error_code error_code;
+      std::filesystem::remove(db_path, error_code);
+    }
   }
 
-  queue_based_fixture(const queue_based_fixture &) = delete;
-  auto operator=(const queue_based_fixture &) -> queue_based_fixture & = delete;
-  queue_based_fixture(queue_based_fixture &&) = delete;
-  auto operator=(queue_based_fixture &&) -> queue_based_fixture & = delete;
+  orchestrator_fixture(const orchestrator_fixture &) = delete;
+  auto operator=(const orchestrator_fixture &) -> orchestrator_fixture & = delete;
+  orchestrator_fixture(orchestrator_fixture &&) = delete;
+  auto operator=(orchestrator_fixture &&) -> orchestrator_fixture & = delete;
 };
+
+using queue_based_fixture_t = orchestrator_fixture<radix_relay::signal::bridge>;
+using test_double_fixture_t = orchestrator_fixture<radix_relay_test::test_double_signal_bridge>;
 
 struct two_bridge_fixture
 {
@@ -106,12 +116,12 @@ struct two_bridge_fixture
     alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_db_path);
     bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_db_path);
 
-    const auto alice_bundle_json = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
-    const auto alice_bundle_parsed = nlohmann::json::parse(alice_bundle_json);
+    const auto alice_bundle_json_info = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    const auto alice_bundle_parsed = nlohmann::json::parse(alice_bundle_json_info.announcement_json);
     const std::string alice_bundle_base64 = alice_bundle_parsed["content"].template get<std::string>();
 
-    const auto bob_bundle_json = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
-    const auto bob_bundle_parsed = nlohmann::json::parse(bob_bundle_json);
+    const auto bob_bundle_json_info = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    const auto bob_bundle_parsed = nlohmann::json::parse(bob_bundle_json_info.announcement_json);
     const std::string bob_bundle_base64 = bob_bundle_parsed["content"].template get<std::string>();
 
     bob_rdx = alice_bridge->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob");
@@ -168,7 +178,7 @@ auto bytes_to_string(const std::vector<std::byte> &bytes) -> std::string
 
 TEST_CASE("Queue-based session_orchestrator processes publish_identity command", "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture fixture{ (std::filesystem::temp_directory_path() / "test_queue_publish.db").string() };
+  const queue_based_fixture_t fixture{ (std::filesystem::temp_directory_path() / "test_queue_publish.db").string() };
 
   fixture.in_queue->push(events::publish_identity{});
 
@@ -184,7 +194,7 @@ TEST_CASE("Queue-based session_orchestrator processes publish_identity command",
 
 TEST_CASE("Queue-based session_orchestrator processes trust command", "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture fixture{ (std::filesystem::temp_directory_path() / "test_queue_trust.db").string() };
+  const queue_based_fixture_t fixture{ (std::filesystem::temp_directory_path() / "test_queue_trust.db").string() };
 
   fixture.in_queue->push(events::trust{ .peer = "test_peer", .alias = "test_alias" });
 
@@ -199,7 +209,7 @@ TEST_CASE("Queue-based session_orchestrator processes trust command", "[core][se
 TEST_CASE("Queue-based session_orchestrator processes bytes_received with unknown protocol",
   "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture fixture{
+  const queue_based_fixture_t fixture{
     (std::filesystem::temp_directory_path() / "test_queue_bytes_unknown.db").string()
   };
 
@@ -219,7 +229,7 @@ TEST_CASE("Queue-based session_orchestrator processes bytes_received with unknow
 TEST_CASE("Queue-based session_orchestrator processes bytes_received with OK message",
   "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture fixture{ (std::filesystem::temp_directory_path() / "test_queue_bytes_ok.db").string() };
+  const queue_based_fixture_t fixture{ (std::filesystem::temp_directory_path() / "test_queue_bytes_ok.db").string() };
 
   const std::string json_msg = R"(["OK","test_event_id",true,""])";
   const auto bytes = string_to_bytes(json_msg);
@@ -237,7 +247,7 @@ TEST_CASE("Queue-based session_orchestrator processes bytes_received with OK mes
 TEST_CASE("Queue-based session_orchestrator processes bytes_received with EOSE message",
   "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture fixture{ (std::filesystem::temp_directory_path() / "test_queue_bytes_eose.db").string() };
+  const queue_based_fixture_t fixture{ (std::filesystem::temp_directory_path() / "test_queue_bytes_eose.db").string() };
 
   const std::string json_msg = R"(["EOSE","test_subscription_id"])";
   const auto bytes = string_to_bytes(json_msg);
@@ -255,7 +265,9 @@ TEST_CASE("Queue-based session_orchestrator processes bytes_received with EOSE m
 TEST_CASE("Queue-based session_orchestrator processes transport disconnected event",
   "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture fixture{ (std::filesystem::temp_directory_path() / "test_queue_disconnected.db").string() };
+  const queue_based_fixture_t fixture{
+    (std::filesystem::temp_directory_path() / "test_queue_disconnected.db").string()
+  };
 
   fixture.in_queue->push(core::events::transport::disconnected{});
 
@@ -269,7 +281,7 @@ TEST_CASE("Queue-based session_orchestrator processes transport disconnected eve
 
 TEST_CASE("Queue-based session_orchestrator processes transport sent event", "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture fixture{ (std::filesystem::temp_directory_path() / "test_queue_sent.db").string() };
+  const queue_based_fixture_t fixture{ (std::filesystem::temp_directory_path() / "test_queue_sent.db").string() };
 
   fixture.in_queue->push(core::events::transport::sent{ .message_id = "test_msg_id" });
 
@@ -284,7 +296,9 @@ TEST_CASE("Queue-based session_orchestrator processes transport sent event", "[c
 TEST_CASE("Queue-based session_orchestrator processes transport send_failed event",
   "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture fixture{ (std::filesystem::temp_directory_path() / "test_queue_send_failed.db").string() };
+  const queue_based_fixture_t fixture{
+    (std::filesystem::temp_directory_path() / "test_queue_send_failed.db").string()
+  };
 
   fixture.in_queue->push(
     core::events::transport::send_failed{ .message_id = "test_msg_id", .error_message = "test reason" });
@@ -300,7 +314,7 @@ TEST_CASE("Queue-based session_orchestrator processes transport send_failed even
 TEST_CASE("Queue-based session_orchestrator processes transport connect_failed event",
   "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture fixture{
+  const queue_based_fixture_t fixture{
     (std::filesystem::temp_directory_path() / "test_queue_connect_failed.db").string()
   };
 
@@ -345,7 +359,6 @@ TEST_CASE("Queue-based session_orchestrator Alice encrypts and Bob decrypts end-
   fixture.bob_io->run();
 
   REQUIRE_FALSE(fixture.bob_presentation_out->empty());
-  REQUIRE(fixture.bob_presentation_out->size() == 1);
 
   fixture.bob_io->restart();
   auto main_future =
@@ -362,7 +375,8 @@ TEST_CASE("Queue-based session_orchestrator Alice encrypts and Bob decrypts end-
 
 TEST_CASE("session_orchestrator handles subscribe_identities command", "[session_orchestrator][subscribe]")
 {
-  const queue_based_fixture fixture((std::filesystem::temp_directory_path() / "test_subscribe_identities.db").string());
+  const queue_based_fixture_t fixture(
+    (std::filesystem::temp_directory_path() / "test_subscribe_identities.db").string());
 
   fixture.in_queue->push(events::subscribe_identities{});
 
@@ -401,7 +415,7 @@ TEST_CASE("session_orchestrator handles subscribe_identities command", "[session
 
 TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_orchestrator][subscribe]")
 {
-  const queue_based_fixture fixture((std::filesystem::temp_directory_path() / "test_subscribe_messages.db").string());
+  const queue_based_fixture_t fixture((std::filesystem::temp_directory_path() / "test_subscribe_messages.db").string());
 
   fixture.in_queue->push(events::subscribe_messages{});
 
@@ -440,7 +454,7 @@ TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_o
 TEST_CASE("session_orchestrator handles connect command and manages connection lifecycle",
   "[session_orchestrator][connect]")
 {
-  const queue_based_fixture fixture((std::filesystem::temp_directory_path() / "test_connect_lifecycle.db").string());
+  const queue_based_fixture_t fixture((std::filesystem::temp_directory_path() / "test_connect_lifecycle.db").string());
 
   fixture.in_queue->push(events::connect{ .relay = "wss://relay.example.com" });
 
@@ -462,7 +476,8 @@ TEST_CASE("session_orchestrator handles connect command and manages connection l
 
 TEST_CASE("session_orchestrator sends subscriptions when transport connects", "[session_orchestrator][connect]")
 {
-  const queue_based_fixture fixture((std::filesystem::temp_directory_path() / "test_transport_connected.db").string());
+  const queue_based_fixture_t fixture(
+    (std::filesystem::temp_directory_path() / "test_transport_connected.db").string());
 
   fixture.in_queue->push(core::events::transport::connected{ .url = "wss://relay.example.com" });
 
@@ -471,13 +486,18 @@ TEST_CASE("session_orchestrator sends subscriptions when transport connects", "[
   fixture.io_context->restart();
   fixture.io_context->run();
 
-  auto first_send = fixture.transport_out_queue->try_pop();
-  REQUIRE(first_send.has_value());
-  if (first_send.has_value()) { REQUIRE(std::holds_alternative<core::events::transport::send>(first_send.value())); }
+  int req_count = 0;
+  while (not fixture.transport_out_queue->empty()) {
+    auto transport_cmd = fixture.transport_out_queue->try_pop();
+    if (transport_cmd.has_value() and std::holds_alternative<core::events::transport::send>(*transport_cmd)) {
+      const auto &send_cmd = std::get<core::events::transport::send>(*transport_cmd);
+      const std::string json_str = bytes_to_string(send_cmd.bytes);
+      auto parsed = nlohmann::json::parse(json_str);
+      if (parsed.is_array() and parsed[0] == "REQ") { req_count++; }
+    }
+  }
 
-  auto second_send = fixture.transport_out_queue->try_pop();
-  REQUIRE(second_send.has_value());
-  if (second_send.has_value()) { REQUIRE(std::holds_alternative<core::events::transport::send>(second_send.value())); }
+  REQUIRE(req_count == 2);
 }
 
 TEST_CASE("session_orchestrator respects cancellation signal", "[core][session_orchestrator][cancellation]")
@@ -487,7 +507,7 @@ TEST_CASE("session_orchestrator respects cancellation signal", "[core][session_o
     std::atomic<bool> coroutine_done{ false };
   };
 
-  const queue_based_fixture fixture{
+  const queue_based_fixture_t fixture{
     (std::filesystem::temp_directory_path() / "test_cancellation_orchestrator.db").string()
   };
   auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
@@ -529,7 +549,7 @@ TEST_CASE("session_orchestrator returns empty identities list initially", "[sess
   const auto alice_db_path =
     (std::filesystem::temp_directory_path() / ("test_bundle_storage_alice_" + std::to_string(timestamp) + ".db"))
       .string();
-  const queue_based_fixture alice(alice_db_path);
+  const queue_based_fixture_t alice(alice_db_path);
 
   alice.in_queue->push(core::events::list_identities{});
 
@@ -561,11 +581,11 @@ TEST_CASE("session_orchestrator stores discovered bundle identities", "[session_
   const auto bob_db_path =
     (std::filesystem::temp_directory_path() / ("test_bundle_storage_bob_" + std::to_string(timestamp) + ".db"))
       .string();
-  const queue_based_fixture alice(alice_db_path);
-  const queue_based_fixture bob(bob_db_path);
+  const queue_based_fixture_t alice(alice_db_path);
+  const queue_based_fixture_t bob(bob_db_path);
 
-  auto bob_announcement = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
-  auto bob_announcement_json = nlohmann::json::parse(bob_announcement);
+  auto bob_announcement_info = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  auto bob_announcement_json = nlohmann::json::parse(bob_announcement_info.announcement_json);
   auto bob_bundle_base64 = bob_announcement_json["content"].template get<std::string>();
   auto bob_pubkey = bob_announcement_json["pubkey"].template get<std::string>();
   auto bob_event_id = bob_announcement_json["id"].template get<std::string>();
@@ -620,11 +640,11 @@ TEST_CASE("session_orchestrator removes bundle when bundle_announcement_removed 
   const auto bob_db_path =
     (std::filesystem::temp_directory_path() / ("test_bundle_removal_bob_" + std::to_string(timestamp) + ".db"))
       .string();
-  const queue_based_fixture alice(alice_db_path);
-  const queue_based_fixture bob(bob_db_path);
+  const queue_based_fixture_t alice(alice_db_path);
+  const queue_based_fixture_t bob(bob_db_path);
 
-  auto bob_announcement = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
-  auto bob_announcement_json = nlohmann::json::parse(bob_announcement);
+  auto bob_announcement_info = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  auto bob_announcement_json = nlohmann::json::parse(bob_announcement_info.announcement_json);
   auto bob_bundle_base64 = bob_announcement_json["content"].template get<std::string>();
   auto bob_pubkey = bob_announcement_json["pubkey"].template get<std::string>();
   auto bob_event_id = bob_announcement_json["id"].template get<std::string>();
@@ -706,14 +726,14 @@ TEST_CASE("session_orchestrator updates bundle when duplicate bundle_announcemen
       .string();
   const auto bob_db_path =
     (std::filesystem::temp_directory_path() / ("test_bundle_update_bob_" + std::to_string(timestamp) + ".db")).string();
-  const queue_based_fixture alice(alice_db_path);
-  const queue_based_fixture bob(bob_db_path);
+  const queue_based_fixture_t alice(alice_db_path);
+  const queue_based_fixture_t bob(bob_db_path);
 
-  auto bob_announcement_1 = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
-  auto bob_announcement_json_1 = nlohmann::json::parse(bob_announcement_1);
-  auto bob_bundle_base64_1 = bob_announcement_json_1["content"].template get<std::string>();
-  auto bob_pubkey = bob_announcement_json_1["pubkey"].template get<std::string>();
-  auto bob_event_id_1 = bob_announcement_json_1["id"].template get<std::string>();
+  auto bob_announcement_1_info = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  auto bob_announcement_1_json = nlohmann::json::parse(bob_announcement_1_info.announcement_json);
+  auto bob_bundle_base64_1 = bob_announcement_1_json["content"].template get<std::string>();
+  auto bob_pubkey = bob_announcement_1_json["pubkey"].template get<std::string>();
+  auto bob_event_id_1 = bob_announcement_1_json["id"].template get<std::string>();
 
   const core::events::session_orchestrator::in_t bundle_event_1 = core::events::bundle_announcement_received{
     .pubkey = bob_pubkey, .bundle_content = bob_bundle_base64_1, .event_id = bob_event_id_1
@@ -730,10 +750,10 @@ TEST_CASE("session_orchestrator updates bundle when duplicate bundle_announcemen
   alice.io_context->run();
   alice.io_context->restart();
 
-  auto bob_announcement_2 = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
-  auto bob_announcement_json_2 = nlohmann::json::parse(bob_announcement_2);
-  auto bob_bundle_base64_2 = bob_announcement_json_2["content"].template get<std::string>();
-  auto bob_event_id_2 = bob_announcement_json_2["id"].template get<std::string>();
+  auto bob_announcement_2_info = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  auto bob_announcement_2_json = nlohmann::json::parse(bob_announcement_2_info.announcement_json);
+  auto bob_bundle_base64_2 = bob_announcement_2_json["content"].template get<std::string>();
+  auto bob_event_id_2 = bob_announcement_2_json["id"].template get<std::string>();
 
   const core::events::session_orchestrator::in_t bundle_event_2 = core::events::bundle_announcement_received{
     .pubkey = bob_pubkey, .bundle_content = bob_bundle_base64_2, .event_id = bob_event_id_2
@@ -781,11 +801,11 @@ TEST_CASE("session_orchestrator establishes session when trusting discovered ide
     (std::filesystem::temp_directory_path() / ("test_trust_alice_" + std::to_string(timestamp) + ".db")).string();
   const auto bob_db_path =
     (std::filesystem::temp_directory_path() / ("test_trust_bob_" + std::to_string(timestamp) + ".db")).string();
-  const queue_based_fixture alice(alice_db_path);
-  const queue_based_fixture bob(bob_db_path);
+  const queue_based_fixture_t alice(alice_db_path);
+  const queue_based_fixture_t bob(bob_db_path);
 
-  auto bob_announcement = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
-  auto bob_announcement_json = nlohmann::json::parse(bob_announcement);
+  auto bob_announcement_info = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  auto bob_announcement_json = nlohmann::json::parse(bob_announcement_info.announcement_json);
   auto bob_bundle_base64 = bob_announcement_json["content"].template get<std::string>();
   auto bob_pubkey = bob_announcement_json["pubkey"].template get<std::string>();
   auto bob_event_id = bob_announcement_json["id"].template get<std::string>();
@@ -867,17 +887,43 @@ TEST_CASE("session_orchestrator ignores duplicate encrypted messages", "[session
   REQUIRE(first_response.has_value());
   if (first_response.has_value()) { REQUIRE(std::holds_alternative<events::message_received>(*first_response)); }
 
+  if (not fixture.bob_in->empty()) {
+    boost::asio::co_spawn(*fixture.bob_io, fixture.bob_orch->run_once(), boost::asio::detached);
+    fixture.bob_io->run();
+    fixture.bob_io->restart();
+
+    if (not fixture.bob_transport_out->empty()) {
+      auto bundle_publish = fixture.bob_transport_out->try_pop();
+      if (bundle_publish.has_value() and std::holds_alternative<core::events::transport::send>(*bundle_publish)) {
+        const auto &send_cmd = std::get<core::events::transport::send>(*bundle_publish);
+        const std::string json_str = bytes_to_string(send_cmd.bytes);
+        auto parsed = nlohmann::json::parse(json_str);
+        if (parsed.is_array() and parsed[0] == "EVENT") {
+          const std::string bundle_event_id = parsed[1]["id"].get<std::string>();
+          const std::string ok_response = nlohmann::json::array({ "OK", bundle_event_id, true, "" }).dump();
+          fixture.bob_in->push(core::events::transport::bytes_received{ .bytes = string_to_bytes(ok_response) });
+          boost::asio::co_spawn(*fixture.bob_io, fixture.bob_orch->run_once(), boost::asio::detached);
+          fixture.bob_io->run();
+          fixture.bob_io->restart();
+        }
+      }
+    }
+  }
+
   fixture.bob_in->push(core::events::transport::bytes_received{ .bytes = string_to_bytes(nostr_message_json) });
   boost::asio::co_spawn(*fixture.bob_io, fixture.bob_orch->run_once(), boost::asio::detached);
   fixture.bob_io->run();
 
-  REQUIRE(fixture.bob_presentation_out->empty());
+  while (not fixture.bob_presentation_out->empty()) {
+    auto event = fixture.bob_presentation_out->try_pop();
+    if (event.has_value()) { REQUIRE_FALSE(std::holds_alternative<events::message_received>(*event)); }
+  }
 }
 
 TEST_CASE("session_orchestrator includes since filter when subscribing to messages",
   "[session_orchestrator][subscribe][since]")
 {
-  const queue_based_fixture fixture((std::filesystem::temp_directory_path() / "test_subscribe_since.db").string());
+  const queue_based_fixture_t fixture((std::filesystem::temp_directory_path() / "test_subscribe_since.db").string());
 
   constexpr std::uint64_t test_timestamp = 1700000000;
 
@@ -1011,7 +1057,6 @@ TEST_CASE("received encrypted message produces message_received event with corre
   fixture.bob_io->run();
 
   REQUIRE_FALSE(fixture.bob_presentation_out->empty());
-  REQUIRE(fixture.bob_presentation_out->size() == 1);
 
   fixture.bob_io->restart();
   auto main_future =
@@ -1024,6 +1069,80 @@ TEST_CASE("received encrypted message produces message_received event with corre
   const auto &msg = std::get<events::message_received>(main_event);
   REQUIRE(msg.content == plaintext);
   REQUIRE(msg.sender_rdx == fixture.alice_rdx);
+}
+
+TEST_CASE("session_orchestrator republishes bundle when encrypted message indicates pre-key consumption",
+  "[session_orchestrator][republish][prekey]")
+{
+  const two_bridge_fixture fixture{ (std::filesystem::temp_directory_path() / "test_republish_alice.db").string(),
+    (std::filesystem::temp_directory_path() / "test_republish_bob.db").string() };
+
+  const std::string plaintext = "Message that consumes pre-key";
+  const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
+
+  auto encrypted_bytes = fixture.alice_bridge->encrypt_message(fixture.bob_rdx, message_bytes);
+
+  std::string hex_content;
+  for (const auto &byte : encrypted_bytes) { hex_content += std::format("{:02x}", byte); }
+
+  constexpr std::uint32_t test_timestamp = 1234567890;
+  const auto signed_event_json =
+    fixture.alice_bridge->create_and_sign_encrypted_message(fixture.bob_rdx, hex_content, test_timestamp, "test-0.1.0");
+
+  auto event_parsed = nlohmann::json::parse(signed_event_json);
+  const nlohmann::json nostr_event_message = nlohmann::json::array({ "EVENT", "test_sub_id", event_parsed });
+  const std::string nostr_message_json = nostr_event_message.dump();
+
+  fixture.bob_in->push(core::events::transport::bytes_received{ .bytes = string_to_bytes(nostr_message_json) });
+  boost::asio::co_spawn(*fixture.bob_io, fixture.bob_orch->run_once(), boost::asio::detached);
+  fixture.bob_io->run();
+
+  REQUIRE_FALSE(fixture.bob_transport_out->empty());
+  auto transport_cmd = fixture.bob_transport_out->try_pop();
+  REQUIRE(transport_cmd.has_value());
+  if (transport_cmd.has_value()) {
+    REQUIRE(std::holds_alternative<core::events::transport::send>(*transport_cmd));
+    const auto &send_cmd = std::get<core::events::transport::send>(*transport_cmd);
+    const std::string json_str = bytes_to_string(send_cmd.bytes);
+    auto parsed = nlohmann::json::parse(json_str);
+    REQUIRE(parsed.is_array());
+    REQUIRE(parsed[0] == "EVENT");
+    REQUIRE(parsed[1].contains("kind"));
+    REQUIRE(parsed[1]["kind"] == 30078);
+  }
+}
+
+TEST_CASE("session_orchestrator republishes bundle on connection if keys rotated",
+  "[session_orchestrator][maintenance][connect]")
+{
+  const test_double_fixture_t fixture;
+
+  fixture.bridge->set_maintenance_result(
+    { .signed_pre_key_rotated = true, .kyber_pre_key_rotated = false, .pre_keys_replenished = false });
+
+  fixture.in_queue->push(core::events::transport::connected{ .url = "wss://relay.example.com" });
+
+  boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
+  fixture.io_context->run();
+  fixture.io_context->restart();
+  fixture.io_context->run();
+
+  bool found_bundle = false;
+  while (not fixture.transport_out_queue->empty()) {
+    auto transport_cmd = fixture.transport_out_queue->try_pop();
+    if (transport_cmd.has_value() and std::holds_alternative<core::events::transport::send>(*transport_cmd)) {
+      const auto &send_cmd = std::get<core::events::transport::send>(*transport_cmd);
+      const std::string json_str = bytes_to_string(send_cmd.bytes);
+      auto parsed = nlohmann::json::parse(json_str);
+      if (parsed.is_array() and parsed[0] == "EVENT" and parsed[1].contains("kind")
+          and parsed[1]["kind"] == nostr::protocol::kind::bundle_announcement) {
+        found_bundle = true;
+        break;
+      }
+    }
+  }
+
+  REQUIRE(found_bundle);
 }
 
 }// namespace radix_relay::core::test

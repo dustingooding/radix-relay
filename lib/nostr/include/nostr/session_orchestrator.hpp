@@ -126,19 +126,23 @@ private:
       *io_context_,
       // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
       [self = this->shared_from_this(), cmd]() -> boost::asio::awaitable<void> {
-        auto [event_id, bytes] = self->handler_.handle(cmd);
+        auto result = self->handler_.handle(cmd);
 
         core::events::transport::send transport_cmd{ .message_id = core::uuid_generator::generate(),
-          .bytes = std::move(bytes) };
+          .bytes = std::move(result.bytes) };
         self->emit_transport_event(transport_cmd);
 
         try {
           auto ok_response =
-            co_await self->tracker_->template async_track<nostr::protocol::ok>(event_id, self->default_timeout);
+            co_await self->tracker_->template async_track<nostr::protocol::ok>(result.event_id, self->default_timeout);
+          if (ok_response.accepted) {
+            self->bridge_->record_published_bundle(
+              result.pre_key_id, result.signed_pre_key_id, result.kyber_pre_key_id);
+          }
           self->emit_presentation_event(
-            core::events::bundle_published{ .event_id = event_id, .accepted = ok_response.accepted });
+            core::events::bundle_published{ .event_id = result.event_id, .accepted = ok_response.accepted });
         } catch (const std::exception &e) {
-          spdlog::warn("[session_orchestrator] OK timeout for event: {} - {}", event_id, e.what());
+          spdlog::warn("[session_orchestrator] OK timeout for event: {} - {}", result.event_id, e.what());
           self->emit_presentation_event(core::events::bundle_published{ .event_id = "", .accepted = false });
         }
       },
@@ -317,7 +321,10 @@ private:
               .content = event_data["content"],
               .sig = event_data["sig"] } };
 
-            if (auto result = handler_.handle(evt_inner)) { emit_presentation_event(*result); }
+            if (auto result = handler_.handle(evt_inner)) {
+              emit_presentation_event(*result);
+              if (result->should_republish_bundle) { handle(core::events::publish_identity{}); }
+            }
             break;
           }
           case nostr::protocol::kind::bundle_announcement: {
@@ -429,7 +436,15 @@ private:
 
   auto handle(const core::events::transport::connected & /*evt*/) -> void
   {
-    spdlog::info("[session_orchestrator] Transport connected, subscribing to identities and messages");
+    spdlog::info("[session_orchestrator] Transport connected, performing key maintenance");
+    auto maintenance_result = bridge_->perform_key_maintenance();
+
+    if (maintenance_result.signed_pre_key_rotated or maintenance_result.kyber_pre_key_rotated) {
+      spdlog::info("[session_orchestrator] Keys rotated, republishing bundle");
+      handle(core::events::publish_identity{});
+    }
+
+    spdlog::info("[session_orchestrator] Subscribing to identities and messages");
     handle(core::events::subscribe_identities{});
     handle(core::events::subscribe_messages{});
   }

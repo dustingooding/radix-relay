@@ -68,6 +68,11 @@ struct SerializablePreKeyBundle {
     pub kyber_pre_key_signature: Vec<u8>,
 }
 
+pub struct DecryptionResult {
+    pub plaintext: Vec<u8>,
+    pub should_republish_bundle: bool,
+}
+
 pub struct SignalBridge {
     pub(crate) storage: SqliteStorage,
     contact_manager: ContactManager,
@@ -268,6 +273,64 @@ impl SignalBridge {
         Ok(plaintext)
     }
 
+    pub async fn decrypt_message_with_metadata(
+        &mut self,
+        peer: &str,
+        ciphertext_bytes: &[u8],
+    ) -> Result<DecryptionResult, SignalBridgeError> {
+        use libsignal_protocol::{PreKeySignalMessage, SignalMessage};
+
+        if peer.is_empty() {
+            return Err(SignalBridgeError::InvalidInput(
+                "Specify a peer name".to_string(),
+            ));
+        }
+
+        if ciphertext_bytes.is_empty() {
+            return Err(SignalBridgeError::InvalidInput(
+                "Provide a message to decrypt".to_string(),
+            ));
+        }
+
+        let session_address = match self
+            .contact_manager
+            .lookup_contact(peer, self.storage.session_store())
+            .await
+        {
+            Ok(contact) => contact.rdx_fingerprint,
+            Err(_) => peer.to_string(),
+        };
+
+        let address = ProtocolAddress::new(
+            session_address,
+            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
+        );
+
+        let pre_key_consumed =
+            if let Ok(prekey_msg) = PreKeySignalMessage::try_from(ciphertext_bytes) {
+                prekey_msg.pre_key_id().is_some()
+            } else {
+                false
+            };
+
+        let ciphertext = if let Ok(prekey_msg) = PreKeySignalMessage::try_from(ciphertext_bytes) {
+            CiphertextMessage::PreKeySignalMessage(prekey_msg)
+        } else if let Ok(signal_msg) = SignalMessage::try_from(ciphertext_bytes) {
+            CiphertextMessage::SignalMessage(signal_msg)
+        } else {
+            return Err(SignalBridgeError::Serialization(
+                "Provide a valid Signal Protocol message".to_string(),
+            ));
+        };
+
+        let plaintext = self.storage.decrypt_message(&address, &ciphertext).await?;
+
+        Ok(DecryptionResult {
+            plaintext,
+            should_republish_bundle: pre_key_consumed,
+        })
+    }
+
     pub async fn establish_session(
         &mut self,
         peer: &str,
@@ -328,18 +391,13 @@ impl SignalBridge {
         Ok(())
     }
 
-    pub async fn generate_pre_key_bundle(&mut self) -> Result<Vec<u8>, SignalBridgeError> {
+    pub async fn generate_pre_key_bundle(
+        &mut self,
+    ) -> Result<(Vec<u8>, u32, u32, u32), SignalBridgeError> {
+        use crate::storage_trait::{
+            ExtendedKyberPreKeyStore, ExtendedPreKeyStore, ExtendedSignedPreKeyStore,
+        };
         use libsignal_protocol::*;
-
-        // TODO: PreKey Management & Rotation (Phase 7)
-        // Current implementation always uses PreKey #1, which is NOT production-ready:
-        // 1. One-time pre-keys should be consumed after use (delete after session establishment)
-        // 2. Should track available pre-keys and replenish when count < threshold (e.g., 10)
-        // 3. Should generate batches of ~100 pre-keys when replenishing
-        // 4. Signed pre-keys should rotate periodically (e.g., weekly) for forward secrecy
-        // 5. Kyber pre-keys should also rotate with signed pre-keys
-        // 6. Need to track which pre-keys are "in bundles" (pending use) vs truly available
-        // For now this works for demo/testing where each identity establishes limited sessions.
 
         let identity_key = *self
             .storage
@@ -353,30 +411,58 @@ impl SignalBridge {
             .get_local_registration_id()
             .await?;
 
+        // Use latest available keys (highest IDs) for bundle generation
+        // This ensures bundles reflect the most recent key rotation
+        let pre_key_id = self
+            .storage
+            .pre_key_store()
+            .get_max_pre_key_id()
+            .await?
+            .ok_or_else(|| SignalBridgeError::Protocol("No pre-keys available".to_string()))?;
+        let signed_pre_key_id = self
+            .storage
+            .signed_pre_key_store()
+            .get_max_signed_pre_key_id()
+            .await?
+            .ok_or_else(|| {
+                SignalBridgeError::Protocol("No signed pre-keys available".to_string())
+            })?;
+        let kyber_pre_key_id = self
+            .storage
+            .kyber_pre_key_store()
+            .get_max_kyber_pre_key_id()
+            .await?
+            .ok_or_else(|| {
+                SignalBridgeError::Protocol("No kyber pre-keys available".to_string())
+            })?;
+
         let pre_key_record = self
             .storage
             .pre_key_store()
-            .get_pre_key(PreKeyId::from(1u32))
+            .get_pre_key(PreKeyId::from(pre_key_id))
             .await?;
         let signed_pre_key_record = self
             .storage
             .signed_pre_key_store()
-            .get_signed_pre_key(SignedPreKeyId::from(1u32))
+            .get_signed_pre_key(SignedPreKeyId::from(signed_pre_key_id))
             .await?;
         let kyber_pre_key_record = self
             .storage
             .kyber_pre_key_store()
-            .get_kyber_pre_key(KyberPreKeyId::from(1u32))
+            .get_kyber_pre_key(KyberPreKeyId::from(kyber_pre_key_id))
             .await?;
 
         let bundle = PreKeyBundle::new(
             registration_id,
             DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
-            Some((PreKeyId::from(1u32), pre_key_record.key_pair()?.public_key)),
+            Some((
+                PreKeyId::from(pre_key_id),
+                pre_key_record.key_pair()?.public_key,
+            )),
             signed_pre_key_record.id()?,
             signed_pre_key_record.public_key()?,
             signed_pre_key_record.signature()?.to_vec(),
-            KyberPreKeyId::from(1u32),
+            KyberPreKeyId::from(kyber_pre_key_id),
             kyber_pre_key_record.key_pair()?.public_key,
             kyber_pre_key_record.signature()?.to_vec(),
             identity_key,
@@ -396,7 +482,13 @@ impl SignalBridge {
             kyber_pre_key_signature: bundle.kyber_pre_key_signature()?.to_vec(),
         };
 
-        Ok(bincode::serialize(&serializable)?)
+        let bundle_bytes = bincode::serialize(&serializable)?;
+        Ok((
+            bundle_bytes,
+            pre_key_id,
+            signed_pre_key_id,
+            kyber_pre_key_id,
+        ))
     }
 
     pub async fn cleanup_all_sessions(&mut self) -> Result<(), SignalBridgeError> {
@@ -573,8 +665,9 @@ impl SignalBridge {
     pub async fn generate_prekey_bundle_announcement(
         &mut self,
         project_version: &str,
-    ) -> Result<String, SignalBridgeError> {
-        let bundle_bytes = self.generate_pre_key_bundle().await?;
+    ) -> Result<ffi::BundleInfo, SignalBridgeError> {
+        let (bundle_bytes, pre_key_id, signed_pre_key_id, kyber_pre_key_id) =
+            self.generate_pre_key_bundle().await?;
 
         let rdx_fingerprint = self
             .add_contact_from_bundle(&bundle_bytes, Some("self"))
@@ -612,7 +705,15 @@ impl SignalBridge {
             "sig": signature,
         });
 
-        serde_json::to_string(&event).map_err(|e| SignalBridgeError::Serialization(e.to_string()))
+        let announcement_json = serde_json::to_string(&event)
+            .map_err(|e| SignalBridgeError::Serialization(e.to_string()))?;
+
+        Ok(ffi::BundleInfo {
+            announcement_json,
+            pre_key_id,
+            signed_pre_key_id,
+            kyber_pre_key_id,
+        })
     }
 
     pub async fn generate_empty_bundle_announcement(
@@ -907,6 +1008,28 @@ mod ffi {
         pub pre_keys_replenished: bool,
     }
 
+    #[derive(Clone, Debug)]
+    pub struct DecryptionResult {
+        pub plaintext: Vec<u8>,
+        pub should_republish_bundle: bool,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct BundleInfo {
+        pub announcement_json: String,
+        pub pre_key_id: u32,
+        pub signed_pre_key_id: u32,
+        pub kyber_pre_key_id: u32,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct PreKeyBundleWithMetadata {
+        pub bundle_bytes: Vec<u8>,
+        pub pre_key_id: u32,
+        pub signed_pre_key_id: u32,
+        pub kyber_pre_key_id: u32,
+    }
+
     extern "Rust" {
         type SignalBridge;
 
@@ -924,9 +1047,15 @@ mod ffi {
             ciphertext: &[u8],
         ) -> Result<Vec<u8>>;
 
+        fn decrypt_message_with_metadata(
+            bridge: &mut SignalBridge,
+            peer: &str,
+            ciphertext: &[u8],
+        ) -> Result<DecryptionResult>;
+
         fn establish_session(bridge: &mut SignalBridge, peer: &str, bundle: &[u8]) -> Result<()>;
 
-        fn generate_pre_key_bundle(bridge: &mut SignalBridge) -> Result<Vec<u8>>;
+        fn generate_pre_key_bundle(bridge: &mut SignalBridge) -> Result<PreKeyBundleWithMetadata>;
 
         fn clear_peer_session(bridge: &mut SignalBridge, peer: &str) -> Result<()>;
 
@@ -967,7 +1096,7 @@ mod ffi {
         fn generate_prekey_bundle_announcement(
             bridge: &mut SignalBridge,
             project_version: &str,
-        ) -> Result<String>;
+        ) -> Result<BundleInfo>;
 
         fn generate_empty_bundle_announcement(
             bridge: &mut SignalBridge,
@@ -997,6 +1126,13 @@ mod ffi {
         ) -> Result<String>;
 
         fn perform_key_maintenance(bridge: &mut SignalBridge) -> Result<KeyMaintenanceResult>;
+
+        fn record_published_bundle(
+            bridge: &mut SignalBridge,
+            pre_key_id: u32,
+            signed_pre_key_id: u32,
+            kyber_pre_key_id: u32,
+        ) -> Result<()>;
     }
 }
 
@@ -1031,6 +1167,22 @@ pub fn decrypt_message(
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+pub fn decrypt_message_with_metadata(
+    bridge: &mut SignalBridge,
+    peer: &str,
+    ciphertext: &[u8],
+) -> Result<ffi::DecryptionResult, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+    let result = rt
+        .block_on(bridge.decrypt_message_with_metadata(peer, ciphertext))
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+    Ok(ffi::DecryptionResult {
+        plaintext: result.plaintext,
+        should_republish_bundle: result.should_republish_bundle,
+    })
+}
+
 pub fn establish_session(
     bridge: &mut SignalBridge,
     peer: &str,
@@ -1044,11 +1196,18 @@ pub fn establish_session(
 
 pub fn generate_pre_key_bundle(
     bridge: &mut SignalBridge,
-) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+) -> Result<ffi::PreKeyBundleWithMetadata, Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-    rt.block_on(bridge.generate_pre_key_bundle())
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
+    let (bundle_bytes, pre_key_id, signed_pre_key_id, kyber_pre_key_id) = rt
+        .block_on(bridge.generate_pre_key_bundle())
+        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
+    Ok(ffi::PreKeyBundleWithMetadata {
+        bundle_bytes,
+        pre_key_id,
+        signed_pre_key_id,
+        kyber_pre_key_id,
+    })
 }
 
 pub fn clear_peer_session(
@@ -1088,6 +1247,18 @@ pub fn perform_key_maintenance(
         kyber_pre_key_rotated: result.kyber_pre_key_rotated,
         pre_keys_replenished: result.pre_keys_replenished,
     })
+}
+
+pub fn record_published_bundle(
+    bridge: &mut SignalBridge,
+    pre_key_id: u32,
+    signed_pre_key_id: u32,
+    kyber_pre_key_id: u32,
+) -> Result<(), Box<dyn std::error::Error>> {
+    bridge
+        .storage
+        .record_published_bundle(pre_key_id, signed_pre_key_id, kyber_pre_key_id)?;
+    Ok(())
 }
 
 pub fn generate_node_fingerprint(
@@ -1238,7 +1409,7 @@ pub fn list_contacts(
 pub fn generate_prekey_bundle_announcement(
     bridge: &mut SignalBridge,
     project_version: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<ffi::BundleInfo, Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(bridge.generate_prekey_bundle_announcement(project_version))
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
@@ -1364,7 +1535,7 @@ mod tests {
         let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
         let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
 
-        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+        let (bob_bundle, _, _, _) = bob.generate_pre_key_bundle().await.unwrap();
         let bob_rdx = alice
             .add_contact_and_establish_session(&bob_bundle, Some("bob"))
             .await
@@ -1481,8 +1652,8 @@ mod tests {
         let bob_db_str = bob_db_path.to_str().unwrap();
         let mut bob = SignalBridge::new(bob_db_str).await?;
 
-        let bob_bundle = bob.generate_pre_key_bundle().await?;
-        let alice_bundle = alice.generate_pre_key_bundle().await?;
+        let (bob_bundle, _, _, _) = bob.generate_pre_key_bundle().await?;
+        let (alice_bundle, _, _, _) = alice.generate_pre_key_bundle().await?;
 
         let bob_rdx = alice
             .add_contact_and_establish_session(&bob_bundle, Some("bob"))
@@ -1529,8 +1700,8 @@ mod tests {
             let mut alice = SignalBridge::new(alice_db_str).await?;
             let mut bob = SignalBridge::new(bob_db_str).await?;
 
-            let bob_bundle = bob.generate_pre_key_bundle().await?;
-            let alice_bundle = alice.generate_pre_key_bundle().await?;
+            let (bob_bundle, _, _, _) = bob.generate_pre_key_bundle().await?;
+            let (alice_bundle, _, _, _) = alice.generate_pre_key_bundle().await?;
 
             let bob_rdx = alice
                 .add_contact_and_establish_session(&bob_bundle, Some("bob"))
@@ -1593,7 +1764,7 @@ mod tests {
         let mut alice = SignalBridge::new(alice_db_str).await?;
         let mut bob = SignalBridge::new(bob_db_str).await?;
 
-        let bob_bundle = bob.generate_pre_key_bundle().await?;
+        let (bob_bundle, _, _, _) = bob.generate_pre_key_bundle().await?;
         let bob_rdx = alice
             .add_contact_and_establish_session(&bob_bundle, Some("bob"))
             .await?;
@@ -1644,8 +1815,8 @@ mod tests {
         let mut bob = SignalBridge::new(bob_db_str).await?;
         let mut charlie = SignalBridge::new(charlie_db_str).await?;
 
-        let bob_bundle = bob.generate_pre_key_bundle().await?;
-        let charlie_bundle = charlie.generate_pre_key_bundle().await?;
+        let (bob_bundle, _, _, _) = bob.generate_pre_key_bundle().await?;
+        let (charlie_bundle, _, _, _) = charlie.generate_pre_key_bundle().await?;
 
         let bob_rdx = alice
             .add_contact_and_establish_session(&bob_bundle, Some("bob"))
@@ -1701,12 +1872,12 @@ mod tests {
             let mut alice = SignalBridge::new(alice_db_str).await?;
             let mut bob = SignalBridge::new(bob_db_str).await?;
 
-            let bob_bundle = bob.generate_pre_key_bundle().await?;
+            let (bob_bundle, _, _, _) = bob.generate_pre_key_bundle().await?;
             let bob_rdx = alice
                 .add_contact_and_establish_session(&bob_bundle, Some("bob"))
                 .await?;
 
-            let alice_bundle = alice.generate_pre_key_bundle().await?;
+            let (alice_bundle, _, _, _) = alice.generate_pre_key_bundle().await?;
             (alice_bundle, bob_rdx)
         };
 
@@ -1714,7 +1885,7 @@ mod tests {
             let mut alice = SignalBridge::new(alice_db_str).await?;
             alice.reset_identity().await?;
 
-            let new_alice_bundle = alice.generate_pre_key_bundle().await?;
+            let (new_alice_bundle, _, _, _) = alice.generate_pre_key_bundle().await?;
             assert_ne!(
                 original_alice_bundle, new_alice_bundle,
                 "Alice's identity should be different after reset"
@@ -2095,7 +2266,7 @@ mod tests {
         let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
         let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
 
-        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+        let (bob_bundle, _, _, _) = bob.generate_pre_key_bundle().await.unwrap();
 
         let bob_rdx = alice
             .add_contact_and_establish_session(&bob_bundle, None)
@@ -2121,7 +2292,7 @@ mod tests {
         let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
         let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
 
-        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+        let (bob_bundle, _, _, _) = bob.generate_pre_key_bundle().await.unwrap();
         let bob_rdx = alice
             .add_contact_and_establish_session(&bob_bundle, None)
             .await
@@ -2150,7 +2321,7 @@ mod tests {
         let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
         let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
 
-        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+        let (bob_bundle, _, _, _) = bob.generate_pre_key_bundle().await.unwrap();
         let bob_rdx = alice
             .add_contact_and_establish_session(&bob_bundle, None)
             .await
@@ -2187,8 +2358,8 @@ mod tests {
             .await
             .unwrap();
 
-        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
-        let charlie_bundle = charlie.generate_pre_key_bundle().await.unwrap();
+        let (bob_bundle, _, _, _) = bob.generate_pre_key_bundle().await.unwrap();
+        let (charlie_bundle, _, _, _) = charlie.generate_pre_key_bundle().await.unwrap();
 
         let bob_rdx = alice
             .add_contact_and_establish_session(&bob_bundle, Some("bob"))
@@ -2237,9 +2408,9 @@ mod tests {
         let mut bob2 = SignalBridge::new(bob2_db.to_str().unwrap()).await.unwrap();
         let mut bob3 = SignalBridge::new(bob3_db.to_str().unwrap()).await.unwrap();
 
-        let bob1_bundle = bob1.generate_pre_key_bundle().await.unwrap();
-        let bob2_bundle = bob2.generate_pre_key_bundle().await.unwrap();
-        let bob3_bundle = bob3.generate_pre_key_bundle().await.unwrap();
+        let (bob1_bundle, _, _, _) = bob1.generate_pre_key_bundle().await.unwrap();
+        let (bob2_bundle, _, _, _) = bob2.generate_pre_key_bundle().await.unwrap();
+        let (bob3_bundle, _, _, _) = bob3.generate_pre_key_bundle().await.unwrap();
 
         let bob1_rdx = alice
             .add_contact_and_establish_session(&bob1_bundle, None)
@@ -2294,8 +2465,8 @@ mod tests {
         let mut bob1 = SignalBridge::new(bob1_db.to_str().unwrap()).await.unwrap();
         let mut bob2 = SignalBridge::new(bob2_db.to_str().unwrap()).await.unwrap();
 
-        let bob1_bundle = bob1.generate_pre_key_bundle().await.unwrap();
-        let bob2_bundle = bob2.generate_pre_key_bundle().await.unwrap();
+        let (bob1_bundle, _, _, _) = bob1.generate_pre_key_bundle().await.unwrap();
+        let (bob2_bundle, _, _, _) = bob2.generate_pre_key_bundle().await.unwrap();
 
         let bob1_rdx = alice
             .add_contact_and_establish_session(&bob1_bundle, None)
@@ -2340,11 +2511,12 @@ mod tests {
 
         let mut alice = SignalBridge::new(db_path.to_str().unwrap()).await.unwrap();
 
-        let event_json = alice
+        let bundle_info = alice
             .generate_prekey_bundle_announcement("1.0.0-test")
             .await
             .unwrap();
-        let event: serde_json::Value = serde_json::from_str(&event_json).unwrap();
+        let event: serde_json::Value =
+            serde_json::from_str(&bundle_info.announcement_json).unwrap();
 
         assert_eq!(event["kind"], 30078);
         assert!(event["content"].is_string());
@@ -2379,7 +2551,7 @@ mod tests {
         let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
         let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
 
-        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+        let (bob_bundle, _, _, _) = bob.generate_pre_key_bundle().await.unwrap();
 
         let bob_rdx = alice
             .add_contact_and_establish_session(&bob_bundle, Some("bob"))
@@ -2415,7 +2587,7 @@ mod tests {
         let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
         let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
 
-        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+        let (bob_bundle, _, _, _) = bob.generate_pre_key_bundle().await.unwrap();
 
         let extracted_rdx = extract_rdx_from_bundle(&mut alice, &bob_bundle).unwrap();
 
@@ -2455,7 +2627,7 @@ mod tests {
         let mut alice = SignalBridge::new(alice_db.to_str().unwrap()).await.unwrap();
         let mut bob = SignalBridge::new(bob_db.to_str().unwrap()).await.unwrap();
 
-        let bob_bundle = bob.generate_pre_key_bundle().await.unwrap();
+        let (bob_bundle, _, _, _) = bob.generate_pre_key_bundle().await.unwrap();
         let bob_bundle_base64 = base64::engine::general_purpose::STANDARD.encode(&bob_bundle);
 
         let extracted_rdx = extract_rdx_from_bundle_base64(&mut alice, &bob_bundle_base64).unwrap();
@@ -2811,6 +2983,60 @@ mod tests {
             "Kyber key count should decrease after cleanup (before: {}, after: {})",
             before_count,
             after_count
+        );
+
+        let _ = std::fs::remove_file(&db_path);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_bundle_uses_latest_available_keys() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::key_rotation::{rotate_kyber_pre_key, rotate_signed_pre_key};
+        use crate::SignalBridge;
+
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let db_path = temp_dir.join(format!("test_bundle_latest_keys_{}.db", timestamp));
+        let mut bridge = SignalBridge::new(db_path.to_str().unwrap()).await?;
+
+        // Generate initial bundle
+        let (initial_bundle_bytes, _, _, _) = bridge.generate_pre_key_bundle().await?;
+        let initial_bundle: SerializablePreKeyBundle = bincode::deserialize(&initial_bundle_bytes)?;
+
+        // Initial bundle should use latest (maximum) keys
+        // We initialize with 100 pre-keys (IDs 1-100), 1 signed (ID 1), 1 kyber (ID 1)
+        assert_eq!(initial_bundle.pre_key_id, Some(100));
+        assert_eq!(initial_bundle.signed_pre_key_id, 1);
+        assert_eq!(initial_bundle.kyber_pre_key_id, 1);
+
+        // Force key rotation by calling rotation functions directly
+        let identity_key_pair = bridge
+            .storage
+            .identity_store()
+            .get_identity_key_pair()
+            .await?;
+        rotate_signed_pre_key(&mut bridge.storage, &identity_key_pair).await?;
+        rotate_kyber_pre_key(&mut bridge.storage, &identity_key_pair).await?;
+
+        // Generate new bundle after rotation
+        let (rotated_bundle_bytes, _, _, _) = bridge.generate_pre_key_bundle().await?;
+        let rotated_bundle: SerializablePreKeyBundle = bincode::deserialize(&rotated_bundle_bytes)?;
+
+        // Bundle should now use the NEW (higher ID) keys, not still use #1
+        // After rotation, we expect:
+        // - SignedPreKey #2 (rotated from #1)
+        // - KyberPreKey #2 (rotated from #1)
+        // - PreKey should still be from available pool (may still be #1 if not consumed)
+        assert_eq!(
+            rotated_bundle.signed_pre_key_id, 2,
+            "Bundle should use latest signed pre-key after rotation"
+        );
+        assert_eq!(
+            rotated_bundle.kyber_pre_key_id, 2,
+            "Bundle should use latest kyber pre-key after rotation"
         );
 
         let _ = std::fs::remove_file(&db_path);

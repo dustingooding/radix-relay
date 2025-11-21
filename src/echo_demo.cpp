@@ -69,12 +69,12 @@ auto main() -> int
     bool alice_bundles_eose_received = false;
     bool bob_bundles_eose_received = false;
 
-    auto alice_bundle_json = alice_bridge->generate_prekey_bundle_announcement("0.1.0");
-    auto alice_bundle_parsed = nlohmann::json::parse(alice_bundle_json);
+    auto alice_bundle_info = alice_bridge->generate_prekey_bundle_announcement("0.1.0");
+    auto alice_bundle_parsed = nlohmann::json::parse(alice_bundle_info.announcement_json);
     const std::string alice_own_pubkey = alice_bundle_parsed["pubkey"].get<std::string>();
 
-    auto bob_bundle_json = bob_bridge->generate_prekey_bundle_announcement("0.1.0");
-    auto bob_bundle_parsed = nlohmann::json::parse(bob_bundle_json);
+    auto bob_bundle_info = bob_bridge->generate_prekey_bundle_announcement("0.1.0");
+    auto bob_bundle_parsed = nlohmann::json::parse(bob_bundle_info.announcement_json);
     const std::string bob_own_pubkey = bob_bundle_parsed["pubkey"].get<std::string>();
 
     std::cout << "\nCreating queues...\n";

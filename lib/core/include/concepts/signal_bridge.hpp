@@ -1,6 +1,7 @@
 #pragma once
 
 #include <core/contact_info.hpp>
+#include <core/signal_types.hpp>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -17,7 +18,10 @@ concept signal_bridge = requires(T bridge,
   const std::vector<uint8_t> &bytes,
   const std::string &subscription_id,
   uint32_t timestamp,
-  std::uint64_t since_timestamp) {
+  std::uint64_t since_timestamp,
+  std::uint32_t pre_key_id,
+  std::uint32_t signed_pre_key_id,
+  std::uint32_t kyber_pre_key_id) {
   // Identity and session management
   { bridge.get_node_fingerprint() } -> std::convertible_to<std::string>;
   { bridge.list_contacts() } -> std::convertible_to<std::vector<radix_relay::core::contact_info>>;
@@ -25,12 +29,14 @@ concept signal_bridge = requires(T bridge,
   // Message encryption/decryption
   { bridge.encrypt_message(rdx, bytes) } -> std::convertible_to<std::vector<uint8_t>>;
   { bridge.decrypt_message(rdx, bytes) } -> std::convertible_to<std::vector<uint8_t>>;
+  { bridge.decrypt_message_with_metadata(rdx, bytes) } -> std::convertible_to<radix_relay::signal::decryption_result>;
 
   // Session establishment
   { bridge.add_contact_and_establish_session_from_base64(bundle, alias) } -> std::convertible_to<std::string>;
 
   // Bundle generation
-  { bridge.generate_prekey_bundle_announcement(version) } -> std::convertible_to<std::string>;
+  { bridge.generate_prekey_bundle_announcement(version) } -> std::convertible_to<radix_relay::signal::bundle_info>;
+  { bridge.generate_empty_bundle_announcement(version) } -> std::convertible_to<std::string>;
   { bridge.extract_rdx_from_bundle_base64(bundle) } -> std::convertible_to<std::string>;
 
   // Contact management
@@ -44,6 +50,10 @@ concept signal_bridge = requires(T bridge,
   // Nostr subscription
   { bridge.create_subscription_for_self(subscription_id, since_timestamp) } -> std::convertible_to<std::string>;
   { bridge.update_last_message_timestamp(since_timestamp) } -> std::same_as<void>;
+
+  // Key maintenance
+  { bridge.perform_key_maintenance() } -> std::convertible_to<radix_relay::signal::key_maintenance_result>;
+  { bridge.record_published_bundle(pre_key_id, signed_pre_key_id, kyber_pre_key_id) } -> std::same_as<void>;
 };
 
 }// namespace radix_relay::concepts
