@@ -17,13 +17,13 @@ TEST_CASE("message_handler handles incoming encrypted_message", "[message_handle
     auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
     auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_path);
 
-    auto alice_bundle_json = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
-    auto alice_event_json = nlohmann::json::parse(alice_bundle_json);
+    auto alice_bundle_info = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    auto alice_event_json = nlohmann::json::parse(alice_bundle_info.announcement_json);
     const std::string alice_bundle_base64 = alice_event_json["content"].get<std::string>();
     auto alice_rdx = bob_bridge->add_contact_and_establish_session_from_base64(alice_bundle_base64, "alice");
 
-    auto bob_bundle_json = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
-    auto bob_event_json = nlohmann::json::parse(bob_bundle_json);
+    auto bob_bundle_info = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    auto bob_event_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
     const std::string bob_bundle_base64 = bob_event_json["content"].get<std::string>();
     auto bob_rdx = alice_bridge->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob");
 
@@ -80,8 +80,8 @@ TEST_CASE("message_handler handles incoming bundle_announcement without establis
     auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
     auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_path);
 
-    auto alice_bundle_json = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
-    auto alice_event_json = nlohmann::json::parse(alice_bundle_json);
+    auto alice_bundle_info = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    auto alice_event_json = nlohmann::json::parse(alice_bundle_info.announcement_json);
     const std::string alice_bundle_base64 = alice_event_json["content"].get<std::string>();
 
     constexpr std::uint64_t test_timestamp = 1234567890;
@@ -124,8 +124,8 @@ TEST_CASE("message_handler filters old version bundle announcements", "[message_
   {
     auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
 
-    auto alice_bundle_json = alice_bridge->generate_prekey_bundle_announcement("0.4.0");
-    auto alice_event_json = nlohmann::json::parse(alice_bundle_json);
+    auto alice_bundle_info = alice_bridge->generate_prekey_bundle_announcement("0.4.0");
+    auto alice_event_json = nlohmann::json::parse(alice_bundle_info.announcement_json);
     const std::string alice_bundle_base64 = alice_event_json["content"].get<std::string>();
 
     SECTION("rejects bundle announcements with version < 0.4.0")
@@ -207,8 +207,8 @@ TEST_CASE("message_handler handles send command", "[message_handler]")
     auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
     auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_path);
 
-    auto bob_bundle_json = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
-    auto bob_event_json = nlohmann::json::parse(bob_bundle_json);
+    auto bob_bundle_info = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    auto bob_event_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
     const std::string bob_bundle_base64 = bob_event_json["content"].get<std::string>();
 
     auto bob_rdx = alice_bridge->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob");
@@ -291,8 +291,8 @@ TEST_CASE("message_handler handles establish_session command", "[message_handler
     auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
     auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_path);
 
-    auto alice_bundle_json = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
-    auto alice_event_json = nlohmann::json::parse(alice_bundle_json);
+    auto alice_bundle_info = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    auto alice_event_json = nlohmann::json::parse(alice_bundle_info.announcement_json);
     const std::string alice_bundle_base64 = alice_event_json["content"].get<std::string>();
 
     radix_relay::nostr::message_handler<radix_relay::signal::bridge> handler(bob_bridge);
@@ -321,8 +321,8 @@ TEST_CASE("message_handler handles trust command", "[message_handler]")
     auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
     auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_path);
 
-    auto bob_bundle_json = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
-    auto bob_event_json = nlohmann::json::parse(bob_bundle_json);
+    auto bob_bundle_info = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    auto bob_event_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
     const std::string bob_bundle_base64 = bob_event_json["content"].template get<std::string>();
 
     auto bob_rdx = alice_bridge->add_contact_and_establish_session_from_base64(bob_bundle_base64, "");
@@ -371,8 +371,8 @@ TEST_CASE("message_handler filters bundle announcements by version", "[message_h
 
     SECTION("accepts bundles with version == 0.4.0")
     {
-      auto bundle_json = bridge->generate_prekey_bundle_announcement("0.4.0");
-      auto event_json = nlohmann::json::parse(bundle_json);
+      auto bundle_json_info = bridge->generate_prekey_bundle_announcement("0.4.0");
+      auto event_json = nlohmann::json::parse(bundle_json_info.announcement_json);
 
       radix_relay::nostr::protocol::event_data event_data;
       event_data.id = event_json["id"];
@@ -397,8 +397,8 @@ TEST_CASE("message_handler filters bundle announcements by version", "[message_h
 
     SECTION("accepts bundles with version > 0.4.0")
     {
-      auto bundle_json = bridge->generate_prekey_bundle_announcement("0.5.0");
-      auto event_json = nlohmann::json::parse(bundle_json);
+      auto bundle_json_info = bridge->generate_prekey_bundle_announcement("0.5.0");
+      auto event_json = nlohmann::json::parse(bundle_json_info.announcement_json);
 
       radix_relay::nostr::protocol::event_data event_data;
       event_data.id = event_json["id"];
@@ -479,8 +479,8 @@ TEST_CASE("message_handler filters bundle announcements by content", "[message_h
 
     SECTION("accepts bundles with non-empty content")
     {
-      auto bundle_json = bridge->generate_prekey_bundle_announcement("0.4.0");
-      auto event_json = nlohmann::json::parse(bundle_json);
+      auto bundle_json_info = bridge->generate_prekey_bundle_announcement("0.4.0");
+      auto event_json = nlohmann::json::parse(bundle_json_info.announcement_json);
 
       radix_relay::nostr::protocol::event_data event_data;
       event_data.id = event_json["id"];

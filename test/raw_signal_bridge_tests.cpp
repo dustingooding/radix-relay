@@ -90,15 +90,15 @@ TEST_CASE("SignalBridge CXX Integration", "[signal][cxx]")
       auto alice = radix_relay::new_signal_bridge(alice_db.c_str());
       auto bob = radix_relay::new_signal_bridge(bob_db.c_str());
 
-      auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
-      auto alice_bundle = radix_relay::generate_pre_key_bundle(*alice);
-      REQUIRE(not bob_bundle.empty());
-      REQUIRE(not alice_bundle.empty());
+      auto bob_bundle_with_metadata = radix_relay::generate_pre_key_bundle(*bob);
+      auto alice_bundle_with_metadata = radix_relay::generate_pre_key_bundle(*alice);
+      REQUIRE(not bob_bundle_with_metadata.bundle_bytes.empty());
+      REQUIRE(not alice_bundle_with_metadata.bundle_bytes.empty());
 
-      auto bob_rdx =
-        radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "bob");
-      auto alice_rdx =
-        radix_relay::add_contact_and_establish_session(*bob, rust::Slice<const uint8_t>{ alice_bundle }, "alice");
+      auto bob_rdx = radix_relay::add_contact_and_establish_session(
+        *alice, rust::Slice<const uint8_t>{ bob_bundle_with_metadata.bundle_bytes }, "bob");
+      auto alice_rdx = radix_relay::add_contact_and_establish_session(
+        *bob, rust::Slice<const uint8_t>{ alice_bundle_with_metadata.bundle_bytes }, "alice");
       REQUIRE(std::string(bob_rdx).starts_with("RDX:"));
       REQUIRE(std::string(alice_rdx).starts_with("RDX:"));
 
@@ -137,7 +137,8 @@ TEST_CASE("SignalBridge CXX Integration", "[signal][cxx]")
       auto alice = radix_relay::new_signal_bridge(alice_db.c_str());
       auto bob = radix_relay::new_signal_bridge(bob_db.c_str());
 
-      auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
+      auto bob_bundle_with_metadata = radix_relay::generate_pre_key_bundle(*bob);
+      auto bob_bundle = bob_bundle_with_metadata.bundle_bytes;
       auto bob_rdx =
         radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "bob");
       REQUIRE(std::string(bob_rdx).starts_with("RDX:"));
@@ -171,7 +172,8 @@ TEST_CASE("SignalBridge Contact Management", "[signal][contacts][cxx]")
       auto alice = radix_relay::new_signal_bridge(alice_db.c_str());
       auto bob = radix_relay::new_signal_bridge(bob_db.c_str());
 
-      auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
+      auto bob_bundle_with_metadata = radix_relay::generate_pre_key_bundle(*bob);
+      auto bob_bundle = bob_bundle_with_metadata.bundle_bytes;
       REQUIRE(not bob_bundle.empty());
 
       auto bob_rdx =
@@ -204,7 +206,8 @@ TEST_CASE("SignalBridge Contact Management", "[signal][contacts][cxx]")
       auto alice = radix_relay::new_signal_bridge(alice_db.c_str());
       auto bob = radix_relay::new_signal_bridge(bob_db.c_str());
 
-      auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
+      auto bob_bundle_with_metadata = radix_relay::generate_pre_key_bundle(*bob);
+      auto bob_bundle = bob_bundle_with_metadata.bundle_bytes;
       auto bob_rdx =
         radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "");
 
@@ -238,8 +241,10 @@ TEST_CASE("SignalBridge Contact Management", "[signal][contacts][cxx]")
       auto bob = radix_relay::new_signal_bridge(bob_db.c_str());
       auto charlie = radix_relay::new_signal_bridge(charlie_db.c_str());
 
-      auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
-      auto charlie_bundle = radix_relay::generate_pre_key_bundle(*charlie);
+      auto bob_bundle_with_metadata = radix_relay::generate_pre_key_bundle(*bob);
+      auto bob_bundle = bob_bundle_with_metadata.bundle_bytes;
+      auto charlie_bundle_with_metadata = radix_relay::generate_pre_key_bundle(*charlie);
+      auto charlie_bundle = charlie_bundle_with_metadata.bundle_bytes;
 
       auto bob_rdx =
         radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "bob");
@@ -286,11 +291,11 @@ TEST_CASE("SignalBridge Bundle Announcement", "[signal][bundle][nostr][cxx]")
     {
       auto alice = radix_relay::new_signal_bridge(alice_db.c_str());
 
-      auto event_json = radix_relay::generate_prekey_bundle_announcement(*alice, "1.0.0-test");
-      REQUIRE(not event_json.empty());
+      auto bundle_info = radix_relay::generate_prekey_bundle_announcement(*alice, "1.0.0-test");
+      REQUIRE(not bundle_info.announcement_json.empty());
 
       // Parse JSON to verify structure
-      auto event_str = std::string(event_json);
+      auto event_str = std::string(bundle_info.announcement_json);
       REQUIRE(event_str.find("\"kind\":30078") != std::string::npos);
       REQUIRE(event_str.find("\"rdx\"") != std::string::npos);
       REQUIRE(event_str.find("RDX:") != std::string::npos);
@@ -318,7 +323,8 @@ TEST_CASE("SignalBridge Bundle Announcement", "[signal][bundle][nostr][cxx]")
       auto alice = radix_relay::new_signal_bridge(alice_db.c_str());
       auto bob = radix_relay::new_signal_bridge(bob_db.c_str());
 
-      auto bob_bundle = radix_relay::generate_pre_key_bundle(*bob);
+      auto bob_bundle_with_metadata = radix_relay::generate_pre_key_bundle(*bob);
+      auto bob_bundle = bob_bundle_with_metadata.bundle_bytes;
 
       // Alice adds Bob as contact AND establishes session in one call
       auto bob_rdx =

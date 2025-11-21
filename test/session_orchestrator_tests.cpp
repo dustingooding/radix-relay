@@ -106,12 +106,12 @@ struct two_bridge_fixture
     alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_db_path);
     bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_db_path);
 
-    const auto alice_bundle_json = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
-    const auto alice_bundle_parsed = nlohmann::json::parse(alice_bundle_json);
+    const auto alice_bundle_json_info = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    const auto alice_bundle_parsed = nlohmann::json::parse(alice_bundle_json_info.announcement_json);
     const std::string alice_bundle_base64 = alice_bundle_parsed["content"].template get<std::string>();
 
-    const auto bob_bundle_json = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
-    const auto bob_bundle_parsed = nlohmann::json::parse(bob_bundle_json);
+    const auto bob_bundle_json_info = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    const auto bob_bundle_parsed = nlohmann::json::parse(bob_bundle_json_info.announcement_json);
     const std::string bob_bundle_base64 = bob_bundle_parsed["content"].template get<std::string>();
 
     bob_rdx = alice_bridge->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob");
@@ -564,8 +564,8 @@ TEST_CASE("session_orchestrator stores discovered bundle identities", "[session_
   const queue_based_fixture alice(alice_db_path);
   const queue_based_fixture bob(bob_db_path);
 
-  auto bob_announcement = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
-  auto bob_announcement_json = nlohmann::json::parse(bob_announcement);
+  auto bob_announcement_info = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  auto bob_announcement_json = nlohmann::json::parse(bob_announcement_info.announcement_json);
   auto bob_bundle_base64 = bob_announcement_json["content"].template get<std::string>();
   auto bob_pubkey = bob_announcement_json["pubkey"].template get<std::string>();
   auto bob_event_id = bob_announcement_json["id"].template get<std::string>();
@@ -623,8 +623,8 @@ TEST_CASE("session_orchestrator removes bundle when bundle_announcement_removed 
   const queue_based_fixture alice(alice_db_path);
   const queue_based_fixture bob(bob_db_path);
 
-  auto bob_announcement = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
-  auto bob_announcement_json = nlohmann::json::parse(bob_announcement);
+  auto bob_announcement_info = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  auto bob_announcement_json = nlohmann::json::parse(bob_announcement_info.announcement_json);
   auto bob_bundle_base64 = bob_announcement_json["content"].template get<std::string>();
   auto bob_pubkey = bob_announcement_json["pubkey"].template get<std::string>();
   auto bob_event_id = bob_announcement_json["id"].template get<std::string>();
@@ -709,11 +709,11 @@ TEST_CASE("session_orchestrator updates bundle when duplicate bundle_announcemen
   const queue_based_fixture alice(alice_db_path);
   const queue_based_fixture bob(bob_db_path);
 
-  auto bob_announcement_1 = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
-  auto bob_announcement_json_1 = nlohmann::json::parse(bob_announcement_1);
-  auto bob_bundle_base64_1 = bob_announcement_json_1["content"].template get<std::string>();
-  auto bob_pubkey = bob_announcement_json_1["pubkey"].template get<std::string>();
-  auto bob_event_id_1 = bob_announcement_json_1["id"].template get<std::string>();
+  auto bob_announcement_1_info = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  auto bob_announcement_1_json = nlohmann::json::parse(bob_announcement_1_info.announcement_json);
+  auto bob_bundle_base64_1 = bob_announcement_1_json["content"].template get<std::string>();
+  auto bob_pubkey = bob_announcement_1_json["pubkey"].template get<std::string>();
+  auto bob_event_id_1 = bob_announcement_1_json["id"].template get<std::string>();
 
   const core::events::session_orchestrator::in_t bundle_event_1 = core::events::bundle_announcement_received{
     .pubkey = bob_pubkey, .bundle_content = bob_bundle_base64_1, .event_id = bob_event_id_1
@@ -730,10 +730,10 @@ TEST_CASE("session_orchestrator updates bundle when duplicate bundle_announcemen
   alice.io_context->run();
   alice.io_context->restart();
 
-  auto bob_announcement_2 = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
-  auto bob_announcement_json_2 = nlohmann::json::parse(bob_announcement_2);
-  auto bob_bundle_base64_2 = bob_announcement_json_2["content"].template get<std::string>();
-  auto bob_event_id_2 = bob_announcement_json_2["id"].template get<std::string>();
+  auto bob_announcement_2_info = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  auto bob_announcement_2_json = nlohmann::json::parse(bob_announcement_2_info.announcement_json);
+  auto bob_bundle_base64_2 = bob_announcement_2_json["content"].template get<std::string>();
+  auto bob_event_id_2 = bob_announcement_2_json["id"].template get<std::string>();
 
   const core::events::session_orchestrator::in_t bundle_event_2 = core::events::bundle_announcement_received{
     .pubkey = bob_pubkey, .bundle_content = bob_bundle_base64_2, .event_id = bob_event_id_2
@@ -784,8 +784,8 @@ TEST_CASE("session_orchestrator establishes session when trusting discovered ide
   const queue_based_fixture alice(alice_db_path);
   const queue_based_fixture bob(bob_db_path);
 
-  auto bob_announcement = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
-  auto bob_announcement_json = nlohmann::json::parse(bob_announcement);
+  auto bob_announcement_info = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  auto bob_announcement_json = nlohmann::json::parse(bob_announcement_info.announcement_json);
   auto bob_bundle_base64 = bob_announcement_json["content"].template get<std::string>();
   auto bob_pubkey = bob_announcement_json["pubkey"].template get<std::string>();
   auto bob_event_id = bob_announcement_json["id"].template get<std::string>();

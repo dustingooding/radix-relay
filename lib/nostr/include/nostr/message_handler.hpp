@@ -117,8 +117,8 @@ public:
     -> std::pair<std::string, std::vector<std::byte>>
   {
     const std::string version_str{ radix_relay::cmake::project_version };
-    auto bundle_json = bridge_->generate_prekey_bundle_announcement(version_str);
-    auto event_json = nlohmann::json::parse(bundle_json);
+    auto bundle_info = bridge_->generate_prekey_bundle_announcement(version_str);
+    auto event_json = nlohmann::json::parse(bundle_info.announcement_json);
 
     const std::string event_id = event_json["id"].template get<std::string>();
 

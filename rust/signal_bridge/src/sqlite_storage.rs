@@ -15,6 +15,9 @@ use libsignal_protocol::{
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
 
+/// Bundle metadata tuple: (pre_key_id, signed_pre_key_id, kyber_pre_key_id)
+type BundleMetadata = (u32, u32, u32);
+
 pub struct SqliteStorage {
     connection: Arc<Mutex<Connection>>,
     session_store: Option<SqliteSessionStore>,
@@ -96,6 +99,17 @@ impl SqliteStorage {
                 )",
                 [],
             )?;
+
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS bundle_metadata (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    pre_key_id INTEGER NOT NULL,
+                    signed_pre_key_id INTEGER NOT NULL,
+                    kyber_pre_key_id INTEGER NOT NULL,
+                    published_at INTEGER NOT NULL
+                )",
+                [],
+            )?;
         }
 
         self.session_store = Some(SqliteSessionStore::new(self.connection.clone()));
@@ -140,6 +154,40 @@ impl SqliteStorage {
             [timestamp.to_string()],
         )?;
         Ok(())
+    }
+
+    pub fn record_published_bundle(
+        &mut self,
+        pre_key_id: u32,
+        signed_pre_key_id: u32,
+        kyber_pre_key_id: u32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs();
+
+        conn.execute(
+            "INSERT OR REPLACE INTO bundle_metadata (id, pre_key_id, signed_pre_key_id, kyber_pre_key_id, published_at)
+             VALUES (1, ?1, ?2, ?3, ?4)",
+            rusqlite::params![pre_key_id, signed_pre_key_id, kyber_pre_key_id, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_last_published_bundle_metadata(
+        &self,
+    ) -> Result<Option<BundleMetadata>, Box<dyn std::error::Error>> {
+        let conn = self.connection.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT pre_key_id, signed_pre_key_id, kyber_pre_key_id FROM bundle_metadata WHERE id = 1",
+        )?;
+
+        match stmt.query_row([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))) {
+            Ok(result) => Ok(Some(result)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(Box::new(e)),
+        }
     }
 }
 
@@ -2528,6 +2576,40 @@ mod tests {
         assert!(
             result.is_err(),
             "Should return error when local registration ID is cleared"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_bundle_metadata_record_and_retrieve() -> Result<(), Box<dyn std::error::Error>> {
+        let mut storage = SqliteStorage::new(":memory:").await?;
+        storage.initialize_schema()?;
+
+        // Initially, no bundle metadata should exist
+        let initial_metadata = storage.get_last_published_bundle_metadata()?;
+        assert_eq!(initial_metadata, None, "Should have no metadata initially");
+
+        // Record a bundle
+        storage.record_published_bundle(100, 2, 2)?;
+
+        // Retrieve and verify
+        let metadata = storage.get_last_published_bundle_metadata()?;
+        assert_eq!(
+            metadata,
+            Some((100, 2, 2)),
+            "Should retrieve the recorded bundle metadata"
+        );
+
+        // Update with new bundle (simulating rotation)
+        storage.record_published_bundle(99, 3, 3)?;
+
+        // Verify the metadata was updated (not added as new row)
+        let updated_metadata = storage.get_last_published_bundle_metadata()?;
+        assert_eq!(
+            updated_metadata,
+            Some((99, 3, 3)),
+            "Should retrieve the updated bundle metadata"
         );
 
         Ok(())

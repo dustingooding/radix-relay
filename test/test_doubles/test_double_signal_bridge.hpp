@@ -2,6 +2,7 @@
 
 #include <concepts/signal_bridge.hpp>
 #include <core/contact_info.hpp>
+#include <signal/types.hpp>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,16 @@ struct test_double_signal_bridge
     return bytes;
   }
 
+  auto decrypt_message_with_metadata(const std::string & /*rdx*/, const std::vector<uint8_t> &bytes) const
+    -> radix_relay::signal::decryption_result
+  {
+    called_methods.push_back("decrypt_message_with_metadata");
+    return {
+      .plaintext = bytes,
+      .pre_key_consumed = false,
+    };
+  }
+
   auto add_contact_and_establish_session_from_base64(const std::string & /*bundle*/,
     const std::string & /*alias*/) const -> std::string
   {
@@ -56,9 +67,20 @@ struct test_double_signal_bridge
     return "RDX:new_contact";
   }
 
-  auto generate_prekey_bundle_announcement(const std::string & /*version*/) const -> std::string
+  auto generate_prekey_bundle_announcement(const std::string & /*version*/) const -> radix_relay::signal::bundle_info
   {
     called_methods.push_back("generate_prekey_bundle_announcement");
+    return {
+      .announcement_json = "{}",
+      .pre_key_id = 100,
+      .signed_pre_key_id = 1,
+      .kyber_pre_key_id = 1,
+    };
+  }
+
+  auto generate_empty_bundle_announcement(const std::string & /*version*/) const -> std::string
+  {
+    called_methods.push_back("generate_empty_bundle_announcement");
     return "{}";
   }
 
@@ -109,6 +131,23 @@ struct test_double_signal_bridge
   auto update_last_message_timestamp(std::uint64_t /*timestamp*/) const -> void
   {
     called_methods.push_back("update_last_message_timestamp");
+  }
+
+  auto perform_key_maintenance() const -> radix_relay::signal::key_maintenance_result
+  {
+    called_methods.push_back("perform_key_maintenance");
+    return {
+      .signed_pre_key_rotated = false,
+      .kyber_pre_key_rotated = false,
+      .pre_keys_replenished = false,
+    };
+  }
+
+  auto record_published_bundle(std::uint32_t /*pre_key_id*/,
+    std::uint32_t /*signed_pre_key_id*/,
+    std::uint32_t /*kyber_pre_key_id*/) const -> void
+  {
+    called_methods.push_back("record_published_bundle");
   }
 };
 
