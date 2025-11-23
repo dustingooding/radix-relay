@@ -40,6 +40,8 @@ template<typename Bridge> struct orchestrator_fixture
 
   explicit orchestrator_fixture(std::string path = "") : db_path(std::move(path))
   {
+    constexpr auto short_timeout{ 100 };
+
     if (not db_path.empty()) { std::filesystem::remove(db_path); }
 
     io_context = std::make_shared<boost::asio::io_context>();
@@ -54,15 +56,21 @@ template<typename Bridge> struct orchestrator_fixture
     presentation_out_queue =
       std::make_shared<async::async_queue<core::events::presentation_event_variant_t>>(io_context);
     orchestrator =
-      std::make_shared<radix_relay::nostr::session_orchestrator<Bridge, radix_relay::nostr::request_tracker>>(
-        bridge, tracker, io_context, in_queue, transport_out_queue, presentation_out_queue);
+      std::make_shared<radix_relay::nostr::session_orchestrator<Bridge, radix_relay::nostr::request_tracker>>(bridge,
+        tracker,
+        io_context,
+        in_queue,
+        transport_out_queue,
+        presentation_out_queue,
+        std::chrono::milliseconds(short_timeout));
   }
 
   // NOLINTNEXTLINE(bugprone-exception-escape)
   ~orchestrator_fixture()
   {
     orchestrator.reset();
-    io_context->run();
+    tracker->cancel_all_pending();
+    io_context->stop();
     bridge.reset();
     tracker.reset();
     if (not db_path.empty()) {
@@ -110,6 +118,8 @@ struct two_bridge_fixture
   explicit two_bridge_fixture(std::string alice_path, std::string bob_path)
     : alice_db_path(std::move(alice_path)), bob_db_path(std::move(bob_path))
   {
+    constexpr auto short_timeout{ 100 };
+
     std::filesystem::remove(alice_db_path);
     std::filesystem::remove(bob_db_path);
 
@@ -134,7 +144,13 @@ struct two_bridge_fixture
     alice_tracker = std::make_shared<radix_relay::nostr::request_tracker>(alice_io);
     alice_orch = std::make_shared<
       radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
-      alice_bridge, alice_tracker, alice_io, alice_in, alice_transport_out, alice_presentation_out);
+      alice_bridge,
+      alice_tracker,
+      alice_io,
+      alice_in,
+      alice_transport_out,
+      alice_presentation_out,
+      std::chrono::milliseconds(short_timeout));
 
     bob_io = std::make_shared<boost::asio::io_context>();
     bob_in = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(bob_io);
@@ -143,7 +159,13 @@ struct two_bridge_fixture
     bob_tracker = std::make_shared<radix_relay::nostr::request_tracker>(bob_io);
     bob_orch = std::make_shared<
       radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
-      bob_bridge, bob_tracker, bob_io, bob_in, bob_transport_out, bob_presentation_out);
+      bob_bridge,
+      bob_tracker,
+      bob_io,
+      bob_in,
+      bob_transport_out,
+      bob_presentation_out,
+      std::chrono::milliseconds(short_timeout));
   }
 
   // NOLINTNEXTLINE(bugprone-exception-escape)
@@ -151,8 +173,10 @@ struct two_bridge_fixture
   {
     alice_orch.reset();
     bob_orch.reset();
-    alice_io->run();
-    bob_io->run();
+    alice_tracker->cancel_all_pending();
+    alice_io->stop();
+    bob_tracker->cancel_all_pending();
+    bob_io->stop();
     alice_bridge.reset();
     bob_bridge.reset();
     alice_tracker.reset();
@@ -178,7 +202,7 @@ auto bytes_to_string(const std::vector<std::byte> &bytes) -> std::string
 
 TEST_CASE("Queue-based session_orchestrator processes publish_identity command", "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture_t fixture{ (std::filesystem::temp_directory_path() / "test_queue_publish.db").string() };
+  const test_double_fixture_t fixture;
 
   fixture.in_queue->push(events::publish_identity{});
 
@@ -194,7 +218,7 @@ TEST_CASE("Queue-based session_orchestrator processes publish_identity command",
 
 TEST_CASE("Queue-based session_orchestrator processes trust command", "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture_t fixture{ (std::filesystem::temp_directory_path() / "test_queue_trust.db").string() };
+  const test_double_fixture_t fixture;
 
   fixture.in_queue->push(events::trust{ .peer = "test_peer", .alias = "test_alias" });
 
@@ -209,9 +233,7 @@ TEST_CASE("Queue-based session_orchestrator processes trust command", "[core][se
 TEST_CASE("Queue-based session_orchestrator processes bytes_received with unknown protocol",
   "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture_t fixture{
-    (std::filesystem::temp_directory_path() / "test_queue_bytes_unknown.db").string()
-  };
+  const test_double_fixture_t fixture;
 
   const std::string json_msg = R"(["UNKNOWN","test"])";
   const auto bytes = string_to_bytes(json_msg);
@@ -229,7 +251,7 @@ TEST_CASE("Queue-based session_orchestrator processes bytes_received with unknow
 TEST_CASE("Queue-based session_orchestrator processes bytes_received with OK message",
   "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture_t fixture{ (std::filesystem::temp_directory_path() / "test_queue_bytes_ok.db").string() };
+  const test_double_fixture_t fixture;
 
   const std::string json_msg = R"(["OK","test_event_id",true,""])";
   const auto bytes = string_to_bytes(json_msg);
@@ -247,7 +269,7 @@ TEST_CASE("Queue-based session_orchestrator processes bytes_received with OK mes
 TEST_CASE("Queue-based session_orchestrator processes bytes_received with EOSE message",
   "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture_t fixture{ (std::filesystem::temp_directory_path() / "test_queue_bytes_eose.db").string() };
+  const test_double_fixture_t fixture;
 
   const std::string json_msg = R"(["EOSE","test_subscription_id"])";
   const auto bytes = string_to_bytes(json_msg);
@@ -265,9 +287,7 @@ TEST_CASE("Queue-based session_orchestrator processes bytes_received with EOSE m
 TEST_CASE("Queue-based session_orchestrator processes transport disconnected event",
   "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture_t fixture{
-    (std::filesystem::temp_directory_path() / "test_queue_disconnected.db").string()
-  };
+  const test_double_fixture_t fixture;
 
   fixture.in_queue->push(core::events::transport::disconnected{});
 
@@ -281,7 +301,7 @@ TEST_CASE("Queue-based session_orchestrator processes transport disconnected eve
 
 TEST_CASE("Queue-based session_orchestrator processes transport sent event", "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture_t fixture{ (std::filesystem::temp_directory_path() / "test_queue_sent.db").string() };
+  const test_double_fixture_t fixture;
 
   fixture.in_queue->push(core::events::transport::sent{ .message_id = "test_msg_id" });
 
@@ -296,9 +316,7 @@ TEST_CASE("Queue-based session_orchestrator processes transport sent event", "[c
 TEST_CASE("Queue-based session_orchestrator processes transport send_failed event",
   "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture_t fixture{
-    (std::filesystem::temp_directory_path() / "test_queue_send_failed.db").string()
-  };
+  const test_double_fixture_t fixture;
 
   fixture.in_queue->push(
     core::events::transport::send_failed{ .message_id = "test_msg_id", .error_message = "test reason" });
@@ -314,9 +332,7 @@ TEST_CASE("Queue-based session_orchestrator processes transport send_failed even
 TEST_CASE("Queue-based session_orchestrator processes transport connect_failed event",
   "[core][session_orchestrator][queue]")
 {
-  const queue_based_fixture_t fixture{
-    (std::filesystem::temp_directory_path() / "test_queue_connect_failed.db").string()
-  };
+  const test_double_fixture_t fixture;
 
   fixture.in_queue->push(core::events::transport::connect_failed{ .url = "test_url", .error_message = "test reason" });
 
@@ -375,8 +391,7 @@ TEST_CASE("Queue-based session_orchestrator Alice encrypts and Bob decrypts end-
 
 TEST_CASE("session_orchestrator handles subscribe_identities command", "[session_orchestrator][subscribe]")
 {
-  const queue_based_fixture_t fixture(
-    (std::filesystem::temp_directory_path() / "test_subscribe_identities.db").string());
+  const test_double_fixture_t fixture;
 
   fixture.in_queue->push(events::subscribe_identities{});
 
@@ -415,7 +430,7 @@ TEST_CASE("session_orchestrator handles subscribe_identities command", "[session
 
 TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_orchestrator][subscribe]")
 {
-  const queue_based_fixture_t fixture((std::filesystem::temp_directory_path() / "test_subscribe_messages.db").string());
+  const test_double_fixture_t fixture;
 
   fixture.in_queue->push(events::subscribe_messages{});
 
@@ -454,7 +469,7 @@ TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_o
 TEST_CASE("session_orchestrator handles connect command and manages connection lifecycle",
   "[session_orchestrator][connect]")
 {
-  const queue_based_fixture_t fixture((std::filesystem::temp_directory_path() / "test_connect_lifecycle.db").string());
+  const test_double_fixture_t fixture;
 
   fixture.in_queue->push(events::connect{ .relay = "wss://relay.example.com" });
 
@@ -476,8 +491,7 @@ TEST_CASE("session_orchestrator handles connect command and manages connection l
 
 TEST_CASE("session_orchestrator sends subscriptions when transport connects", "[session_orchestrator][connect]")
 {
-  const queue_based_fixture_t fixture(
-    (std::filesystem::temp_directory_path() / "test_transport_connected.db").string());
+  const test_double_fixture_t fixture;
 
   fixture.in_queue->push(core::events::transport::connected{ .url = "wss://relay.example.com" });
 
@@ -507,9 +521,7 @@ TEST_CASE("session_orchestrator respects cancellation signal", "[core][session_o
     std::atomic<bool> coroutine_done{ false };
   };
 
-  const queue_based_fixture_t fixture{
-    (std::filesystem::temp_directory_path() / "test_cancellation_orchestrator.db").string()
-  };
+  const test_double_fixture_t fixture;
   auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
   auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
 
@@ -517,7 +529,7 @@ TEST_CASE("session_orchestrator respects cancellation signal", "[core][session_o
 
   boost::asio::co_spawn(
     *fixture.io_context,
-    [](std::shared_ptr<radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge,
+    [](std::shared_ptr<radix_relay::nostr::session_orchestrator<radix_relay_test::test_double_signal_bridge,
          radix_relay::nostr::request_tracker>> orch,
       std::shared_ptr<test_state> test_state_ptr,
       std::shared_ptr<boost::asio::cancellation_slot> c_slot) -> boost::asio::awaitable<void> {
@@ -544,12 +556,7 @@ TEST_CASE("session_orchestrator respects cancellation signal", "[core][session_o
 
 TEST_CASE("session_orchestrator returns empty identities list initially", "[session_orchestrator][bundles]")
 {
-  const auto timestamp =
-    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-  const auto alice_db_path =
-    (std::filesystem::temp_directory_path() / ("test_bundle_storage_alice_" + std::to_string(timestamp) + ".db"))
-      .string();
-  const queue_based_fixture_t alice(alice_db_path);
+  const test_double_fixture_t alice;
 
   alice.in_queue->push(core::events::list_identities{});
 
@@ -923,7 +930,7 @@ TEST_CASE("session_orchestrator ignores duplicate encrypted messages", "[session
 TEST_CASE("session_orchestrator includes since filter when subscribing to messages",
   "[session_orchestrator][subscribe][since]")
 {
-  const queue_based_fixture_t fixture((std::filesystem::temp_directory_path() / "test_subscribe_since.db").string());
+  const test_double_fixture_t fixture;
 
   constexpr std::uint64_t test_timestamp = 1700000000;
 

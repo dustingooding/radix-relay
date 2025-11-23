@@ -42,6 +42,12 @@ public:
 
   [[nodiscard]] auto has_pending(const std::string &event_id) const -> bool { return pending_.contains(event_id); }
 
+  auto cancel_all_pending() -> void
+  {
+    for (auto &[event_id, request] : pending_) { request.timer->cancel(); }
+    pending_.clear();
+  }
+
   template<typename ResponseType> auto resolve(const std::string &event_id, const ResponseType &response) -> void
   {
     auto iter = pending_.find(event_id);

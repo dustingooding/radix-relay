@@ -14,6 +14,7 @@ struct test_double_signal_bridge
   mutable std::vector<std::string> called_methods;
   std::string fingerprint_to_return = "RDX:test_fingerprint";
   std::vector<radix_relay::core::contact_info> contacts_to_return;
+  mutable std::uint64_t last_message_timestamp = 0;
 
   auto get_node_fingerprint() const -> std::string
   {
@@ -132,16 +133,22 @@ struct test_double_signal_bridge
     return "{}";
   }
 
-  auto create_subscription_for_self(const std::string & /*subscription_id*/,
-    std::uint64_t /*since_timestamp*/ = 0) const -> std::string
+  auto create_subscription_for_self(const std::string &subscription_id, std::uint64_t since_timestamp = 0) const
+    -> std::string
   {
     called_methods.push_back("create_subscription_for_self");
-    return R"(["REQ","sub123",{"kinds":[4],"#p":["test_pubkey"]}])";
+    const auto timestamp_to_use = since_timestamp > 0 ? since_timestamp : last_message_timestamp;
+    if (timestamp_to_use > 0) {
+      return R"(["REQ",")" + subscription_id + R"(",{"kinds":[40001],"#p":["test_pubkey"],"since":)"
+             + std::to_string(timestamp_to_use) + R"(}])";
+    }
+    return R"(["REQ",")" + subscription_id + R"(",{"kinds":[40001],"#p":["test_pubkey"]}])";
   }
 
-  auto update_last_message_timestamp(std::uint64_t /*timestamp*/) const -> void
+  auto update_last_message_timestamp(std::uint64_t timestamp) const -> void
   {
     called_methods.push_back("update_last_message_timestamp");
+    last_message_timestamp = timestamp;
   }
 
   auto perform_key_maintenance() const -> radix_relay::signal::key_maintenance_result

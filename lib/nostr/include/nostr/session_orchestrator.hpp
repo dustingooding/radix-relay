@@ -42,9 +42,10 @@ struct session_orchestrator : public std::enable_shared_from_this<session_orches
     const std::shared_ptr<boost::asio::io_context> &io_context,
     const std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> &in_queue,
     const std::shared_ptr<async::async_queue<core::events::transport::in_t>> &transport_out_queue,
-    const std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> &presentation_out_queue)
-    : bridge_(bridge), handler_(bridge_), tracker_(tracker), io_context_(io_context), in_queue_(in_queue),
-      transport_out_queue_(transport_out_queue), presentation_out_queue_(presentation_out_queue)
+    const std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> &presentation_out_queue,
+    std::chrono::milliseconds timeout = std::chrono::seconds(15))
+    : bridge_(bridge), handler_(bridge_), tracker_(tracker), request_timeout_(timeout), io_context_(io_context),
+      in_queue_(in_queue), transport_out_queue_(transport_out_queue), presentation_out_queue_(presentation_out_queue)
   {}
 
   // NOLINTNEXTLINE(performance-unnecessary-value-param)
@@ -78,11 +79,11 @@ private:
   {
     return discovered_bundles_;
   }
-  static constexpr auto default_timeout = std::chrono::seconds(15);
 
   std::shared_ptr<Bridge> bridge_;
   nostr::message_handler<Bridge> handler_;
   std::shared_ptr<Tracker> tracker_;
+  std::chrono::milliseconds request_timeout_;
   std::shared_ptr<boost::asio::io_context> io_context_;
   std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> in_queue_;
   std::shared_ptr<async::async_queue<core::events::transport::in_t>> transport_out_queue_;
@@ -110,7 +111,7 @@ private:
 
         try {
           auto ok_response =
-            co_await self->tracker_->template async_track<nostr::protocol::ok>(event_id, self->default_timeout);
+            co_await self->tracker_->template async_track<nostr::protocol::ok>(event_id, self->request_timeout_);
           self->emit_presentation_event(core::events::message_sent{ cmd.peer, event_id, ok_response.accepted });
         } catch (const std::exception &) {
           self->emit_presentation_event(
@@ -134,7 +135,7 @@ private:
 
         try {
           auto ok_response =
-            co_await self->tracker_->template async_track<nostr::protocol::ok>(result.event_id, self->default_timeout);
+            co_await self->tracker_->template async_track<nostr::protocol::ok>(result.event_id, self->request_timeout_);
           if (ok_response.accepted) {
             self->bridge_->record_published_bundle(
               result.pre_key_id, result.signed_pre_key_id, result.kyber_pre_key_id);
@@ -163,7 +164,7 @@ private:
 
         try {
           auto ok_response =
-            co_await self->tracker_->template async_track<nostr::protocol::ok>(event_id, self->default_timeout);
+            co_await self->tracker_->template async_track<nostr::protocol::ok>(event_id, self->request_timeout_);
           self->emit_presentation_event(
             core::events::bundle_published{ .event_id = event_id, .accepted = ok_response.accepted });
         } catch (const std::exception &e) {
@@ -203,7 +204,7 @@ private:
 
         try {
           auto eose = co_await self->tracker_->template async_track<nostr::protocol::eose>(
-            subscription_id, self->default_timeout);
+            subscription_id, self->request_timeout_);
           self->emit_presentation_event(core::events::subscription_established{ eose.subscription_id });
         } catch (const std::exception &e) {
           spdlog::warn("[session_orchestrator] EOSE timeout for subscription: {} - {}", subscription_id, e.what());
