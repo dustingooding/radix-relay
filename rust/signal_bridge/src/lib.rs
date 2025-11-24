@@ -275,16 +275,11 @@ impl SignalBridge {
 
     pub async fn decrypt_message_with_metadata(
         &mut self,
-        peer: &str,
+        peer_hint: &str,
         ciphertext_bytes: &[u8],
     ) -> Result<DecryptionResult, SignalBridgeError> {
+        use crate::contact_manager::ContactManager;
         use libsignal_protocol::{PreKeySignalMessage, SignalMessage};
-
-        if peer.is_empty() {
-            return Err(SignalBridgeError::InvalidInput(
-                "Specify a peer name".to_string(),
-            ));
-        }
 
         if ciphertext_bytes.is_empty() {
             return Err(SignalBridgeError::InvalidInput(
@@ -292,36 +287,58 @@ impl SignalBridge {
             ));
         }
 
-        let session_address = match self
-            .contact_manager
-            .lookup_contact(peer, self.storage.session_store())
-            .await
-        {
-            Ok(contact) => contact.rdx_fingerprint,
-            Err(_) => peer.to_string(),
-        };
+        let (session_address, pre_key_consumed, ciphertext) =
+            if let Ok(prekey_msg) = PreKeySignalMessage::try_from(ciphertext_bytes) {
+                let sender_identity = prekey_msg.identity_key();
+                let rdx_fingerprint =
+                    ContactManager::generate_identity_fingerprint_from_key(sender_identity);
+
+                let contact_exists = self
+                    .contact_manager
+                    .lookup_contact(&rdx_fingerprint, self.storage.session_store())
+                    .await
+                    .is_ok();
+
+                if !contact_exists {
+                    self.contact_manager
+                        .add_contact_from_identity_key(sender_identity)
+                        .await?;
+                }
+
+                let pre_key_consumed = prekey_msg.pre_key_id().is_some();
+                (
+                    rdx_fingerprint,
+                    pre_key_consumed,
+                    CiphertextMessage::PreKeySignalMessage(prekey_msg),
+                )
+            } else if let Ok(signal_msg) = SignalMessage::try_from(ciphertext_bytes) {
+                if peer_hint.is_empty() {
+                    return Err(SignalBridgeError::InvalidInput(
+                        "SignalMessage requires peer_hint (Nostr pubkey from event wrapper)"
+                            .to_string(),
+                    ));
+                }
+
+                let contact = self
+                    .contact_manager
+                    .lookup_contact(peer_hint, self.storage.session_store())
+                    .await?;
+
+                (
+                    contact.rdx_fingerprint,
+                    false,
+                    CiphertextMessage::SignalMessage(signal_msg),
+                )
+            } else {
+                return Err(SignalBridgeError::Serialization(
+                    "Provide a valid Signal Protocol message".to_string(),
+                ));
+            };
 
         let address = ProtocolAddress::new(
             session_address,
             DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
         );
-
-        let pre_key_consumed =
-            if let Ok(prekey_msg) = PreKeySignalMessage::try_from(ciphertext_bytes) {
-                prekey_msg.pre_key_id().is_some()
-            } else {
-                false
-            };
-
-        let ciphertext = if let Ok(prekey_msg) = PreKeySignalMessage::try_from(ciphertext_bytes) {
-            CiphertextMessage::PreKeySignalMessage(prekey_msg)
-        } else if let Ok(signal_msg) = SignalMessage::try_from(ciphertext_bytes) {
-            CiphertextMessage::SignalMessage(signal_msg)
-        } else {
-            return Err(SignalBridgeError::Serialization(
-                "Provide a valid Signal Protocol message".to_string(),
-            ));
-        };
 
         let plaintext = self.storage.decrypt_message(&address, &ciphertext).await?;
 
@@ -3040,6 +3057,236 @@ mod tests {
         );
 
         let _ = std::fs::remove_file(&db_path);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_extract_identity_from_prekey_message() -> Result<(), Box<dyn std::error::Error>> {
+        use libsignal_protocol::PreKeySignalMessage;
+
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db_path = temp_dir.join(format!("test_extract_alice_{}.db", timestamp));
+        let mut alice_bridge = SignalBridge::new(alice_db_path.to_str().unwrap()).await?;
+
+        let bob_db_path = temp_dir.join(format!("test_extract_bob_{}.db", timestamp));
+        let mut bob_bridge = SignalBridge::new(bob_db_path.to_str().unwrap()).await?;
+
+        let (alice_bundle_bytes, _, _, _) = alice_bridge.generate_pre_key_bundle().await?;
+        bob_bridge
+            .establish_session("alice", &alice_bundle_bytes)
+            .await?;
+
+        let plaintext = b"Hello Alice!";
+        let ciphertext = bob_bridge.encrypt_message("alice", plaintext).await?;
+
+        let prekey_msg = PreKeySignalMessage::try_from(ciphertext.as_ref())?;
+        let extracted_identity_key = prekey_msg.identity_key();
+
+        let bob_identity_key_pair = bob_bridge
+            .storage
+            .identity_store()
+            .get_identity_key_pair()
+            .await?;
+        let bob_identity_key = bob_identity_key_pair.identity_key();
+
+        assert_eq!(
+            extracted_identity_key.serialize(),
+            bob_identity_key.serialize(),
+            "Alice should be able to extract Bob's identity key from the PreKeySignalMessage"
+        );
+
+        let _ = std::fs::remove_file(&alice_db_path);
+        let _ = std::fs::remove_file(&bob_db_path);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_first_message_is_prekey_signal_message() -> Result<(), Box<dyn std::error::Error>>
+    {
+        use libsignal_protocol::PreKeySignalMessage;
+
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db_path = temp_dir.join(format!("test_prekey_type_alice_{}.db", timestamp));
+        let mut alice_bridge = SignalBridge::new(alice_db_path.to_str().unwrap()).await?;
+
+        let bob_db_path = temp_dir.join(format!("test_prekey_type_bob_{}.db", timestamp));
+        let mut bob_bridge = SignalBridge::new(bob_db_path.to_str().unwrap()).await?;
+
+        let (alice_bundle_bytes, _, _, _) = alice_bridge.generate_pre_key_bundle().await?;
+        bob_bridge
+            .establish_session("alice", &alice_bundle_bytes)
+            .await?;
+
+        let plaintext = b"Hello Alice!";
+        let ciphertext = bob_bridge.encrypt_message("alice", plaintext).await?;
+
+        assert!(
+            PreKeySignalMessage::try_from(ciphertext.as_ref()).is_ok(),
+            "First message to a new recipient must be a PreKeySignalMessage containing sender identity"
+        );
+
+        let _ = std::fs::remove_file(&alice_db_path);
+        let _ = std::fs::remove_file(&bob_db_path);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_decrypt_initial_message_from_unknown_sender(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db_path = temp_dir.join(format!("test_unknown_alice_{}.db", timestamp));
+        let mut alice_bridge = SignalBridge::new(alice_db_path.to_str().unwrap()).await?;
+
+        let bob_db_path = temp_dir.join(format!("test_unknown_bob_{}.db", timestamp));
+        let mut bob_bridge = SignalBridge::new(bob_db_path.to_str().unwrap()).await?;
+
+        let bob_nostr_keypair = bob_bridge.derive_nostr_keypair().await?;
+        let bob_nostr_pubkey = bob_nostr_keypair.public_key().to_string();
+
+        let (alice_bundle_bytes, _, _, _) = alice_bridge.generate_pre_key_bundle().await?;
+        let alice_rdx = bob_bridge
+            .add_contact_and_establish_session(&alice_bundle_bytes, Some("Alice"))
+            .await?;
+
+        let plaintext = b"Hello Alice!";
+        let ciphertext = bob_bridge.encrypt_message(&alice_rdx, plaintext).await?;
+
+        let result = alice_bridge
+            .decrypt_message_with_metadata(&bob_nostr_pubkey, &ciphertext)
+            .await?;
+
+        assert_eq!(result.plaintext, plaintext);
+        assert!(result.should_republish_bundle);
+
+        let bob_contact = alice_bridge.lookup_contact(&bob_nostr_pubkey).await?;
+        assert!(bob_contact.rdx_fingerprint.starts_with("RDX:"));
+        assert_eq!(bob_contact.nostr_pubkey, bob_nostr_pubkey);
+        assert!(bob_contact
+            .user_alias
+            .as_ref()
+            .unwrap()
+            .starts_with("Unknown-"));
+
+        let response = b"Hi Bob!";
+        let response_ciphertext = alice_bridge
+            .encrypt_message(&bob_contact.rdx_fingerprint, response)
+            .await?;
+
+        let decrypted_response = bob_bridge
+            .decrypt_message_with_metadata(
+                &alice_bridge
+                    .derive_nostr_keypair()
+                    .await?
+                    .public_key()
+                    .to_string(),
+                &response_ciphertext,
+            )
+            .await?;
+
+        assert_eq!(decrypted_response.plaintext, response);
+
+        let _ = std::fs::remove_file(&alice_db_path);
+        let _ = std::fs::remove_file(&bob_db_path);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_bidirectional_session_uses_signal_message(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use libsignal_protocol::{PreKeySignalMessage, SignalMessage};
+
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db_path = temp_dir.join(format!("test_bidi_alice_{}.db", timestamp));
+        let mut alice_bridge = SignalBridge::new(alice_db_path.to_str().unwrap()).await?;
+
+        let bob_db_path = temp_dir.join(format!("test_bidi_bob_{}.db", timestamp));
+        let mut bob_bridge = SignalBridge::new(bob_db_path.to_str().unwrap()).await?;
+
+        let alice_nostr_pubkey = alice_bridge
+            .derive_nostr_keypair()
+            .await?
+            .public_key()
+            .to_string();
+        let bob_nostr_pubkey = bob_bridge
+            .derive_nostr_keypair()
+            .await?
+            .public_key()
+            .to_string();
+
+        let (alice_bundle_bytes, _, _, _) = alice_bridge.generate_pre_key_bundle().await?;
+        let alice_rdx = bob_bridge
+            .add_contact_and_establish_session(&alice_bundle_bytes, Some("Alice"))
+            .await?;
+
+        let first_msg = b"Hello Alice!";
+        let first_ciphertext = bob_bridge.encrypt_message(&alice_rdx, first_msg).await?;
+
+        assert!(
+            PreKeySignalMessage::try_from(first_ciphertext.as_ref()).is_ok(),
+            "First message from Bob should be PreKeySignalMessage"
+        );
+
+        let result = alice_bridge
+            .decrypt_message_with_metadata(&bob_nostr_pubkey, &first_ciphertext)
+            .await?;
+        assert_eq!(result.plaintext, first_msg);
+
+        let bob_contact = alice_bridge.lookup_contact(&bob_nostr_pubkey).await?;
+
+        let alice_response = b"Hi Bob!";
+        let alice_response_ciphertext = alice_bridge
+            .encrypt_message(&bob_contact.rdx_fingerprint, alice_response)
+            .await?;
+
+        assert!(
+            SignalMessage::try_from(alice_response_ciphertext.as_ref()).is_ok(),
+            "Alice's response uses SignalMessage (session established on her side during decrypt)"
+        );
+
+        let bob_result = bob_bridge
+            .decrypt_message_with_metadata(&alice_nostr_pubkey, &alice_response_ciphertext)
+            .await?;
+        assert_eq!(bob_result.plaintext, alice_response);
+
+        let second_msg = b"How are you?";
+        let second_ciphertext = bob_bridge.encrypt_message(&alice_rdx, second_msg).await?;
+
+        assert!(
+            SignalMessage::try_from(second_ciphertext.as_ref()).is_ok(),
+            "After bidirectional session established, should use SignalMessage"
+        );
+
+        let second_result = alice_bridge
+            .decrypt_message_with_metadata(&bob_nostr_pubkey, &second_ciphertext)
+            .await?;
+        assert_eq!(second_result.plaintext, second_msg);
+        assert!(
+            !second_result.should_republish_bundle,
+            "No pre-key consumed in SignalMessage"
+        );
+
+        let _ = std::fs::remove_file(&alice_db_path);
+        let _ = std::fs::remove_file(&bob_db_path);
         Ok(())
     }
 }

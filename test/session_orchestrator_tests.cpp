@@ -1152,4 +1152,174 @@ TEST_CASE("session_orchestrator republishes bundle on connection if keys rotated
   REQUIRE(found_bundle);
 }
 
+TEST_CASE("reply to unknown sender includes correct nostr pubkey in p tag",
+  "[session_orchestrator][x3dh][unknown-sender][reply]")
+{
+  const queue_based_fixture_t alice{
+    (std::filesystem::temp_directory_path() / "test_reply_unknown_alice.db").string()
+  };
+  const queue_based_fixture_t bob{ (std::filesystem::temp_directory_path() / "test_reply_unknown_bob.db").string() };
+
+  // Get bundles
+  const auto alice_bundle_info = alice.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  const auto alice_bundle_json = nlohmann::json::parse(alice_bundle_info.announcement_json);
+  const std::string alice_bundle_base64 = alice_bundle_json["content"].template get<std::string>();
+  const std::string alice_nostr_pubkey = alice_bundle_json["pubkey"].template get<std::string>();
+
+  const auto bob_bundle_info = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  const auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
+  const std::string bob_nostr_pubkey = bob_bundle_json["pubkey"].template get<std::string>();
+
+  // Bob establishes session with Alice (Alice has NOT established session with Bob)
+  const std::string alice_rdx = bob.bridge->add_contact_and_establish_session_from_base64(alice_bundle_base64, "Alice");
+
+  // Bob sends message to Alice
+  const std::string plaintext = "Hello Alice from unknown Bob!";
+  const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
+  auto encrypted_bytes = bob.bridge->encrypt_message(alice_rdx, message_bytes);
+
+  std::string hex_content;
+  for (const auto &byte : encrypted_bytes) { hex_content += std::format("{:02x}", byte); }
+
+  // Create Nostr event from Bob to Alice
+  constexpr std::uint64_t test_timestamp = 1234567890;
+  constexpr std::uint32_t encrypted_message_kind = 40001;
+  const nlohmann::json event_json = { { "id", "test_event_unknown_bob" },
+    { "pubkey", bob_nostr_pubkey },
+    { "created_at", test_timestamp },
+    { "kind", encrypted_message_kind },
+    { "content", hex_content },
+    { "sig", "signature" },
+    { "tags", nlohmann::json::array({ nlohmann::json::array({ "p", alice_nostr_pubkey }) }) } };
+
+  const std::string nostr_message_json = nlohmann::json::array({ "EVENT", "sub_id_unknown", event_json }).dump();
+
+  // Alice receives the message from unknown Bob
+  alice.in_queue->push(core::events::transport::bytes_received{ .bytes = string_to_bytes(nostr_message_json) });
+  boost::asio::co_spawn(*alice.io_context, alice.orchestrator->run_once(), boost::asio::detached);
+  alice.io_context->run();
+
+  // Verify Alice received the message
+  REQUIRE_FALSE(alice.presentation_out_queue->empty());
+  alice.io_context->restart();
+  auto msg_future =
+    boost::asio::co_spawn(*alice.io_context, alice.presentation_out_queue->pop(), boost::asio::use_future);
+  alice.io_context->run();
+  auto msg_event = msg_future.get();
+
+  REQUIRE(std::holds_alternative<events::message_received>(msg_event));
+  const auto &received = std::get<events::message_received>(msg_event);
+  REQUIRE(received.content == plaintext);
+  REQUIRE(received.sender_alias.starts_with("Unknown-"));
+
+  // Alice sends a reply to Bob using his Unknown alias
+  const std::string reply = "Hi Bob!";
+  alice.io_context->restart();
+  alice.in_queue->push(events::send{ .peer = received.sender_alias, .message = reply });
+  boost::asio::co_spawn(*alice.io_context, alice.orchestrator->run_once(), boost::asio::detached);
+  alice.io_context->run();
+
+  // Alice's transport queue should have messages (bundle republish first, then reply)
+  REQUIRE_FALSE(alice.transport_out_queue->empty());
+
+  // Pop the bundle republish message (kind 30078)
+  alice.io_context->restart();
+  auto bundle_future =
+    boost::asio::co_spawn(*alice.io_context, alice.transport_out_queue->pop(), boost::asio::use_future);
+  alice.io_context->run();
+  auto bundle_cmd = bundle_future.get();
+  REQUIRE(std::holds_alternative<core::events::transport::send>(bundle_cmd));
+
+  // Now pop the actual reply message (kind 40001)
+  REQUIRE_FALSE(alice.transport_out_queue->empty());
+  alice.io_context->restart();
+  auto reply_future =
+    boost::asio::co_spawn(*alice.io_context, alice.transport_out_queue->pop(), boost::asio::use_future);
+  alice.io_context->run();
+  auto reply_cmd = reply_future.get();
+
+  REQUIRE(std::holds_alternative<core::events::transport::send>(reply_cmd));
+  const auto &send_cmd = std::get<core::events::transport::send>(reply_cmd);
+  const std::string json_str = bytes_to_string(send_cmd.bytes);
+  auto parsed = nlohmann::json::parse(json_str);
+
+  // Verify it's an EVENT message
+  REQUIRE(parsed.is_array());
+  REQUIRE(parsed[0] == "EVENT");
+  const auto &reply_event = parsed[1];
+
+  // Verify it's an encrypted message, not a bundle
+  REQUIRE(reply_event["kind"] == 40001);
+
+  // Verify the p tag contains Bob's Nostr pubkey
+  REQUIRE(reply_event.contains("tags"));
+  auto p_tag = std::ranges::find_if(
+    reply_event["tags"], [](const auto &tag) { return tag.is_array() and tag.size() >= 2 and tag[0] == "p"; });
+
+  REQUIRE(p_tag != reply_event["tags"].end());
+  const std::string recipient_nostr_pubkey = (*p_tag)[1].template get<std::string>();
+  CHECK(recipient_nostr_pubkey == bob_nostr_pubkey);
+}
+
+TEST_CASE("trust updates alias for existing contact without bundle", "[session_orchestrator][trust][alias]")
+{
+  const queue_based_fixture_t alice{ (std::filesystem::temp_directory_path() / "test_trust_update_alias.db").string() };
+  const queue_based_fixture_t bob{ (std::filesystem::temp_directory_path() / "test_trust_update_bob.db").string() };
+
+  const auto alice_bundle_info = alice.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  const auto alice_bundle_json = nlohmann::json::parse(alice_bundle_info.announcement_json);
+  const std::string alice_bundle_base64 = alice_bundle_json["content"].template get<std::string>();
+
+  const auto bob_bundle_info = bob.bridge->generate_prekey_bundle_announcement("test-0.1.0");
+  const auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
+  const std::string bob_nostr_pubkey = bob_bundle_json["pubkey"].template get<std::string>();
+
+  const std::string alice_rdx = bob.bridge->add_contact_and_establish_session_from_base64(alice_bundle_base64, "Alice");
+
+  const std::string plaintext = "Hello Alice from Bob!";
+  const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
+  auto encrypted_bytes = bob.bridge->encrypt_message(alice_rdx, message_bytes);
+
+  std::string hex_content;
+  for (const auto &byte : encrypted_bytes) { hex_content += std::format("{:02x}", byte); }
+
+  constexpr std::uint64_t test_timestamp = 1234567890;
+  constexpr std::uint32_t encrypted_message_kind = 40001;
+  const nlohmann::json event_json = { { "id", "test_event_bob" },
+    { "pubkey", bob_nostr_pubkey },
+    { "created_at", test_timestamp },
+    { "kind", encrypted_message_kind },
+    { "content", hex_content },
+    { "sig", "signature" },
+    { "tags", nlohmann::json::array({ nlohmann::json::array({ "p", alice_rdx }) }) } };
+
+  const std::string nostr_message_json = nlohmann::json::array({ "EVENT", "sub_id", event_json }).dump();
+
+  alice.in_queue->push(core::events::transport::bytes_received{ .bytes = string_to_bytes(nostr_message_json) });
+  boost::asio::co_spawn(*alice.io_context, alice.orchestrator->run_once(), boost::asio::detached);
+  alice.io_context->run();
+
+  REQUIRE_FALSE(alice.presentation_out_queue->empty());
+  alice.io_context->restart();
+  auto msg_future =
+    boost::asio::co_spawn(*alice.io_context, alice.presentation_out_queue->pop(), boost::asio::use_future);
+  alice.io_context->run();
+  auto msg_event = msg_future.get();
+
+  REQUIRE(std::holds_alternative<events::message_received>(msg_event));
+  const auto &received = std::get<events::message_received>(msg_event);
+  REQUIRE(received.sender_alias.starts_with("Unknown-"));
+
+  const std::string bob_rdx = received.sender_rdx;
+
+  alice.io_context->restart();
+  alice.in_queue->push(events::trust{ .peer = bob_rdx, .alias = "Bob" });
+  boost::asio::co_spawn(*alice.io_context, alice.orchestrator->run_once(), boost::asio::detached);
+  alice.io_context->run();
+
+  auto updated_contact = alice.bridge->lookup_contact(bob_rdx);
+  CHECK(updated_contact.user_alias == "Bob");
+  CHECK(updated_contact.rdx_fingerprint == bob_rdx);
+}
+
 }// namespace radix_relay::core::test

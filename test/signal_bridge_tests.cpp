@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
@@ -327,5 +328,105 @@ TEST_CASE("signal::bridge record_published_bundle tracks bundle state", "[signal
       // (This will be implemented in Phase 4, but we're testing the recording part)
     }
     std::filesystem::remove(db_path);
+  }
+}
+
+TEST_CASE("signal::bridge X3DH initial message from unknown sender", "[signal][wrapper][x3dh][unknown-sender]")
+{
+  auto timestamp =
+    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  auto alice_db = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                   / ("test_x3dh_alice_" + std::to_string(timestamp) + ".db"))
+                    .string();
+  auto bob_db = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                 / ("test_x3dh_bob_" + std::to_string(timestamp) + ".db"))
+                  .string();
+
+  SECTION("Alice can decrypt message from unknown sender Bob without pre-establishing session")
+  {
+    {
+      auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
+      auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
+
+      // Alice publishes her bundle
+      auto alice_bundle_info = alice->generate_prekey_bundle_announcement("test-0.1.0");
+      auto alice_bundle_json = nlohmann::json::parse(alice_bundle_info.announcement_json);
+      auto alice_bundle_base64 = alice_bundle_json["content"].template get<std::string>();
+
+      // Bob retrieves Alice's bundle and establishes session (adds contact)
+      auto alice_rdx = bob->add_contact_and_establish_session_from_base64(alice_bundle_base64, "Alice");
+
+      // Also extract Alice's RDX for later use
+      auto alice_rdx_from_bundle = bob->extract_rdx_from_bundle_base64(alice_bundle_base64);
+
+      // Bob encrypts a message to Alice
+      const std::string plaintext = "Hello Alice! I'm Bob.";
+      const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
+      auto encrypted = bob->encrypt_message(alice_rdx, message_bytes);
+
+      // CRITICAL: Alice has NEVER seen Bob before - no contact, no session
+      // Alice has no contacts except potentially herself
+      auto alice_contacts_before = alice->list_contacts();
+      auto contacts_before_count = alice_contacts_before.size();
+
+      // Alice receives encrypted message with empty peer_hint (unknown sender)
+      // decrypt_message_with_metadata will:
+      // 1. Detect this is a PreKeySignalMessage (initial message)
+      // 2. Extract Bob's identity key from the PreKeySignalMessage
+      // 3. Automatically create a contact for Bob with derived RDX fingerprint
+      // 4. Establish the session during decryption
+      // 5. Return the plaintext
+      auto result = alice->decrypt_message_with_metadata("", encrypted);
+
+      // Assert: Message decrypts successfully
+      std::string decrypted_str(result.plaintext.begin(), result.plaintext.end());
+      REQUIRE(decrypted_str == plaintext);
+
+      // Assert: Pre-key was consumed (should republish bundle)
+      REQUIRE(result.should_republish_bundle);
+
+      // Assert: Bob is now in Alice's contacts (one more than before)
+      auto alice_contacts_after = alice->list_contacts();
+      REQUIRE(alice_contacts_after.size() == contacts_before_count + 1);
+
+      // Get Bob's actual RDX to verify
+      auto bob_rdx = bob->get_node_fingerprint();
+
+      // Find Bob in the contact list (filter out any existing contacts like Alice herself)
+      auto bob_it = std::find_if(alice_contacts_after.begin(),
+        alice_contacts_after.end(),
+        [&bob_rdx](const auto &contact) { return contact.rdx_fingerprint == bob_rdx; });
+
+      REQUIRE(bob_it != alice_contacts_after.end());
+      auto bob_contact = *bob_it;
+      REQUIRE(bob_contact.user_alias.starts_with("Unknown-"));
+      REQUIRE(bob_contact.has_active_session);
+
+      // Assert: Alice can now reply to Bob using his RDX fingerprint
+      const std::string response = "Hi Bob! Nice to meet you.";
+      const std::vector<uint8_t> response_bytes(response.begin(), response.end());
+      auto response_encrypted = alice->encrypt_message(bob_contact.rdx_fingerprint, response_bytes);
+
+      // Bob can decrypt Alice's response using Alice's RDX
+      auto bob_result = bob->decrypt_message_with_metadata(alice_rdx_from_bundle, response_encrypted);
+      std::string bob_decrypted(bob_result.plaintext.begin(), bob_result.plaintext.end());
+      REQUIRE(bob_decrypted == response);
+
+      // Assert: Bidirectional session is established
+      // Both parties can now send messages without bundle republishing
+      const std::string second_msg = "How are you?";
+      const std::vector<uint8_t> second_bytes(second_msg.begin(), second_msg.end());
+      auto second_encrypted = bob->encrypt_message(alice_rdx, second_bytes);
+      // Alice can now use Bob's RDX (from her contact list) or continue using empty string
+      auto second_result = alice->decrypt_message_with_metadata(bob_contact.rdx_fingerprint, second_encrypted);
+
+      std::string second_decrypted(second_result.plaintext.begin(), second_result.plaintext.end());
+      REQUIRE(second_decrypted == second_msg);
+
+      // Pre-key should NOT be consumed on subsequent messages
+      REQUIRE_FALSE(second_result.should_republish_bundle);
+    }
+    std::filesystem::remove(alice_db);
+    std::filesystem::remove(bob_db);
   }
 }

@@ -40,8 +40,6 @@ public:
   [[nodiscard]] auto handle(const nostr::events::incoming::encrypted_message &event)
     -> std::optional<core::events::message_received>
   {
-    auto sender_contact = bridge_->lookup_contact(event.pubkey);
-
     std::vector<uint8_t> encrypted_bytes;
     constexpr int hex_base = 16;
     for (size_t i = 0; i < event.content.length(); i += 2) {
@@ -50,11 +48,17 @@ public:
       encrypted_bytes.push_back(byte_value);
     }
 
-    auto result = bridge_->decrypt_message_with_metadata(sender_contact.rdx_fingerprint, encrypted_bytes);
+    // Pass Nostr pubkey as peer_hint - decrypt_message_with_metadata will:
+    // - For PreKeySignalMessage: extract identity key and create contact automatically
+    // - For SignalMessage: look up existing contact by this pubkey
+    auto result = bridge_->decrypt_message_with_metadata(event.pubkey, encrypted_bytes);
 
     const std::string decrypted_content(result.plaintext.begin(), result.plaintext.end());
 
     bridge_->update_last_message_timestamp(event.created_at);
+
+    // After successful decryption, get the sender's contact info (now guaranteed to exist)
+    auto sender_contact = bridge_->lookup_contact(event.pubkey);
 
     return core::events::message_received{ .sender_rdx = sender_contact.rdx_fingerprint,
       .sender_alias = sender_contact.user_alias,
