@@ -95,6 +95,9 @@ if(BUILD_TESTING)
   add_subdirectory(test)
 endif()
 
+# Benchmarks
+add_subdirectory(benchmarks)
+
 # Code quality targets (clang-tidy, etc.)
 include(cmake/Quality.cmake)
 
