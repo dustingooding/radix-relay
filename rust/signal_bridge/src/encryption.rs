@@ -365,7 +365,7 @@ mod tests {
         let ciphertext_bytes = alice_bridge.encrypt_message(&bob_rdx, plaintext).await?;
 
         let result = bob_bridge
-            .decrypt_message_with_metadata(&alice_rdx, &ciphertext_bytes)
+            .decrypt_message(&alice_rdx, &ciphertext_bytes)
             .await?;
 
         assert_eq!(result.plaintext, plaintext);

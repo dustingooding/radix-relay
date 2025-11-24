@@ -1030,7 +1030,7 @@ TEST_CASE("received encrypted message can be decrypted using sender's RDX identi
     encrypted_bytes_from_event.push_back(byte_value);
   }
 
-  auto decrypted_bytes = fixture.bob_bridge->decrypt_message(fixture.alice_rdx, encrypted_bytes_from_event);
+  auto [decrypted_bytes, metadata] = fixture.bob_bridge->decrypt_message(fixture.alice_rdx, encrypted_bytes_from_event);
 
   const std::string decrypted_content(decrypted_bytes.begin(), decrypted_bytes.end());
   REQUIRE(decrypted_content == plaintext);

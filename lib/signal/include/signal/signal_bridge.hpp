@@ -33,9 +33,6 @@ public:
     -> std::vector<uint8_t>;
 
   [[nodiscard]] auto decrypt_message(const std::string &rdx, const std::vector<uint8_t> &bytes) const
-    -> std::vector<uint8_t>;
-
-  [[nodiscard]] auto decrypt_message_with_metadata(const std::string &rdx, const std::vector<uint8_t> &bytes) const
     -> decryption_result;
 
   [[nodiscard]] auto add_contact_and_establish_session_from_base64(const std::string &bundle,

@@ -28,8 +28,7 @@ concept signal_bridge = requires(T bridge,
 
   // Message encryption/decryption
   { bridge.encrypt_message(rdx, bytes) } -> std::convertible_to<std::vector<uint8_t>>;
-  { bridge.decrypt_message(rdx, bytes) } -> std::convertible_to<std::vector<uint8_t>>;
-  { bridge.decrypt_message_with_metadata(rdx, bytes) } -> std::convertible_to<radix_relay::signal::decryption_result>;
+  { bridge.decrypt_message(rdx, bytes) } -> std::convertible_to<radix_relay::signal::decryption_result>;
 
   // Session establishment
   { bridge.add_contact_and_establish_session_from_base64(bundle, alias) } -> std::convertible_to<std::string>;
