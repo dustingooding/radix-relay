@@ -4,6 +4,16 @@
 include(cmake/RustQualityChecks.cmake)
 
 function(setup_rust_workspace)
+    # Generate Cargo.toml from template with version from VERSION file
+    # configure_file automatically tracks changes to VERSION and regenerates when needed
+    configure_file(
+        "${CMAKE_SOURCE_DIR}/rust/Cargo.toml.in"
+        "${CMAKE_SOURCE_DIR}/rust/Cargo.toml"
+        @ONLY
+    )
+
+    message(STATUS "Configured Rust workspace with version ${PROJECT_VERSION}")
+
     find_program(RUST_CARGO cargo REQUIRED)
     find_program(RUST_RUSTC rustc REQUIRED)
 
