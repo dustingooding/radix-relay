@@ -33,9 +33,11 @@ SCENARIO("Transport event display handler formats events as display messages", "
     WHEN("handling message_received event without alias")
     {
       constexpr std::uint64_t test_timestamp = 1234567890;
-      const radix_relay::core::events::message_received evt{
-        .sender_rdx = "RDX:alice123", .sender_alias = "", .content = "Hello from Alice", .timestamp = test_timestamp
-      };
+      const radix_relay::core::events::message_received evt{ .sender_rdx = "RDX:alice123",
+        .sender_alias = "",
+        .content = "Hello from Alice",
+        .timestamp = test_timestamp,
+        .should_republish_bundle = false };
 
       THEN("handler emits formatted display message with RDX fingerprint")
       {
@@ -54,7 +56,8 @@ SCENARIO("Transport event display handler formats events as display messages", "
       const radix_relay::core::events::message_received evt{ .sender_rdx = "RDX:alice123",
         .sender_alias = "Alice",
         .content = "Hello from Alice",
-        .timestamp = test_timestamp };
+        .timestamp = test_timestamp,
+        .should_republish_bundle = false };
 
       THEN("handler emits formatted display message with alias")
       {

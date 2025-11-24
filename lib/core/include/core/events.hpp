@@ -104,6 +104,7 @@ struct message_received
   std::string sender_alias;
   std::string content;
   std::uint64_t timestamp;
+  bool should_republish_bundle;
 };
 
 struct session_established

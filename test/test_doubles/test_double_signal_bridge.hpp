@@ -1,7 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <concepts/signal_bridge.hpp>
 #include <core/contact_info.hpp>
+#include <core/signal_types.hpp>
 #include <string>
 #include <vector>
 
@@ -27,7 +29,9 @@ struct test_double_signal_bridge
 
   auto was_called(const std::string &method) const -> bool
   {
-    return std::find(called_methods.begin(), called_methods.end(), method) != called_methods.end();
+    return std::any_of(called_methods.cbegin(), called_methods.cend(), [&method](const std::string &called) {
+      return called == method;
+    });
   }
 
   auto call_count(const std::string &method) const -> size_t
@@ -49,6 +53,16 @@ struct test_double_signal_bridge
     return bytes;
   }
 
+  auto decrypt_message_with_metadata(const std::string & /*rdx*/, const std::vector<uint8_t> &bytes) const
+    -> radix_relay::signal::decryption_result
+  {
+    called_methods.push_back("decrypt_message_with_metadata");
+    return {
+      .plaintext = bytes,
+      .should_republish_bundle = false,
+    };
+  }
+
   auto add_contact_and_establish_session_from_base64(const std::string & /*bundle*/,
     const std::string & /*alias*/) const -> std::string
   {
@@ -56,9 +70,28 @@ struct test_double_signal_bridge
     return "RDX:new_contact";
   }
 
-  auto generate_prekey_bundle_announcement(const std::string & /*version*/) const -> std::string
+  auto generate_prekey_bundle_announcement(const std::string & /*version*/) const -> radix_relay::signal::bundle_info
   {
     called_methods.push_back("generate_prekey_bundle_announcement");
+    return {
+      .announcement_json = R"({
+        "id": "test_bundle_event_id",
+        "pubkey": "test_pubkey",
+        "created_at": 1234567890,
+        "kind": 30078,
+        "tags": [["d", "radix_prekey_bundle_v1"], ["v", "test-0.1.0"]],
+        "content": "test_bundle_content_base64",
+        "sig": "test_signature"
+      })",
+      .pre_key_id = 100,
+      .signed_pre_key_id = 1,
+      .kyber_pre_key_id = 1,
+    };
+  }
+
+  auto generate_empty_bundle_announcement(const std::string & /*version*/) const -> std::string
+  {
+    called_methods.push_back("generate_empty_bundle_announcement");
     return "{}";
   }
 
@@ -110,6 +143,31 @@ struct test_double_signal_bridge
   {
     called_methods.push_back("update_last_message_timestamp");
   }
+
+  auto perform_key_maintenance() const -> radix_relay::signal::key_maintenance_result
+  {
+    called_methods.push_back("perform_key_maintenance");
+    return maintenance_result;
+  }
+
+  auto record_published_bundle(std::uint32_t /*pre_key_id*/,
+    std::uint32_t /*signed_pre_key_id*/,
+    std::uint32_t /*kyber_pre_key_id*/) const -> void
+  {
+    called_methods.push_back("record_published_bundle");
+  }
+
+  auto set_maintenance_result(radix_relay::signal::key_maintenance_result result) -> void
+  {
+    maintenance_result = result;
+  }
+
+private:
+  radix_relay::signal::key_maintenance_result maintenance_result{
+    .signed_pre_key_rotated = false,
+    .kyber_pre_key_rotated = false,
+    .pre_keys_replenished = false,
+  };
 };
 
 static_assert(radix_relay::concepts::signal_bridge<test_double_signal_bridge>);

@@ -53,9 +53,11 @@ SCENARIO("Transport event processor handles transport events", "[presentation_pr
     WHEN("a message_received event is pushed to the queue")
     {
       constexpr std::uint64_t test_timestamp = 12345;
-      radix_relay::core::events::message_received evt{
-        .sender_rdx = "RDX:alice123", .sender_alias = "", .content = "hello", .timestamp = test_timestamp
-      };
+      radix_relay::core::events::message_received evt{ .sender_rdx = "RDX:alice123",
+        .sender_alias = "",
+        .content = "hello",
+        .timestamp = test_timestamp,
+        .should_republish_bundle = false };
       event_queue->push(evt);
 
       boost::asio::co_spawn(*io_context, processor.run_once(), boost::asio::detached);

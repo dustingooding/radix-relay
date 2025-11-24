@@ -66,8 +66,8 @@ TEST_CASE("signal::bridge contact management", "[signal][wrapper][contacts]")
       auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
       auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
 
-      auto bob_bundle = bob->generate_prekey_bundle_announcement("test-0.1.0");
-      auto bob_bundle_json = nlohmann::json::parse(bob_bundle);
+      auto bob_bundle_info = bob->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
       auto bob_bundle_base64 = bob_bundle_json["content"].template get<std::string>();
 
       auto extracted_rdx = alice->extract_rdx_from_bundle_base64(bob_bundle_base64);
@@ -92,8 +92,8 @@ TEST_CASE("signal::bridge contact management", "[signal][wrapper][contacts]")
       auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
       auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
 
-      auto bob_bundle = bob->generate_prekey_bundle_announcement("test-0.1.0");
-      auto bob_bundle_json = nlohmann::json::parse(bob_bundle);
+      auto bob_bundle_info = bob->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
       auto bob_bundle_base64 = bob_bundle_json["content"].template get<std::string>();
 
       auto bob_rdx = alice->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob");
@@ -126,13 +126,13 @@ TEST_CASE("signal::bridge encryption/decryption", "[signal][wrapper][encryption]
       auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
       auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
 
-      auto bob_bundle = bob->generate_prekey_bundle_announcement("test-0.1.0");
-      auto bob_bundle_json = nlohmann::json::parse(bob_bundle);
+      auto bob_bundle_info = bob->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
       auto bob_bundle_base64 = bob_bundle_json["content"].template get<std::string>();
       auto bob_rdx = alice->add_contact_and_establish_session_from_base64(bob_bundle_base64, "");
 
-      auto alice_bundle = alice->generate_prekey_bundle_announcement("test-0.1.0");
-      auto alice_bundle_json = nlohmann::json::parse(alice_bundle);
+      auto alice_bundle_info = alice->generate_prekey_bundle_announcement("test-0.1.0");
+      auto alice_bundle_json = nlohmann::json::parse(alice_bundle_info.announcement_json);
       auto alice_bundle_base64 = alice_bundle_json["content"].template get<std::string>();
       auto alice_rdx = bob->add_contact_and_establish_session_from_base64(alice_bundle_base64, "");
 
@@ -167,8 +167,8 @@ TEST_CASE("signal::bridge alias management", "[signal][wrapper][alias]")
       auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
       auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
 
-      auto bob_bundle = bob->generate_prekey_bundle_announcement("test-0.1.0");
-      auto bob_bundle_json = nlohmann::json::parse(bob_bundle);
+      auto bob_bundle_info = bob->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
       auto bob_bundle_base64 = bob_bundle_json["content"].template get<std::string>();
       auto bob_rdx = alice->add_contact_and_establish_session_from_base64(bob_bundle_base64, "");
 
@@ -224,6 +224,48 @@ TEST_CASE("signal::bridge generate_empty_bundle_announcement creates valid empty
   std::filesystem::remove(db_path);
 }
 
+TEST_CASE("signal::bridge decrypt_message_with_metadata signals pre-key consumption", "[signal][wrapper][encryption]")
+{
+  auto timestamp =
+    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  auto alice_db = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                   / ("test_wrapper_metadata_alice_" + std::to_string(timestamp) + ".db"))
+                    .string();
+  auto bob_db = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                 / ("test_wrapper_metadata_bob_" + std::to_string(timestamp) + ".db"))
+                  .string();
+
+  SECTION("First message signals pre-key consumption")
+  {
+    {
+      auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
+      auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
+
+      auto bob_bundle_info = bob->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
+      auto bob_bundle_base64 = bob_bundle_json["content"].template get<std::string>();
+      auto bob_rdx = alice->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob");
+
+      auto alice_bundle_info = alice->generate_prekey_bundle_announcement("test-0.1.0");
+      auto alice_bundle_json = nlohmann::json::parse(alice_bundle_info.announcement_json);
+      auto alice_bundle_base64 = alice_bundle_json["content"].template get<std::string>();
+      auto alice_rdx = bob->add_contact_and_establish_session_from_base64(alice_bundle_base64, "alice");
+
+      const std::string plaintext = "Hello Bob!";
+      const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
+
+      auto encrypted = alice->encrypt_message(bob_rdx, message_bytes);
+      auto result = bob->decrypt_message_with_metadata(alice_rdx, encrypted);
+
+      std::string decrypted_str(result.plaintext.begin(), result.plaintext.end());
+      REQUIRE(decrypted_str == plaintext);
+      REQUIRE(result.should_republish_bundle);
+    }
+    std::filesystem::remove(alice_db);
+    std::filesystem::remove(bob_db);
+  }
+}
+
 TEST_CASE("signal::bridge key maintenance", "[signal][wrapper][maintenance]")
 {
   auto timestamp =
@@ -249,6 +291,40 @@ TEST_CASE("signal::bridge key maintenance", "[signal][wrapper][maintenance]")
       REQUIRE_FALSE(result2.signed_pre_key_rotated);
       REQUIRE_FALSE(result2.kyber_pre_key_rotated);
       REQUIRE_FALSE(result2.pre_keys_replenished);
+    }
+    std::filesystem::remove(db_path);
+  }
+}
+
+TEST_CASE("signal::bridge record_published_bundle tracks bundle state", "[signal][wrapper][bundle]")
+{
+  auto timestamp =
+    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  auto db_path = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                  / ("test_record_bundle_" + std::to_string(timestamp) + ".db"))
+                   .string();
+
+  SECTION("Record bundle after publishing")
+  {
+    {
+      auto wrapper = radix_relay::signal::bridge(db_path);
+
+      // Generate a bundle
+      auto bundle_info = wrapper.generate_prekey_bundle_announcement("test-0.1.0");
+      auto event = nlohmann::json::parse(bundle_info.announcement_json);
+
+      // Verify we have the key IDs
+      REQUIRE(bundle_info.pre_key_id == 100);// 100 pre-keys initialized
+      REQUIRE(bundle_info.signed_pre_key_id == 1);
+      REQUIRE(bundle_info.kyber_pre_key_id == 1);
+
+      // Simulate publishing to Nostr successfully
+      // Then record which bundle was published (using the actual key IDs from the bundle)
+      wrapper.record_published_bundle(
+        bundle_info.pre_key_id, bundle_info.signed_pre_key_id, bundle_info.kyber_pre_key_id);
+
+      // After recording, we should be able to check if republishing is needed
+      // (This will be implemented in Phase 4, but we're testing the recording part)
     }
     std::filesystem::remove(db_path);
   }

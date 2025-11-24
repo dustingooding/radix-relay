@@ -42,6 +42,17 @@ auto bridge::decrypt_message(const std::string &rdx, const std::vector<uint8_t> 
   return { decrypted.begin(), decrypted.end() };
 }
 
+auto bridge::decrypt_message_with_metadata(const std::string &rdx, const std::vector<uint8_t> &bytes) const
+  -> decryption_result
+{
+  auto result = radix_relay::decrypt_message_with_metadata(
+    *bridge_, rdx.c_str(), rust::Slice<const uint8_t>{ bytes.data(), bytes.size() });
+  return {
+    .plaintext = { result.plaintext.begin(), result.plaintext.end() },
+    .should_republish_bundle = result.should_republish_bundle,
+  };
+}
+
 auto bridge::add_contact_and_establish_session_from_base64(const std::string &bundle, const std::string &alias) const
   -> std::string
 {
@@ -55,10 +66,15 @@ auto bridge::extract_rdx_from_bundle_base64(const std::string &bundle_base64) co
   return std::string(rdx);
 }
 
-auto bridge::generate_prekey_bundle_announcement(const std::string &version) const -> std::string
+auto bridge::generate_prekey_bundle_announcement(const std::string &version) const -> bundle_info
 {
-  auto bundle_json = radix_relay::generate_prekey_bundle_announcement(*bridge_, version.c_str());
-  return std::string(bundle_json);
+  auto bundle_result = radix_relay::generate_prekey_bundle_announcement(*bridge_, version.c_str());
+  return {
+    .announcement_json = std::string(bundle_result.announcement_json),
+    .pre_key_id = bundle_result.pre_key_id,
+    .signed_pre_key_id = bundle_result.signed_pre_key_id,
+    .kyber_pre_key_id = bundle_result.kyber_pre_key_id,
+  };
 }
 
 auto bridge::generate_empty_bundle_announcement(const std::string &version) const -> std::string
@@ -120,6 +136,13 @@ auto bridge::perform_key_maintenance() const -> signal::key_maintenance_result
     .kyber_pre_key_rotated = rust_result.kyber_pre_key_rotated,
     .pre_keys_replenished = rust_result.pre_keys_replenished,
   };
+}
+
+auto bridge::record_published_bundle(std::uint32_t pre_key_id,
+  std::uint32_t signed_pre_key_id,
+  std::uint32_t kyber_pre_key_id) const -> void
+{
+  radix_relay::record_published_bundle(*bridge_, pre_key_id, signed_pre_key_id, kyber_pre_key_id);
 }
 
 }// namespace radix_relay::signal

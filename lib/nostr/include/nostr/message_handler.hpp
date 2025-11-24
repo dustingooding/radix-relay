@@ -21,6 +21,15 @@
 
 namespace radix_relay::nostr {
 
+struct publish_bundle_result
+{
+  std::string event_id;
+  std::vector<std::byte> bytes;
+  std::uint32_t pre_key_id;
+  std::uint32_t signed_pre_key_id;
+  std::uint32_t kyber_pre_key_id;
+};
+
 template<concepts::signal_bridge Bridge> class message_handler
 {
 public:
@@ -41,16 +50,17 @@ public:
       encrypted_bytes.push_back(byte_value);
     }
 
-    auto decrypted_bytes = bridge_->decrypt_message(sender_contact.rdx_fingerprint, encrypted_bytes);
+    auto result = bridge_->decrypt_message_with_metadata(sender_contact.rdx_fingerprint, encrypted_bytes);
 
-    const std::string decrypted_content(decrypted_bytes.begin(), decrypted_bytes.end());
+    const std::string decrypted_content(result.plaintext.begin(), result.plaintext.end());
 
     bridge_->update_last_message_timestamp(event.created_at);
 
     return core::events::message_received{ .sender_rdx = sender_contact.rdx_fingerprint,
       .sender_alias = sender_contact.user_alias,
       .content = decrypted_content,
-      .timestamp = event.created_at };
+      .timestamp = event.created_at,
+      .should_republish_bundle = result.should_republish_bundle };
   }
 
   [[nodiscard]] static auto handle(const nostr::events::incoming::bundle_announcement &event) -> std::optional<
@@ -113,12 +123,11 @@ public:
     return { event_id, bytes };
   }
 
-  [[nodiscard]] auto handle(const core::events::publish_identity & /*command*/)
-    -> std::pair<std::string, std::vector<std::byte>>
+  [[nodiscard]] auto handle(const core::events::publish_identity & /*command*/) -> publish_bundle_result
   {
     const std::string version_str{ radix_relay::cmake::project_version };
-    auto bundle_json = bridge_->generate_prekey_bundle_announcement(version_str);
-    auto event_json = nlohmann::json::parse(bundle_json);
+    auto bundle_info = bridge_->generate_prekey_bundle_announcement(version_str);
+    auto event_json = nlohmann::json::parse(bundle_info.announcement_json);
 
     const std::string event_id = event_json["id"].template get<std::string>();
 
@@ -144,7 +153,11 @@ public:
     bytes.resize(json_str.size());
     std::ranges::transform(json_str, bytes.begin(), [](char character) { return std::bit_cast<std::byte>(character); });
 
-    return { event_id, bytes };
+    return publish_bundle_result{ .event_id = event_id,
+      .bytes = std::move(bytes),
+      .pre_key_id = bundle_info.pre_key_id,
+      .signed_pre_key_id = bundle_info.signed_pre_key_id,
+      .kyber_pre_key_id = bundle_info.kyber_pre_key_id };
   }
 
   [[nodiscard]] auto handle(const core::events::unpublish_identity & /*command*/)

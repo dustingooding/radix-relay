@@ -1,6 +1,7 @@
 #pragma once
 
 #include <core/contact_info.hpp>
+#include <core/signal_types.hpp>
 #include <cstdint>
 #include <filesystem>
 #include <rust/cxx.h>
@@ -9,13 +10,6 @@
 #include <vector>
 
 namespace radix_relay::signal {
-
-struct key_maintenance_result
-{
-  bool signed_pre_key_rotated;
-  bool kyber_pre_key_rotated;
-  bool pre_keys_replenished;
-};
 
 class bridge
 {
@@ -41,12 +35,15 @@ public:
   [[nodiscard]] auto decrypt_message(const std::string &rdx, const std::vector<uint8_t> &bytes) const
     -> std::vector<uint8_t>;
 
+  [[nodiscard]] auto decrypt_message_with_metadata(const std::string &rdx, const std::vector<uint8_t> &bytes) const
+    -> decryption_result;
+
   [[nodiscard]] auto add_contact_and_establish_session_from_base64(const std::string &bundle,
     const std::string &alias) const -> std::string;
 
   [[nodiscard]] auto extract_rdx_from_bundle_base64(const std::string &bundle_base64) const -> std::string;
 
-  [[nodiscard]] auto generate_prekey_bundle_announcement(const std::string &version) const -> std::string;
+  [[nodiscard]] auto generate_prekey_bundle_announcement(const std::string &version) const -> bundle_info;
 
   [[nodiscard]] auto generate_empty_bundle_announcement(const std::string &version) const -> std::string;
 
@@ -67,6 +64,10 @@ public:
   auto update_last_message_timestamp(std::uint64_t timestamp) const -> void;
 
   [[nodiscard]] auto perform_key_maintenance() const -> key_maintenance_result;
+
+  auto record_published_bundle(std::uint32_t pre_key_id,
+    std::uint32_t signed_pre_key_id,
+    std::uint32_t kyber_pre_key_id) const -> void;
 
 private:
   mutable rust::Box<SignalBridge> bridge_;
