@@ -1,0 +1,111 @@
+/* Black + Green Terminal Aesthetic */
+
+:root {
+  --terminal-green: #00ff00;
+  --terminal-green-dim: #00cc00;
+  --terminal-green-bright: #33ff33;
+  --terminal-black: #000000;
+  --terminal-dark-gray: #0a0a0a;
+  --terminal-gray: #1a1a1a;
+}
+
+/* Override Material theme colors */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: var(--terminal-black);
+  --md-primary-fg-color--light: var(--terminal-gray);
+  --md-primary-fg-color--dark: var(--terminal-black);
+  --md-accent-fg-color: var(--terminal-green);
+  --md-accent-fg-color--transparent: rgba(0, 255, 0, 0.1);
+
+  --md-default-bg-color: var(--terminal-black);
+  --md-default-fg-color: var(--terminal-green);
+  --md-default-fg-color--light: var(--terminal-green-dim);
+  --md-default-fg-color--lighter: var(--terminal-green-dim);
+  --md-default-fg-color--lightest: var(--terminal-green-dim);
+
+  --md-code-bg-color: var(--terminal-dark-gray);
+  --md-code-fg-color: var(--terminal-green-bright);
+
+  --md-typeset-a-color: var(--terminal-green);
+}
+
+/* Terminal-style code blocks */
+.highlight {
+  background-color: var(--terminal-dark-gray) !important;
+  border: 1px solid var(--terminal-green-dim);
+  border-radius: 4px;
+}
+
+.highlight code {
+  color: var(--terminal-green-bright);
+}
+
+/* Green glow effect on hover for links */
+a:hover {
+  text-shadow: 0 0 5px var(--terminal-green);
+  transition: text-shadow 0.2s ease-in-out;
+}
+
+/* Terminal-style navigation */
+.md-nav__link--active {
+  color: var(--terminal-green-bright) !important;
+  font-weight: bold;
+}
+
+/* Green borders for admonitions */
+.md-typeset .admonition {
+  border-left: 4px solid var(--terminal-green);
+}
+
+/* Terminal prompt style for headers */
+.md-typeset h1::before {
+  content: "# ";
+  color: var(--terminal-green-dim);
+}
+
+.md-typeset h2::before {
+  content: "## ";
+  color: var(--terminal-green-dim);
+}
+
+/* Inline code styling */
+.md-typeset code {
+  background-color: var(--terminal-dark-gray);
+  color: var(--terminal-green-bright);
+  border: 1px solid var(--terminal-green-dim);
+}
+
+/* Search highlighting */
+.md-search-result__article--document em {
+  color: var(--terminal-green-bright);
+  font-weight: bold;
+}
+
+/* Table styling */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--terminal-green-dim);
+}
+
+.md-typeset table:not([class]) th {
+  background-color: var(--terminal-dark-gray);
+  color: var(--terminal-green-bright);
+  border-bottom: 2px solid var(--terminal-green);
+}
+
+/* Button styling */
+.md-button {
+  border: 1px solid var(--terminal-green);
+  color: var(--terminal-green);
+}
+
+.md-button:hover {
+  background-color: var(--terminal-green);
+  color: var(--terminal-black);
+  box-shadow: 0 0 10px var(--terminal-green);
+}
+
+.md-button--primary {
+  background-color: var(--terminal-green);
+  color: var(--terminal-black);
+  border-color: var(--terminal-green);
+}

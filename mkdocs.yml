@@ -1,0 +1,100 @@
+site_name: Radix Relay
+site_url: https://dustingooding.github.io/radix-relay
+site_description: Open-source hybrid mesh communications for activists and disaster response
+site_author: Radix Relay Contributors
+repo_url: https://github.com/dustingooding/radix-relay
+repo_name: dustingooding/radix-relay
+edit_uri: edit/main/docs/
+site_dir: out/site
+use_directory_urls: true
+
+theme:
+  name: material
+  palette:
+    # Black and green hacker/terminal aesthetic
+    scheme: slate
+    primary: black
+    accent: green
+  font:
+    text: Roboto Mono
+    code: Fira Code
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - def_list
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: timeago
+      enable_git_follow: false
+
+validation:
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: warn
+    unrecognized_links: warn
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Installation: getting-started/installation.md
+      - Building: getting-started/building.md
+      - Troubleshooting: getting-started/troubleshooting.md
+      - Docker: getting-started/docker.md
+  - Architecture:
+      - architecture/index.md
+      - Signal Protocol: architecture/signal-protocol.md
+      - Transport Layer: architecture/transport-layer.md
+      - Hybrid Routing: architecture/hybrid-routing.md
+  - Developer Guide:
+      - developer/index.md
+      - Contributing: developer/contributing.md
+      - Testing: developer/testing.md
+      - Coding Standards: developer/coding-standards.md
+  - API Reference:
+      - api/index.md
+      - C++ API: api/cpp-api.md
+      - Rust API: api/rust-api.md
+  - Security:
+      - security/index.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/dustingooding/radix-relay

@@ -6,7 +6,7 @@
 
 Open-source hybrid mesh communications system combining internet (Nostr) and local mesh (BLE) transports with Signal Protocol encryption.
 
-**Status**: Phase 1 Development (Nostr + BLE + Signal Protocol)
+**Status**: Phase 1A Complete (Nostr + Signal Protocol functional), Phase 1B Planned (BLE transport)
 
 ## Security Notice
 
@@ -25,7 +25,7 @@ This project is licensed under the GNU Affero General Public License v3.0 - see 
 
 ## Contributing
 
-This project is in active Phase 1 development. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+This project is in active Phase 1 development. See [CONTRIBUTING.md](docs/developer/contributing.md) for guidelines.
 
 ## Security
 
@@ -33,16 +33,12 @@ For security issues, please email <radix-relay@proton.me> or create a private se
 
 ## Documentation
 
-### Getting Started
+📖 **[Full Documentation](https://dustingooding.github.io/radix-relay)**
 
-- [Dependency Setup](README_dependencies.md)
-- [Building Details](README_building.md)
-- [Troubleshooting](README_troubleshooting.md)
-- [Docker](README_docker.md)
-
-### Architecture & Security
-
-- [Signal Protocol Integration](docs/SIGNAL_PROTOCOL.md) - End-to-end encryption, key management, and bundle republishing
+- [Getting Started](https://dustingooding.github.io/radix-relay/getting-started/)
+- [Architecture](https://dustingooding.github.io/radix-relay/architecture/)
+- [Developer Guide](https://dustingooding.github.io/radix-relay/developer/)
+- [Security](https://dustingooding.github.io/radix-relay/security/)
 
 ## Acknowledgments
 

@@ -9,7 +9,7 @@ docker run -it radix-relay:latest
 ```
 
 This command will put you in a `bash` session in a Ubuntu 20.04 Docker container,
-with all of the tools listed in the [Dependencies](README_dependencies.md) section already installed.
+with all of the tools listed in the [Dependencies](installation.md) section already installed.
 Additionally, you will have `g++-11` and `clang++-13` installed as the default
 versions of `g++` and `clang++`.
 
@@ -42,7 +42,7 @@ docker run -it \
   radix-relay:latest
 ```
 
-You can configure and [build](README_building.md) using these commands:
+You can configure and [build](building.md) using these commands:
 
 ```bash
 /radix_relay# cmake --preset=unixlike-gcc-debug

@@ -101,6 +101,9 @@ add_subdirectory(benchmarks)
 # Code quality targets (clang-tidy, etc.)
 include(cmake/Quality.cmake)
 
+# Documentation target
+include(cmake/Documentation.cmake)
+
 if(radix_relay_BUILD_FUZZ_TESTS)
   message(AUTHOR_WARNING "Building Fuzz Tests, using fuzzing sanitizer https://www.llvm.org/docs/LibFuzzer.html")
   if (NOT radix_relay_ENABLE_SANITIZER_ADDRESS AND NOT radix_relay_ENABLE_SANITIZER_THREAD)
