@@ -177,6 +177,22 @@ private:
 
   auto handle(const core::events::trust &cmd) -> void
   {
+    bool contact_exists = false;
+    try {
+      std::ignore = bridge_->lookup_contact(cmd.peer);
+      contact_exists = true;
+    } catch (const std::exception &e) {
+      spdlog::debug("Contact {} not found, will check discovered bundles: {}", cmd.peer, e.what());
+    }
+
+    if (contact_exists) {
+      if (not cmd.alias.empty()) {
+        handler_.handle(cmd);
+        spdlog::info("Updated alias for existing contact: {}", cmd.peer);
+      }
+      return;
+    }
+
     auto bundle_iter = std::ranges::find_if(
       discovered_bundles_, [&cmd](const discovered_bundle &bundle) { return bundle.rdx_fingerprint == cmd.peer; });
 
@@ -186,7 +202,8 @@ private:
       if (session_result and not cmd.alias.empty()) { handler_.handle(cmd); }
       if (session_result) { emit_presentation_event(*session_result); }
     } else {
-      spdlog::error("Cannot establish session with {}: identity not found in discovered bundles", cmd.peer);
+      spdlog::error(
+        "Cannot establish session with {}: identity not found in discovered bundles and no existing contact", cmd.peer);
     }
   }
 

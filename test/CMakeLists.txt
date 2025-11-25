@@ -84,6 +84,10 @@ add_catch_test(NAME presentation_handler_tests SOURCES presentation_handler_test
 add_catch_test(NAME presentation_processor_tests SOURCES presentation_processor_tests.cpp)
 add_catch_test(NAME tui_processor_tests SOURCES tui_processor_tests.cpp LIBS radix_relay::signal radix_relay::tui)
 
+if(MSVC)
+  target_compile_options(session_orchestrator_tests PRIVATE /bigobj)
+endif()
+
 if(WIN32 AND BUILD_SHARED_LIBS)
   add_custom_command(
     TARGET cli_tests

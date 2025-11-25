@@ -31,6 +31,33 @@ impl ContactManager {
         }
     }
 
+    pub async fn add_contact_from_identity_key(
+        &mut self,
+        identity_key: &IdentityKey,
+    ) -> Result<String, SignalBridgeError> {
+        let rdx = Self::generate_identity_fingerprint_from_key(identity_key);
+
+        let nostr_pubkey = NostrIdentity::derive_public_key_from_peer_identity(identity_key)?;
+
+        let auto_alias = format!("Unknown-{}", &rdx[4..12]);
+
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+        let conn_lock = self.storage.lock().unwrap();
+
+        conn_lock
+            .execute(
+                "INSERT OR REPLACE INTO contacts
+                 (rdx_fingerprint, nostr_pubkey, user_alias, signal_identity_key, first_seen, last_updated)
+                 VALUES (?1, ?2, ?3, ?4,
+                         COALESCE((SELECT first_seen FROM contacts WHERE rdx_fingerprint = ?1), ?5),
+                         ?5)",
+                rusqlite::params![rdx, nostr_pubkey.to_hex(), auto_alias, identity_key.serialize(), now],
+            )
+            .map_err(|e| SignalBridgeError::Storage(e.to_string()))?;
+
+        Ok(rdx)
+    }
+
     pub async fn add_contact_from_bundle(
         &mut self,
         bundle_bytes: &[u8],
@@ -201,5 +228,72 @@ impl ContactManager {
         hasher.update(b"radix-identity-fingerprint");
         let result = hasher.finalize();
         format!("RDX:{:x}", result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::keys::generate_identity_key_pair;
+
+    #[tokio::test]
+    async fn test_add_contact_from_identity_key() {
+        use crate::memory_storage::MemoryStorage;
+
+        let storage_conn = Arc::new(Mutex::new(rusqlite::Connection::open_in_memory().unwrap()));
+
+        {
+            let conn = storage_conn.lock().unwrap();
+            conn.execute(
+                "CREATE TABLE contacts (
+                    rdx_fingerprint TEXT PRIMARY KEY,
+                    nostr_pubkey TEXT NOT NULL,
+                    user_alias TEXT,
+                    signal_identity_key BLOB NOT NULL,
+                    first_seen INTEGER NOT NULL,
+                    last_updated INTEGER NOT NULL
+                )",
+                [],
+            )
+            .unwrap();
+        }
+
+        let mut manager = ContactManager::new(storage_conn.clone());
+        let mut session_store = MemoryStorage::new().session_store;
+
+        let peer_identity = generate_identity_key_pair().await.unwrap();
+        let peer_identity_key = peer_identity.identity_key();
+
+        let rdx_fingerprint = manager
+            .add_contact_from_identity_key(peer_identity_key)
+            .await
+            .unwrap();
+
+        assert!(
+            rdx_fingerprint.starts_with("RDX:"),
+            "RDX fingerprint should start with RDX:"
+        );
+
+        let contact = manager
+            .lookup_contact(&rdx_fingerprint, &mut session_store)
+            .await
+            .unwrap();
+
+        assert_eq!(contact.rdx_fingerprint, rdx_fingerprint);
+        assert!(
+            !contact.nostr_pubkey.is_empty(),
+            "Nostr pubkey should be derived from identity key"
+        );
+        assert!(
+            contact.user_alias.as_ref().unwrap().starts_with("Unknown-"),
+            "Auto-generated alias should start with Unknown-"
+        );
+        assert!(!contact.has_active_session, "No session should exist yet");
+
+        let contact_by_nostr = manager
+            .lookup_contact(&contact.nostr_pubkey, &mut session_store)
+            .await
+            .unwrap();
+        assert_eq!(contact_by_nostr.rdx_fingerprint, rdx_fingerprint);
     }
 }

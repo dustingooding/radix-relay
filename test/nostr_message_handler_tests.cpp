@@ -575,3 +575,101 @@ TEST_CASE("message_handler returns should_republish_bundle flag in message_recei
   std::filesystem::remove(alice_path);
   std::filesystem::remove(bob_path);
 }
+
+TEST_CASE("message_handler handles encrypted_message from unknown sender", "[message_handler][x3dh][unknown-sender]")
+{
+  const std::string alice_path = "/tmp/nostr_handler_unknown_alice.db";
+  const std::string bob_path = "/tmp/nostr_handler_unknown_bob.db";
+
+  std::filesystem::remove(alice_path);
+  std::filesystem::remove(bob_path);
+
+  {
+    auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_path);
+    auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_path);
+
+    // Alice publishes her bundle
+    auto alice_bundle_info = alice_bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    auto alice_event_json = nlohmann::json::parse(alice_bundle_info.announcement_json);
+    const std::string alice_bundle_base64 = alice_event_json["content"].get<std::string>();
+
+    // Bob gets Alice's bundle and establishes session
+    auto alice_rdx = bob_bridge->add_contact_and_establish_session_from_base64(alice_bundle_base64, "Alice");
+
+    // Bob gets Alice's Nostr pubkey for the event
+    auto alice_contact = bob_bridge->lookup_contact(alice_rdx);
+    const std::string alice_nostr_pubkey = alice_contact.nostr_pubkey;
+
+    // Bob encrypts a message to Alice
+    const std::string plaintext = "Hello Alice! I'm Bob from the future.";
+    const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
+    auto encrypted_bytes = bob_bridge->encrypt_message(alice_rdx, message_bytes);
+
+    // Convert to hex for Nostr event
+    std::string hex_content;
+    for (const auto &byte : encrypted_bytes) { hex_content += fmt::format("{:02x}", byte); }
+
+    // Get Bob's Nostr pubkey (this will be in the event)
+    auto bob_bundle_info = bob_bridge->generate_prekey_bundle_announcement("test-0.1.0");
+    auto bob_event_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
+
+    // Extract Bob's pubkey from his event
+    const std::string bob_nostr_pubkey = bob_event_json["pubkey"].get<std::string>();
+
+    // CRITICAL: Alice has NEVER seen Bob before - no contact, no session
+    auto alice_contacts_before = alice_bridge->list_contacts();
+    auto contacts_before_count = alice_contacts_before.size();
+
+    // Create the Nostr event as if it came from Bob
+    constexpr std::uint64_t test_timestamp = 1234567890;
+    radix_relay::nostr::protocol::event_data event_data;
+    event_data.id = "test_event_id";
+    event_data.pubkey = bob_nostr_pubkey;// Bob's Nostr pubkey
+    event_data.created_at = test_timestamp;
+    event_data.kind = radix_relay::nostr::protocol::kind::encrypted_message;
+    event_data.content = hex_content;
+    event_data.sig = "signature";
+    event_data.tags.push_back({ "p", alice_nostr_pubkey });
+
+    const radix_relay::nostr::events::incoming::encrypted_message event{ event_data };
+
+    // Alice handles the message from unknown sender Bob
+    radix_relay::nostr::message_handler<radix_relay::signal::bridge> handler(alice_bridge);
+    auto result = handler.handle(event);
+
+    // Assert: Message was successfully decrypted
+    REQUIRE(result.has_value());
+    if (result.has_value()) {
+      CHECK(result->content == plaintext);
+      CHECK(result->timestamp == test_timestamp);
+      CHECK(result->should_republish_bundle);// Pre-key was consumed
+
+      // Assert: Bob is now in Alice's contacts
+      auto alice_contacts_after = alice_bridge->list_contacts();
+      CHECK(alice_contacts_after.size() == contacts_before_count + 1);
+
+      // Assert: Contact info is correct
+      CHECK(result->sender_alias.starts_with("Unknown-"));
+
+      // Verify Bob's contact was created correctly
+      auto bob_contact = alice_bridge->lookup_contact(bob_nostr_pubkey);
+      CHECK(bob_contact.nostr_pubkey == bob_nostr_pubkey);
+      CHECK(bob_contact.user_alias.starts_with("Unknown-"));
+      CHECK(bob_contact.has_active_session);
+
+      // Assert: Alice can now send a reply to Bob
+      const std::string response = "Hi Bob! Nice to hear from you.";
+      const std::vector<uint8_t> response_bytes(response.begin(), response.end());
+      auto response_encrypted = alice_bridge->encrypt_message(bob_contact.rdx_fingerprint, response_bytes);
+      CHECK(!response_encrypted.empty());
+
+      // Bob can decrypt Alice's response
+      auto bob_result = bob_bridge->decrypt_message_with_metadata(alice_nostr_pubkey, response_encrypted);
+      std::string bob_decrypted(bob_result.plaintext.begin(), bob_result.plaintext.end());
+      CHECK(bob_decrypted == response);
+    }
+  }
+
+  std::filesystem::remove(alice_path);
+  std::filesystem::remove(bob_path);
+}
