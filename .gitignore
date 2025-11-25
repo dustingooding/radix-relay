@@ -17,7 +17,6 @@ CMakeUserPresets.json
 spack.yaml
 .envrc
 .direnv
-requirements.txt
 .pre-commit-config.yaml
 
 # IDE files
