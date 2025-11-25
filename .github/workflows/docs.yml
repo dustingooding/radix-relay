@@ -59,8 +59,10 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
-      - name: Configure CMake (generates rust/Cargo.toml)
-        run: cmake --preset=unixlike-clang-release
+      - name: Generate rust/Cargo.toml from template
+        run: |
+          VERSION=$(cat VERSION | tr -d '\n')
+          sed "s/@PROJECT_VERSION@/$VERSION/g" rust/Cargo.toml.in > rust/Cargo.toml
 
       - name: Build C++ API documentation
         run: doxygen Doxyfile
