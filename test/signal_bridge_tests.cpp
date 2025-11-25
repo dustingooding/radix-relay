@@ -141,7 +141,7 @@ TEST_CASE("signal::bridge encryption/decryption", "[signal][wrapper][encryption]
       const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
 
       auto encrypted = alice->encrypt_message(bob_rdx, message_bytes);
-      auto decrypted = bob->decrypt_message(alice_rdx, encrypted);
+      auto [decrypted, metadata] = bob->decrypt_message(alice_rdx, encrypted);
 
       std::string decrypted_str(decrypted.begin(), decrypted.end());
       REQUIRE(decrypted_str == plaintext);
@@ -225,7 +225,7 @@ TEST_CASE("signal::bridge generate_empty_bundle_announcement creates valid empty
   std::filesystem::remove(db_path);
 }
 
-TEST_CASE("signal::bridge decrypt_message_with_metadata signals pre-key consumption", "[signal][wrapper][encryption]")
+TEST_CASE("signal::bridge decrypt_message signals pre-key consumption", "[signal][wrapper][encryption]")
 {
   auto timestamp =
     std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -256,7 +256,7 @@ TEST_CASE("signal::bridge decrypt_message_with_metadata signals pre-key consumpt
       const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
 
       auto encrypted = alice->encrypt_message(bob_rdx, message_bytes);
-      auto result = bob->decrypt_message_with_metadata(alice_rdx, encrypted);
+      auto result = bob->decrypt_message(alice_rdx, encrypted);
 
       std::string decrypted_str(result.plaintext.begin(), result.plaintext.end());
       REQUIRE(decrypted_str == plaintext);
@@ -370,13 +370,13 @@ TEST_CASE("signal::bridge X3DH initial message from unknown sender", "[signal][w
       auto contacts_before_count = alice_contacts_before.size();
 
       // Alice receives encrypted message with empty peer_hint (unknown sender)
-      // decrypt_message_with_metadata will:
+      // decrypt_message will:
       // 1. Detect this is a PreKeySignalMessage (initial message)
       // 2. Extract Bob's identity key from the PreKeySignalMessage
       // 3. Automatically create a contact for Bob with derived RDX fingerprint
       // 4. Establish the session during decryption
       // 5. Return the plaintext
-      auto result = alice->decrypt_message_with_metadata("", encrypted);
+      auto result = alice->decrypt_message("", encrypted);
 
       // Assert: Message decrypts successfully
       std::string decrypted_str(result.plaintext.begin(), result.plaintext.end());
@@ -408,7 +408,7 @@ TEST_CASE("signal::bridge X3DH initial message from unknown sender", "[signal][w
       auto response_encrypted = alice->encrypt_message(bob_contact.rdx_fingerprint, response_bytes);
 
       // Bob can decrypt Alice's response using Alice's RDX
-      auto bob_result = bob->decrypt_message_with_metadata(alice_rdx_from_bundle, response_encrypted);
+      auto bob_result = bob->decrypt_message(alice_rdx_from_bundle, response_encrypted);
       std::string bob_decrypted(bob_result.plaintext.begin(), bob_result.plaintext.end());
       REQUIRE(bob_decrypted == response);
 
@@ -418,7 +418,7 @@ TEST_CASE("signal::bridge X3DH initial message from unknown sender", "[signal][w
       const std::vector<uint8_t> second_bytes(second_msg.begin(), second_msg.end());
       auto second_encrypted = bob->encrypt_message(alice_rdx, second_bytes);
       // Alice can now use Bob's RDX (from her contact list) or continue using empty string
-      auto second_result = alice->decrypt_message_with_metadata(bob_contact.rdx_fingerprint, second_encrypted);
+      auto second_result = alice->decrypt_message(bob_contact.rdx_fingerprint, second_encrypted);
 
       std::string second_decrypted(second_result.plaintext.begin(), second_result.plaintext.end());
       REQUIRE(second_decrypted == second_msg);

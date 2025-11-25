@@ -35,18 +35,10 @@ auto bridge::encrypt_message(const std::string &rdx, const std::vector<uint8_t> 
   return { encrypted.begin(), encrypted.end() };
 }
 
-auto bridge::decrypt_message(const std::string &rdx, const std::vector<uint8_t> &bytes) const -> std::vector<uint8_t>
+auto bridge::decrypt_message(const std::string &rdx, const std::vector<uint8_t> &bytes) const -> decryption_result
 {
-  auto decrypted =
+  auto result =
     radix_relay::decrypt_message(*bridge_, rdx.c_str(), rust::Slice<const uint8_t>{ bytes.data(), bytes.size() });
-  return { decrypted.begin(), decrypted.end() };
-}
-
-auto bridge::decrypt_message_with_metadata(const std::string &rdx, const std::vector<uint8_t> &bytes) const
-  -> decryption_result
-{
-  auto result = radix_relay::decrypt_message_with_metadata(
-    *bridge_, rdx.c_str(), rust::Slice<const uint8_t>{ bytes.data(), bytes.size() });
   return {
     .plaintext = { result.plaintext.begin(), result.plaintext.end() },
     .should_republish_bundle = result.should_republish_bundle,

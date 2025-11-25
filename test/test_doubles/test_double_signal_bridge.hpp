@@ -48,16 +48,10 @@ struct test_double_signal_bridge
     return bytes;
   }
 
-  auto decrypt_message(const std::string & /*rdx*/, const std::vector<uint8_t> &bytes) const -> std::vector<uint8_t>
-  {
-    called_methods.push_back("decrypt_message");
-    return bytes;
-  }
-
-  auto decrypt_message_with_metadata(const std::string & /*rdx*/, const std::vector<uint8_t> &bytes) const
+  auto decrypt_message(const std::string & /*rdx*/, const std::vector<uint8_t> &bytes) const
     -> radix_relay::signal::decryption_result
   {
-    called_methods.push_back("decrypt_message_with_metadata");
+    called_methods.push_back("decrypt_message");
     return {
       .plaintext = bytes,
       .should_republish_bundle = false,

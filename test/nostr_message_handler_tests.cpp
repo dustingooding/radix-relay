@@ -664,7 +664,7 @@ TEST_CASE("message_handler handles encrypted_message from unknown sender", "[mes
       CHECK(!response_encrypted.empty());
 
       // Bob can decrypt Alice's response
-      auto bob_result = bob_bridge->decrypt_message_with_metadata(alice_nostr_pubkey, response_encrypted);
+      auto bob_result = bob_bridge->decrypt_message(alice_nostr_pubkey, response_encrypted);
       std::string bob_decrypted(bob_result.plaintext.begin(), bob_result.plaintext.end());
       CHECK(bob_decrypted == response);
     }

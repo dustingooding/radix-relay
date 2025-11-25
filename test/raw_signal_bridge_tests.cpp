@@ -110,11 +110,11 @@ TEST_CASE("SignalBridge CXX Integration", "[signal][cxx]")
       REQUIRE(not ciphertext.empty());
       REQUIRE(ciphertext.size() > plaintext_bytes.size());
 
-      auto decrypted = radix_relay::decrypt_message(*bob, alice_rdx.c_str(), rust::Slice<const uint8_t>{ ciphertext });
-      REQUIRE(not decrypted.empty());
-      REQUIRE(decrypted.size() == plaintext_bytes.size());
+      auto result = radix_relay::decrypt_message(*bob, alice_rdx.c_str(), rust::Slice<const uint8_t>{ ciphertext });
+      REQUIRE(not result.plaintext.empty());
+      REQUIRE(result.plaintext.size() == plaintext_bytes.size());
 
-      std::string decrypted_string(decrypted.begin(), decrypted.end());
+      std::string decrypted_string(result.plaintext.begin(), result.plaintext.end());
       REQUIRE(decrypted_string == plaintext);
     }
 

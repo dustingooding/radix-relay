@@ -228,53 +228,6 @@ impl SignalBridge {
 
     pub async fn decrypt_message(
         &mut self,
-        peer: &str,
-        ciphertext_bytes: &[u8],
-    ) -> Result<Vec<u8>, SignalBridgeError> {
-        use libsignal_protocol::{PreKeySignalMessage, SignalMessage};
-
-        if peer.is_empty() {
-            return Err(SignalBridgeError::InvalidInput(
-                "Specify a peer name".to_string(),
-            ));
-        }
-
-        if ciphertext_bytes.is_empty() {
-            return Err(SignalBridgeError::InvalidInput(
-                "Provide a message to decrypt".to_string(),
-            ));
-        }
-
-        let session_address = match self
-            .contact_manager
-            .lookup_contact(peer, self.storage.session_store())
-            .await
-        {
-            Ok(contact) => contact.rdx_fingerprint,
-            Err(_) => peer.to_string(),
-        };
-
-        let address = ProtocolAddress::new(
-            session_address,
-            DeviceId::new(1).map_err(|e| SignalBridgeError::Protocol(e.to_string()))?,
-        );
-
-        let ciphertext = if let Ok(prekey_msg) = PreKeySignalMessage::try_from(ciphertext_bytes) {
-            CiphertextMessage::PreKeySignalMessage(prekey_msg)
-        } else if let Ok(signal_msg) = SignalMessage::try_from(ciphertext_bytes) {
-            CiphertextMessage::SignalMessage(signal_msg)
-        } else {
-            return Err(SignalBridgeError::Serialization(
-                "Provide a valid Signal Protocol message".to_string(),
-            ));
-        };
-
-        let plaintext = self.storage.decrypt_message(&address, &ciphertext).await?;
-        Ok(plaintext)
-    }
-
-    pub async fn decrypt_message_with_metadata(
-        &mut self,
         peer_hint: &str,
         ciphertext_bytes: &[u8],
     ) -> Result<DecryptionResult, SignalBridgeError> {
@@ -1062,12 +1015,6 @@ mod ffi {
             bridge: &mut SignalBridge,
             peer: &str,
             ciphertext: &[u8],
-        ) -> Result<Vec<u8>>;
-
-        fn decrypt_message_with_metadata(
-            bridge: &mut SignalBridge,
-            peer: &str,
-            ciphertext: &[u8],
         ) -> Result<DecryptionResult>;
 
         fn establish_session(bridge: &mut SignalBridge, peer: &str, bundle: &[u8]) -> Result<()>;
@@ -1177,22 +1124,11 @@ pub fn decrypt_message(
     bridge: &mut SignalBridge,
     peer: &str,
     ciphertext: &[u8],
-) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let rt = tokio::runtime::Runtime::new()
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-    rt.block_on(bridge.decrypt_message(peer, ciphertext))
-        .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
-}
-
-pub fn decrypt_message_with_metadata(
-    bridge: &mut SignalBridge,
-    peer: &str,
-    ciphertext: &[u8],
 ) -> Result<ffi::DecryptionResult, Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     let result = rt
-        .block_on(bridge.decrypt_message_with_metadata(peer, ciphertext))
+        .block_on(bridge.decrypt_message(peer, ciphertext))
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
     Ok(ffi::DecryptionResult {
         plaintext: result.plaintext,
@@ -1681,9 +1617,9 @@ mod tests {
 
         let plaintext = b"Hello Bob! This is Alice using SignalBridge.";
         let ciphertext = alice.encrypt_message(&bob_rdx, plaintext).await?;
-        let decrypted = bob.decrypt_message(&alice_rdx, &ciphertext).await?;
+        let result = bob.decrypt_message(&alice_rdx, &ciphertext).await?;
 
-        assert_eq!(plaintext.as_slice(), decrypted.as_slice());
+        assert_eq!(plaintext.as_slice(), result.plaintext.as_slice());
 
         Ok(())
     }
@@ -1746,10 +1682,10 @@ mod tests {
         {
             let mut bob_reopened = SignalBridge::new(bob_db_str).await?;
 
-            let decrypted1 = bob_reopened
+            let result1 = bob_reopened
                 .decrypt_message(&alice_rdx, &ciphertext)
                 .await?;
-            assert_eq!(decrypted1, original_plaintext);
+            assert_eq!(result1.plaintext, original_plaintext);
         }
 
         Ok(())
@@ -1937,35 +1873,6 @@ mod tests {
             .expect("Failed to create bridge");
 
         let result = bridge.encrypt_message("", b"test message").await;
-        assert!(result.is_err());
-        if let Err(SignalBridgeError::InvalidInput(msg)) = result {
-            assert_eq!(msg, "Specify a peer name");
-        } else {
-            panic!("Expected InvalidInput error for empty peer name");
-        }
-    }
-
-    #[tokio::test]
-    async fn test_decrypt_message_empty_peer_name() {
-        use std::env;
-
-        let temp_dir = env::temp_dir();
-        let process_id = std::process::id();
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
-
-        let db_path = temp_dir.join(format!(
-            "test_empty_peer_decrypt_{}_{}.db",
-            process_id, timestamp
-        ));
-        let db_path_str = db_path.to_str().unwrap();
-        let mut bridge = SignalBridge::new(db_path_str)
-            .await
-            .expect("Failed to create bridge");
-
-        let result = bridge.decrypt_message("", b"fake_ciphertext").await;
         assert!(result.is_err());
         if let Err(SignalBridgeError::InvalidInput(msg)) = result {
             assert_eq!(msg, "Specify a peer name");
@@ -3167,7 +3074,7 @@ mod tests {
         let ciphertext = bob_bridge.encrypt_message(&alice_rdx, plaintext).await?;
 
         let result = alice_bridge
-            .decrypt_message_with_metadata(&bob_nostr_pubkey, &ciphertext)
+            .decrypt_message(&bob_nostr_pubkey, &ciphertext)
             .await?;
 
         assert_eq!(result.plaintext, plaintext);
@@ -3188,7 +3095,7 @@ mod tests {
             .await?;
 
         let decrypted_response = bob_bridge
-            .decrypt_message_with_metadata(
+            .decrypt_message(
                 &alice_bridge
                     .derive_nostr_keypair()
                     .await?
@@ -3247,7 +3154,7 @@ mod tests {
         );
 
         let result = alice_bridge
-            .decrypt_message_with_metadata(&bob_nostr_pubkey, &first_ciphertext)
+            .decrypt_message(&bob_nostr_pubkey, &first_ciphertext)
             .await?;
         assert_eq!(result.plaintext, first_msg);
 
@@ -3264,7 +3171,7 @@ mod tests {
         );
 
         let bob_result = bob_bridge
-            .decrypt_message_with_metadata(&alice_nostr_pubkey, &alice_response_ciphertext)
+            .decrypt_message(&alice_nostr_pubkey, &alice_response_ciphertext)
             .await?;
         assert_eq!(bob_result.plaintext, alice_response);
 
@@ -3277,7 +3184,7 @@ mod tests {
         );
 
         let second_result = alice_bridge
-            .decrypt_message_with_metadata(&bob_nostr_pubkey, &second_ciphertext)
+            .decrypt_message(&bob_nostr_pubkey, &second_ciphertext)
             .await?;
         assert_eq!(second_result.plaintext, second_msg);
         assert!(

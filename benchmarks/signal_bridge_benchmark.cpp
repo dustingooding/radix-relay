@@ -85,47 +85,6 @@ TEST_CASE("Signal Bridge Performance Benchmarks", "[benchmark][signal]")
     std::filesystem::remove(bob_db);
   }
 
-  SECTION("Message decryption")
-  {
-    const auto alice_db = (std::filesystem::temp_directory_path() / "bench_decrypt_alice.db").string();
-    const auto bob_db = (std::filesystem::temp_directory_path() / "bench_decrypt_bob.db").string();
-    std::filesystem::remove(alice_db);
-    std::filesystem::remove(bob_db);
-
-    auto alice_bridge = std::make_shared<radix_relay::signal::bridge>(alice_db);
-    auto bob_bridge = std::make_shared<radix_relay::signal::bridge>(bob_db);
-
-    const auto alice_bundle_info = alice_bridge->generate_prekey_bundle_announcement("bench-0.1.0");
-    const auto alice_bundle_parsed = nlohmann::json::parse(alice_bundle_info.announcement_json);
-    const std::string alice_bundle_base64 = alice_bundle_parsed["content"].template get<std::string>();
-
-    const auto bob_bundle_info = bob_bridge->generate_prekey_bundle_announcement("bench-0.1.0");
-    const auto bob_bundle_parsed = nlohmann::json::parse(bob_bundle_info.announcement_json);
-    const std::string bob_bundle_base64 = bob_bundle_parsed["content"].template get<std::string>();
-
-    const auto bob_rdx = alice_bridge->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob");
-    const auto alice_rdx = bob_bridge->add_contact_and_establish_session_from_base64(alice_bundle_base64, "alice");
-
-    const std::string plaintext = "Benchmark message for encryption/decryption testing";
-    const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
-
-    BENCHMARK_ADVANCED("Decrypt message")(Catch::Benchmark::Chronometer meter)
-    {
-      std::vector<std::vector<uint8_t>> encrypted_messages;
-      encrypted_messages.reserve(static_cast<std::size_t>(meter.runs()));
-      for (std::size_t i = 0; i < static_cast<std::size_t>(meter.runs()); ++i) {
-        encrypted_messages.push_back(alice_bridge->encrypt_message(bob_rdx, message_bytes));
-      }
-
-      meter.measure([&](std::size_t idx) { return bob_bridge->decrypt_message(alice_rdx, encrypted_messages[idx]); });
-    };
-
-    alice_bridge.reset();
-    bob_bridge.reset();
-    std::filesystem::remove(alice_db);
-    std::filesystem::remove(bob_db);
-  }
-
   SECTION("Message decryption with metadata")
   {
     const auto alice_db = (std::filesystem::temp_directory_path() / "bench_decrypt_meta_alice.db").string();
@@ -158,8 +117,7 @@ TEST_CASE("Signal Bridge Performance Benchmarks", "[benchmark][signal]")
         encrypted_messages.push_back(alice_bridge->encrypt_message(bob_rdx, message_bytes));
       }
 
-      meter.measure(
-        [&](std::size_t idx) { return bob_bridge->decrypt_message_with_metadata(alice_rdx, encrypted_messages[idx]); });
+      meter.measure([&](std::size_t idx) { return bob_bridge->decrypt_message(alice_rdx, encrypted_messages[idx]); });
     };
 
     alice_bridge.reset();

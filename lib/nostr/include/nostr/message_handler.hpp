@@ -48,10 +48,10 @@ public:
       encrypted_bytes.push_back(byte_value);
     }
 
-    // Pass Nostr pubkey as peer_hint - decrypt_message_with_metadata will:
+    // Pass Nostr pubkey as peer_hint - decrypt_message will:
     // - For PreKeySignalMessage: extract identity key and create contact automatically
     // - For SignalMessage: look up existing contact by this pubkey
-    auto result = bridge_->decrypt_message_with_metadata(event.pubkey, encrypted_bytes);
+    auto result = bridge_->decrypt_message(event.pubkey, encrypted_bytes);
 
     const std::string decrypted_content(result.plaintext.begin(), result.plaintext.end());
 
