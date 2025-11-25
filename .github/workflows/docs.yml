@@ -1,0 +1,79 @@
+name: Deploy Documentation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'requirements.txt'
+      - 'Doxyfile'
+      - 'lib/**/*.hpp'
+      - 'rust/**/*.rs'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            rust/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/**/Cargo.lock') }}
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build C++ API documentation
+        run: doxygen Doxyfile
+
+      - name: Build Rust API documentation
+        run: cargo doc --manifest-path rust/Cargo.toml --no-deps --all-features
+
+      - name: Copy API docs to site directory
+        run: |
+          mkdir -p out/site/api/cpp
+          mkdir -p out/site/api/rust
+          cp -r out/doxygen/html/* out/site/api/cpp/ || true
+          cp -r rust/target/doc/* out/site/api/rust/ || true
+
+      - name: Build MkDocs documentation
+        run: mkdocs build --strict
+
+      - name: Deploy to GitHub Pages
+        run: mkdocs gh-deploy --force
