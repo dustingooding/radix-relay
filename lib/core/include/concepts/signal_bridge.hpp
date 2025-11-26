@@ -8,6 +8,12 @@
 
 namespace radix_relay::concepts {
 
+/**
+ * @brief Concept defining the interface for Signal Protocol cryptographic operations.
+ *
+ * Types satisfying this concept provide identity management, session establishment,
+ * message encryption/decryption, contact management, Nostr event signing, and key maintenance.
+ */
 template<typename T>
 concept signal_bridge = requires(T bridge,
   const std::string &rdx,

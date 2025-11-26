@@ -8,12 +8,30 @@
 
 namespace radix_relay::core {
 
+/**
+ * @brief Parses raw command strings into typed command events.
+ *
+ * @tparam CmdHandler Type satisfying the command_handler concept
+ *
+ * Converts raw text commands from the user into strongly-typed event structures
+ * and dispatches them to the command handler.
+ */
 template<concepts::command_handler CmdHandler> struct event_handler
 {
   using command_handler_t = CmdHandler;
 
+  /**
+   * @brief Constructs an event handler with the given command handler.
+   *
+   * @param command_handler Shared pointer to the command handler
+   */
   explicit event_handler(std::shared_ptr<CmdHandler> command_handler) : command_handler_(command_handler) {}
 
+  /**
+   * @brief Parses and handles a raw command string.
+   *
+   * @param event Raw command event containing unparsed user input
+   */
   auto handle(const events::raw_command &event) const -> void
   {
     const auto &input = event.input;

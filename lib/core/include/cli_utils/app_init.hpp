@@ -13,13 +13,22 @@
 
 namespace radix_relay::cli_utils {
 
+/**
+ * @brief Runtime application state.
+ */
 struct app_state
 {
-  std::string node_fingerprint;
-  std::string mode;
-  std::string identity_path;
+  std::string node_fingerprint;///< Signal Protocol node fingerprint
+  std::string mode;///< Current transport mode
+  std::string identity_path;///< Path to identity database
 };
 
+/**
+ * @brief Configures spdlog logging based on CLI arguments.
+ *
+ * @param args Parsed command-line arguments
+ * @param display_queue Optional queue for routing log messages to TUI
+ */
 inline auto configure_logging(const cli_args &args,
   std::shared_ptr<async::async_queue<core::events::display_message>> display_queue = nullptr) -> void
 {
@@ -32,7 +41,11 @@ inline auto configure_logging(const cli_args &args,
   if (args.verbose) { spdlog::set_level(spdlog::level::debug); }
 }
 
-
+/**
+ * @brief Prints the application startup banner.
+ *
+ * @param state Current application state
+ */
 inline auto print_app_banner(const app_state &state) -> void
 {
   fmt::print("Radix Relay v{} - Interactive Mode\n", radix_relay::cmake::project_version);
@@ -41,6 +54,9 @@ inline auto print_app_banner(const app_state &state) -> void
   fmt::print("Connected Peers: 0 (transport layer not implemented)\n\n");
 }
 
+/**
+ * @brief Prints list of available interactive commands.
+ */
 inline auto print_available_commands() -> void
 {
   fmt::print(
@@ -48,6 +64,14 @@ inline auto print_available_commands() -> void
     "quit\n\n");
 }
 
+/**
+ * @brief Executes a command specified via CLI arguments.
+ *
+ * @tparam CmdHandler Command handler type
+ * @param args Parsed CLI arguments
+ * @param command_handler Handler to execute commands
+ * @return true if a command was executed, false otherwise
+ */
 template<concepts::command_handler CmdHandler>
 [[nodiscard]] inline auto execute_cli_command(const cli_args &args, std::shared_ptr<CmdHandler> command_handler) -> bool
 {

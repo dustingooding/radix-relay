@@ -7,23 +7,39 @@
 
 namespace radix_relay::cli_utils {
 
+/**
+ * @brief Parsed command-line arguments.
+ */
 struct cli_args
 {
-  std::string identity_path = "~/.radix/identity.db";
-  std::string mode = "hybrid";
-  bool verbose = false;
-  bool show_version = false;
+  std::string identity_path = "~/.radix/identity.db";///< Path to identity database file
+  std::string mode = "hybrid";///< Transport mode (internet/mesh/hybrid)
+  bool verbose = false;///< Enable verbose logging
+  bool show_version = false;///< Display version and exit
 
-  bool send_parsed = false;
-  std::string send_recipient;
-  std::string send_message;
+  bool send_parsed = false;///< True if send subcommand was used
+  std::string send_recipient;///< Recipient for send subcommand
+  std::string send_message;///< Message content for send subcommand
 
-  bool peers_parsed = false;
-  bool status_parsed = false;
+  bool peers_parsed = false;///< True if peers subcommand was used
+  bool status_parsed = false;///< True if status subcommand was used
 };
 
+/**
+ * @brief Configures CLI11 application with command-line options.
+ *
+ * @param app CLI11 application instance
+ * @param args Structure to populate with parsed arguments
+ */
 inline auto setup_cli_app(CLI::App &app, cli_args &args) -> void;
 
+/**
+ * @brief Parses command-line arguments into a cli_args structure.
+ *
+ * @param argc Argument count from main()
+ * @param argv Argument vector from main()
+ * @return Parsed command-line arguments
+ */
 [[nodiscard]] inline auto parse_cli_args(int argc, char **argv) -> cli_args
 {
   cli_args args;
@@ -63,6 +79,12 @@ inline auto setup_cli_app(CLI::App &app, cli_args &args) -> void
   status_cmd->callback([&args]() { args.status_parsed = true; });
 }
 
+/**
+ * @brief Validates parsed command-line arguments for logical consistency.
+ *
+ * @param args Parsed arguments to validate
+ * @return true if arguments are valid, false otherwise
+ */
 [[nodiscard]] inline auto validate_cli_args(const cli_args &args) -> bool
 {
   if (args.mode != "internet" and args.mode != "mesh" and args.mode != "hybrid") {

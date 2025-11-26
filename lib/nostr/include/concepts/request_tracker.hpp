@@ -9,6 +9,12 @@
 
 namespace radix_relay::concepts {
 
+/**
+ * @brief Concept defining the interface for tracking Nostr request/response pairs.
+ *
+ * Types satisfying this concept provide callback-based and coroutine-based tracking
+ * for matching Nostr responses (OK, EOSE) to their originating requests.
+ */
 template<typename T>
 concept request_tracker = requires(T tracker,
   const std::string &event_id,

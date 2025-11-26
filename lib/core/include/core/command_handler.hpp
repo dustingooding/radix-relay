@@ -11,8 +11,24 @@
 
 namespace radix_relay::core {
 
+/**
+ * @brief Handles typed command events and coordinates with subsystems.
+ *
+ * @tparam Bridge Type satisfying the signal_bridge concept
+ *
+ * Routes commands to appropriate subsystems (display, transport, session orchestrator)
+ * and interacts with the Signal Protocol bridge for cryptographic operations.
+ */
 template<concepts::signal_bridge Bridge> struct command_handler
 {
+  /**
+   * @brief Constructs a command handler with required subsystem queues.
+   *
+   * @param bridge Signal Protocol bridge for crypto operations
+   * @param display_out_queue Queue for display messages
+   * @param transport_out_queue Queue for transport commands
+   * @param session_out_queue Queue for session orchestrator commands
+   */
   explicit command_handler(const std::shared_ptr<Bridge> &bridge,
     const std::shared_ptr<async::async_queue<events::display_message>> &display_out_queue,
     const std::shared_ptr<async::async_queue<events::transport::in_t>> &transport_out_queue,
@@ -21,8 +37,19 @@ template<concepts::signal_bridge Bridge> struct command_handler
       session_out_queue_(session_out_queue)
   {}
 
+  /**
+   * @brief Handles a typed command event.
+   *
+   * @tparam T Command type satisfying the Command concept
+   * @param command The command to handle
+   */
   template<events::Command T> auto handle(const T &command) const -> void { handle_impl(command); }
 
+  /**
+   * @brief Returns the Signal Protocol bridge.
+   *
+   * @return Shared pointer to the bridge
+   */
   [[nodiscard]] auto get_bridge() -> std::shared_ptr<Bridge> { return bridge_; }
 
 private:

@@ -8,33 +8,69 @@
 
 namespace radix_relay::core {
 
+/**
+ * @brief Handles presentation events and generates user-facing messages.
+ *
+ * Converts presentation events (messages received, sessions established, etc.)
+ * into formatted display messages for the user interface.
+ */
 struct presentation_handler
 {
+  /**
+   * @brief Constructs a presentation handler.
+   *
+   * @param display_out_queue Queue for outgoing display messages
+   */
   explicit presentation_handler(const std::shared_ptr<async::async_queue<events::display_message>> &display_out_queue)
     : display_out_queue_(display_out_queue)
   {}
 
+  /**
+   * @brief Handles a received encrypted message event.
+   *
+   * @param evt Message received event
+   */
   auto handle(const events::message_received &evt) const -> void
   {
     const auto &sender_display = evt.sender_alias.empty() ? evt.sender_rdx : evt.sender_alias;
     emit("Message from {}: {}\n", sender_display, evt.content);
   }
 
+  /**
+   * @brief Handles a session established event.
+   *
+   * @param evt Session established event
+   */
   auto handle(const events::session_established &evt) const -> void
   {
     emit("Encrypted session established with {}\n", evt.peer_rdx);
   }
 
+  /**
+   * @brief Handles a bundle announcement received event.
+   *
+   * @param evt Bundle announcement received event
+   */
   static auto handle(const events::bundle_announcement_received &evt) -> void
   {
     spdlog::debug("Received bundle announcement from {}", evt.pubkey);
   }
 
+  /**
+   * @brief Handles a bundle announcement removed event.
+   *
+   * @param evt Bundle announcement removed event
+   */
   static auto handle(const events::bundle_announcement_removed &evt) -> void
   {
     spdlog::debug("Bundle announcement removed for {}", evt.pubkey);
   }
 
+  /**
+   * @brief Handles a message sent event.
+   *
+   * @param evt Message sent event
+   */
   auto handle(const events::message_sent &evt) const -> void
   {
     if (evt.accepted) {
@@ -44,6 +80,11 @@ struct presentation_handler
     }
   }
 
+  /**
+   * @brief Handles a bundle published event.
+   *
+   * @param evt Bundle published event
+   */
   auto handle(const events::bundle_published &evt) const -> void
   {
     if (evt.accepted) {
@@ -53,11 +94,21 @@ struct presentation_handler
     }
   }
 
+  /**
+   * @brief Handles a subscription established event.
+   *
+   * @param evt Subscription established event
+   */
   static auto handle(const events::subscription_established &evt) -> void
   {
     spdlog::debug("Subscription established: {}", evt.subscription_id);
   }
 
+  /**
+   * @brief Handles an identities listed event.
+   *
+   * @param evt Identities listed event
+   */
   auto handle(const events::identities_listed &evt) const -> void
   {
     if (evt.identities.empty()) {
