@@ -24,7 +24,7 @@ auto websocket_stream::async_connect(websocket_connection_params params,
   resolver_.async_resolve(host_str,
     port_str,
     [this, host_str, port_str, path_str, handler = std::move(handler)](const boost::system::error_code &error_code,
-      const boost::asio::ip::tcp::resolver::results_type &results) mutable {
+      const boost::asio::ip::tcp::resolver::results_type &results) mutable -> void {
       if (error_code) {
         handler(error_code, 0);
         return;
@@ -33,8 +33,8 @@ auto websocket_stream::async_connect(websocket_connection_params params,
       beast::get_lowest_layer(ws_).expires_after(std::chrono::seconds(connection_timeout_seconds));
 
       beast::get_lowest_layer(ws_).async_connect(results,
-        [this, host_str, path_str, handler = std::move(handler)](
-          const boost::system::error_code &connect_error, const boost::asio::ip::tcp::endpoint & /*endpoint*/) mutable {
+        [this, host_str, path_str, handler = std::move(handler)](const boost::system::error_code &connect_error,
+          const boost::asio::ip::tcp::endpoint & /*endpoint*/) mutable -> void {
           if (connect_error) {
             handler(connect_error, 0);
             return;
@@ -55,7 +55,7 @@ auto websocket_stream::async_connect(websocket_connection_params params,
 
           ws_.next_layer().async_handshake(boost::asio::ssl::stream_base::client,
             [this, host_str, path_str, handler = std::move(handler)](
-              const boost::system::error_code &ssl_error) mutable {
+              const boost::system::error_code &ssl_error) mutable -> void {
               if (ssl_error) {
                 handler(ssl_error, 0);
                 return;
@@ -64,14 +64,15 @@ auto websocket_stream::async_connect(websocket_connection_params params,
               beast::get_lowest_layer(ws_).expires_never();
 
               ws_.set_option(beast::websocket::stream_base::timeout::suggested(beast::role_type::client));
-              ws_.set_option(beast::websocket::stream_base::decorator([](beast::websocket::request_type &req) {
+              ws_.set_option(beast::websocket::stream_base::decorator([](beast::websocket::request_type &req) -> void {
                 req.set(
                   boost::beast::http::field::user_agent, std::string(BOOST_BEAST_VERSION_STRING) + " radix-relay");
               }));
 
-              ws_.async_handshake(host_str,
-                path_str,
-                [handler = std::move(handler)](const boost::system::error_code &ws_error) { handler(ws_error, 0); });
+              ws_.async_handshake(
+                host_str, path_str, [handler = std::move(handler)](const boost::system::error_code &ws_error) -> void {
+                  handler(ws_error, 0);
+                });
             });
         });
     });
@@ -81,7 +82,7 @@ auto websocket_stream::async_write(const std::span<const std::byte> data,
   std::function<void(const boost::system::error_code &, std::size_t)> handler) -> void
 {
   ws_.async_write(boost::asio::buffer(data.data(), data.size()),
-    [handler = std::move(handler)](const boost::system::error_code &error_code, std::size_t bytes_transferred) {
+    [handler = std::move(handler)](const boost::system::error_code &error_code, std::size_t bytes_transferred) -> void {
       handler(error_code, bytes_transferred);
     });
 }
@@ -92,7 +93,7 @@ auto websocket_stream::async_read(const boost::asio::mutable_buffer &buffer,
   read_buffer_.clear();
   ws_.async_read(read_buffer_,
     [this, buffer, handler = std::move(handler)](
-      const boost::system::error_code &error_code, std::size_t /*bytes_transferred*/) {
+      const boost::system::error_code &error_code, std::size_t /*bytes_transferred*/) -> void {
       if (not error_code) {
         const auto data = read_buffer_.data();
         const std::size_t size = std::min(boost::asio::buffer_size(buffer), data.size());
@@ -107,7 +108,7 @@ auto websocket_stream::async_read(const boost::asio::mutable_buffer &buffer,
 auto websocket_stream::async_close(std::function<void(const boost::system::error_code &, std::size_t)> handler) -> void
 {
   ws_.async_close(boost::beast::websocket::close_code::normal,
-    [handler = std::move(handler)](const boost::system::error_code &error_code) { handler(error_code, 0); });
+    [handler = std::move(handler)](const boost::system::error_code &error_code) -> void { handler(error_code, 0); });
 }
 
 }// namespace radix_relay::transport

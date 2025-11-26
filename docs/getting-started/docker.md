@@ -8,27 +8,29 @@ docker build -f ./.devcontainer/Dockerfile --tag=radix-relay:latest .
 docker run -it radix-relay:latest
 ```
 
-This command will put you in a `bash` session in a Ubuntu 20.04 Docker container,
+This command will put you in a `bash` session in an Arch Linux Docker container,
 with all of the tools listed in the [Dependencies](installation.md) section already installed.
-Additionally, you will have `g++-11` and `clang++-13` installed as the default
-versions of `g++` and `clang++`.
+The container includes:
 
-If you want to build this container using some other versions of gcc and clang,
-you may do so with the `GCC_VER` and `LLVM_VER` arguments:
+- **Compilers**: GCC 14 and Clang 19 (matching CI configuration)
+- **Build Tools**: CMake 3.21+, Ninja, ccache
+- **Rust**: Stable toolchain with cargo, rustc, and rustup
+- **C++ Libraries**: Boost 1.89.0 (pre-installed; other libraries like fmt, spdlog, Catch2, nlohmann-json are downloaded by CPM during first build)
+- **System Libraries**: Protocol Buffers, OpenSSL
+- **Development Tools**: clang-tidy, clang-format, cppcheck, gcovr, gdb, doxygen
+- **Editors**: neovim, nano
 
-```bash
-docker build --tag=myproject:latest --build-arg GCC_VER=10 --build-arg LLVM_VER=11 .
-```
+The GCC_VER and LLVM_VER build arguments are defined but not actively used (Arch provides the latest stable versions).
 
-The CC and CXX environment variables are set to GCC version 11 by default.
+The CC and CXX environment variables are set to GCC version 14 by default.
 If you wish to use clang as your default CC and CXX environment variables, you
 may do so like this:
 
 ```bash
-docker build --tag=radix-relay:latest --build-arg USE_CLANG=1 .
+docker build -f ./.devcontainer/Dockerfile --tag=radix-relay:latest --build-arg USE_CLANG=1 .
 ```
 
-You will be logged in as root, so you will see the `#` symbol as your prompt.
+By default, you will be logged in as the `vscode` user (non-root) for better security.
 You will be in a directory that contains a copy of `radix-relay`;
 any changes you make to your local copy will not be updated in the Docker image
 until you rebuild it.
@@ -38,24 +40,42 @@ TLDR:
 
 ```bash
 docker run -it \
-  -v absolute_path_on_host_machine:absolute_path_in_guest_container \
+  -v /path/to/radix-relay:/workspace/radix-relay \
   radix-relay:latest
 ```
+
+## Building with Docker
 
 You can configure and [build](building.md) using these commands:
 
 ```bash
-/radix_relay# cmake --preset=unixlike-gcc-debug
-/radix_relay# cmake --build out/build/unixlike-gcc-debug
+cmake --preset=unixlike-gcc-debug
+cmake --build --preset=unixlike-gcc-debug
 ```
 
 You can configure and build using `clang`, without rebuilding the container,
 with these commands:
 
 ```bash
-/radix_relay# cmake --preset=unixlike-clang-debug
-/radix_relay# cmake --build out/build/unixlike-clang-debug
+cmake --preset=unixlike-clang-debug
+cmake --build --preset=unixlike-clang-debug
 ```
+
+## Running Tests
+
+Use `ctest` to run all tests (NEVER use `cargo test` directly):
+
+```bash
+ctest --preset=test-unixlike-gcc-debug
+```
+
+or with clang:
+
+```bash
+ctest --preset=test-unixlike-clang-debug
+```
+
+## Interactive Configuration
 
 The `ccmake` tool is also installed; you can substitute `ccmake` for `cmake` to
 configure the project interactively.
@@ -64,5 +84,8 @@ enabling them is as simple as flipping a switch using the `ccmake` interface.
 Be aware that some of the sanitizers conflict with each other, so be sure to
 run them separately.
 
-A script called `build_examples.sh` is provided to help you to build the example
-GUI projects in this container.
+## VS Code Dev Container
+
+This project also includes a [devcontainer.json](.devcontainer/devcontainer.json) configuration
+for use with VS Code's [Dev Containers extension](https://code.visualstudio.com/docs/devcontainers/containers).
+Simply open the project in VS Code and click "Reopen in Container" when prompted.

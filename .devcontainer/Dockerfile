@@ -1,120 +1,89 @@
-# [Choice] bionic (18.04), focal (20.04)
-ARG VARIANT="focal"
-FROM ubuntu:${VARIANT}
+# Use Arch Linux as base
+FROM docker.io/archlinux:latest
 
-# Restate the variant to use it later on in the llvm and cmake installations
-ARG VARIANT
+# Update system and install base development tools
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm \
+        base-devel \
+        git \
+        cmake \
+        ninja \
+        ccache \
+        wget \
+        curl \
+        unzip \
+        zip \
+        openssh \
+        rsync \
+        sudo
 
-# Install necessary packages available from standard repos
-RUN apt-get update -qq && export DEBIAN_FRONTEND=noninteractive && \
-    apt-get install -y --no-install-recommends \
-        software-properties-common wget apt-utils file zip \
-        openssh-client gpg-agent socat rsync \
-        make ninja-build git \
-        python3 python3-pip
+# Install C++ compilers and tools
+ARG GCC_VER="14"
+ARG LLVM_VER="19"
 
-# Install conan
-RUN python3 -m pip install --upgrade pip setuptools && \
-    python3 -m pip install conan && \
-    conan --version
+RUN pacman -S --noconfirm \
+        gcc \
+        clang \
+        lldb \
+        lld \
+        clang-tools-extra \
+        gdb \
+        cppcheck \
+        doxygen \
+        graphviz
 
-# By default, anything you run in Docker is done as superuser.
-# Conan runs some install commands as superuser, and will prepend `sudo` to
-# these commands, unless `CONAN_SYSREQUIRES_SUDO=0` is in your env variables.
-ENV CONAN_SYSREQUIRES_SUDO 0
-# Some packages request that Conan use the system package manager to install
-# a few dependencies. This flag allows Conan to proceed with these installations;
-# leaving this flag undefined can cause some installation failures.
-ENV CONAN_SYSREQUIRES_MODE enabled
+# Install required system dependencies
+# Note: Boost is the only C++ library we install from pacman because:
+# 1. It's large and time-consuming to build
+# 2. Arch has exactly the version we need (1.89.0)
+# 3. CMake can find it reliably
+# Other C++ libraries (fmt, spdlog, catch2, etc.) will be downloaded by CPM as needed
+RUN pacman -S --noconfirm \
+        boost=1.89.0-3 \
+        boost-libs=1.89.0-3 \
+        protobuf=33.0-2 \
+        openssl
 
-# User-settable versions:
-# This Dockerfile should support gcc-[7, 8, 9, 10, 11] and clang-[10, 11, 12, 13]
-# Earlier versions of clang will require significant modifications to the IWYU section
-ARG GCC_VER="11"
-# Add gcc-${GCC_VER}
-RUN add-apt-repository -y ppa:ubuntu-toolchain-r/test && \
-    apt-get update -qq && export DEBIAN_FRONTEND=noninteractive && \
-    apt-get install -y --no-install-recommends \
-        gcc-${GCC_VER} g++-${GCC_VER} gdb
+# Install Rust toolchain
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
 
-# Set gcc-${GCC_VER} as default gcc
-RUN update-alternatives --install /usr/bin/gcc gcc $(which gcc-${GCC_VER}) 100
-RUN update-alternatives --install /usr/bin/g++ g++ $(which g++-${GCC_VER}) 100
-
-ARG LLVM_VER="13"
-# Add clang-${LLVM_VER}
-ARG LLVM_URL="http://apt.llvm.org/${VARIANT}/"
-ARG LLVM_PKG="llvm-toolchain-${VARIANT}-${LLVM_VER}"
-RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - 2>/dev/null && \
-    add-apt-repository -y "deb ${LLVM_URL} ${LLVM_PKG} main" && \
-    apt-get update -qq && export DEBIAN_FRONTEND=noninteractive && \
-    apt-get install -y --no-install-recommends \
-        clang-${LLVM_VER} lldb-${LLVM_VER} lld-${LLVM_VER} clangd-${LLVM_VER} \
-        llvm-${LLVM_VER}-dev libclang-${LLVM_VER}-dev clang-tidy-${LLVM_VER}
-
-# Set the default clang-tidy, so CMake can find it
-RUN update-alternatives --install /usr/bin/clang-tidy clang-tidy $(which clang-tidy-${LLVM_VER}) 1
-
-# Set clang-${LLVM_VER} as default clang
-RUN update-alternatives --install /usr/bin/clang clang $(which clang-${LLVM_VER}) 100
-RUN update-alternatives --install /usr/bin/clang++ clang++ $(which clang++-${LLVM_VER}) 100
-
-# Add current cmake/ccmake, from Kitware
-ARG CMAKE_URL="https://apt.kitware.com/ubuntu/"
-ARG CMAKE_PKG=${VARIANT}
-RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null \
-        | gpg --dearmor - | tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null && \
-    apt-add-repository -y "deb ${CMAKE_URL} ${CMAKE_PKG} main" && \
-    apt-get update -qq && export DEBIAN_FRONTEND=noninteractive && \
-    apt-get install -y --no-install-recommends cmake cmake-curses-gui
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable && \
+    chmod -R a+rw ${RUSTUP_HOME} ${CARGO_HOME} && \
+    rustup --version && \
+    cargo --version && \
+    rustc --version
 
 # Install editors
-RUN apt-get update -qq && export DEBIAN_FRONTEND=noninteractive && \
-    apt-get install -y --no-install-recommends \
-        neovim emacs nano
+RUN pacman -S --noconfirm \
+        neovim \
+        nano
 
-# Install optional dependecies
-RUN apt-get update -qq && export DEBIAN_FRONTEND=noninteractive && \
-    apt-get install -y --no-install-recommends \
-        doxygen graphviz ccache cppcheck
+# Install Python and development tools
+RUN pacman -S --noconfirm \
+        python \
+        python-pip \
+        gcovr
 
-# Install include-what-you-use
-ENV IWYU /home/iwyu
-ENV IWYU_BUILD ${IWYU}/build
-ENV IWYU_SRC ${IWYU}/include-what-you-use
-RUN mkdir -p ${IWYU_BUILD} && \
-    git clone --branch clang_${LLVM_VER} \
-        https://github.com/include-what-you-use/include-what-you-use.git \
-        ${IWYU_SRC}
-RUN CC=clang-${LLVM_VER} CXX=clang++-${LLVM_VER} cmake -S ${IWYU_SRC} \
-        -B ${IWYU_BUILD} \
-        -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=/usr/lib/llvm-${LLVM_VER} && \
-    cmake --build ${IWYU_BUILD} -j && \
-    cmake --install ${IWYU_BUILD}
-
-# Per https://github.com/include-what-you-use/include-what-you-use#how-to-install:
-# `You need to copy the Clang include directory to the expected location before
-#  running (similarly, use include-what-you-use -print-resource-dir to learn
-#  exactly where IWYU wants the headers).`
-RUN mkdir -p $(include-what-you-use -print-resource-dir 2>/dev/null)
-RUN ln -s $(readlink -f /usr/lib/clang/${LLVM_VER}/include) \
-    $(include-what-you-use -print-resource-dir 2>/dev/null)/include
-
-## Cleanup cached apt data we don't need anymore
-RUN apt-get autoremove -y && apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Allow the user to set compiler defaults
+# Set default compiler environment variables
 ARG USE_CLANG
-# if --build-arg USE_CLANG=1, set CC to 'clang' or set to null otherwise.
 ENV CC=${USE_CLANG:+"clang"}
 ENV CXX=${USE_CLANG:+"clang++"}
-# if CC is null, set it to 'gcc' (or leave as is otherwise).
 ENV CC=${CC:-"gcc"}
 ENV CXX=${CXX:-"g++"}
 
-# Include project
-#ADD . /workspaces/cpp_starter_project
-#WORKDIR /workspaces/cpp_starter_project
+# Create a non-root user for development
+ARG USERNAME=vscode
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+
+RUN groupadd --gid $USER_GID $USERNAME || true \
+    && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME \
+    && echo "$USERNAME ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/$USERNAME \
+    && chmod 0440 /etc/sudoers.d/$USERNAME
+
+# Clean package cache to reduce image size
+RUN pacman -Scc --noconfirm
 
 CMD ["/bin/bash"]

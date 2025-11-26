@@ -119,7 +119,7 @@ TEST_CASE("coroutine lifecycle - basic cleanup with cancellation", "[coroutine][
     }(processor, cancel_slot, state),
     boost::asio::detached);
 
-  std::thread io_thread([&io_context]() { io_context->run(); });
+  std::thread io_thread([&io_context]() -> void { io_context->run(); });
 
   std::this_thread::sleep_for(std::chrono::milliseconds(event_processing_delay_ms));
 
@@ -246,7 +246,7 @@ TEST_CASE("coroutine lifecycle - RAII with scope exit", "[coroutine][lifecycle][
         }(processor, cancel_slot, state),
         boost::asio::detached);
 
-      std::thread io_thread([&io_context]() { io_context->run(); });
+      std::thread io_thread([&io_context]() -> void { io_context->run(); });
 
       std::this_thread::sleep_for(std::chrono::milliseconds(event_processing_delay_ms));
 
@@ -358,11 +358,11 @@ TEST_CASE("coroutine lifecycle - multiple processors with shared cancellation", 
       }(processor2, cancel_slot, state2),
       boost::asio::use_future);
 
-    std::thread io_thread([&io_context]() { io_context->run(); });
+    std::thread io_thread([&io_context]() -> void { io_context->run(); });
 
     std::this_thread::sleep_for(std::chrono::milliseconds(event_processing_delay_ms));
 
-    boost::asio::post(*io_context, [cancel_signal]() {
+    boost::asio::post(*io_context, [cancel_signal]() -> void {
       spdlog::debug("[test] posting emit() to io_context thread");
       cancel_signal->emit(boost::asio::cancellation_type::all);
     });

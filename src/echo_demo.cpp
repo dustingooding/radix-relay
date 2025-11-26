@@ -123,54 +123,54 @@ auto main() -> int
       [](const std::shared_ptr<boost::asio::io_context> &ctx,
         std::shared_ptr<radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge,
           radix_relay::nostr::request_tracker>> orch,
-        std::shared_ptr<boost::asio::cancellation_slot>
-          c_slot) {// NOLINT(performance-unnecessary-value-param) - c_slot reused across calls
-        boost::asio::co_spawn(
-          *ctx,
-          [](std::shared_ptr<radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge,
-               radix_relay::nostr::request_tracker>> orchestrator,
-            std::shared_ptr<boost::asio::cancellation_slot> slot) -> boost::asio::awaitable<void> {
-            try {
-              co_await orchestrator->run(slot);
-            } catch (const boost::system::system_error &err) {
-              if (err.code() != boost::asio::error::operation_aborted
-                  and err.code() != boost::asio::experimental::error::channel_cancelled
-                  and err.code() != boost::asio::experimental::error::channel_closed) {
-                spdlog::error("[echo_demo] Orchestrator unexpected error: {}", err.what());
-              }
+        std::shared_ptr<boost::asio::cancellation_slot> c_slot)
+      -> void {// NOLINT(performance-unnecessary-value-param) - c_slot reused across calls
+      boost::asio::co_spawn(
+        *ctx,
+        [](std::shared_ptr<radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge,
+             radix_relay::nostr::request_tracker>> orchestrator,
+          std::shared_ptr<boost::asio::cancellation_slot> slot) -> boost::asio::awaitable<void> {
+          try {
+            co_await orchestrator->run(slot);
+          } catch (const boost::system::system_error &err) {
+            if (err.code() != boost::asio::error::operation_aborted
+                and err.code() != boost::asio::experimental::error::channel_cancelled
+                and err.code() != boost::asio::experimental::error::channel_closed) {
+              spdlog::error("[echo_demo] Orchestrator unexpected error: {}", err.what());
             }
-          }(std::move(orch), c_slot),// NOLINT(performance-unnecessary-value-param) - c_slot reused across calls
-          boost::asio::detached);
-      };
+          }
+        }(std::move(orch), c_slot),// NOLINT(performance-unnecessary-value-param) - c_slot reused across calls
+        boost::asio::detached);
+    };
 
     auto spawn_transport_loop =
       [](const std::shared_ptr<boost::asio::io_context> &ctx,
         std::shared_ptr<radix_relay::nostr::transport<radix_relay::transport::websocket_stream>> trans,
-        std::shared_ptr<boost::asio::cancellation_slot>
-          c_slot) {// NOLINT(performance-unnecessary-value-param) - c_slot reused across calls
-        boost::asio::co_spawn(
-          *ctx,
-          [](std::shared_ptr<radix_relay::nostr::transport<radix_relay::transport::websocket_stream>> transport,
-            std::shared_ptr<boost::asio::cancellation_slot> slot) -> boost::asio::awaitable<void> {
-            try {
-              co_await transport->run(slot);
-            } catch (const boost::system::system_error &err) {
-              if (err.code() != boost::asio::error::operation_aborted
-                  and err.code() != boost::asio::experimental::error::channel_cancelled
-                  and err.code() != boost::asio::experimental::error::channel_closed) {
-                spdlog::error("[echo_demo] Transport unexpected error: {}", err.what());
-              }
+        std::shared_ptr<boost::asio::cancellation_slot> c_slot)
+      -> void {// NOLINT(performance-unnecessary-value-param) - c_slot reused across calls
+      boost::asio::co_spawn(
+        *ctx,
+        [](std::shared_ptr<radix_relay::nostr::transport<radix_relay::transport::websocket_stream>> transport,
+          std::shared_ptr<boost::asio::cancellation_slot> slot) -> boost::asio::awaitable<void> {
+          try {
+            co_await transport->run(slot);
+          } catch (const boost::system::system_error &err) {
+            if (err.code() != boost::asio::error::operation_aborted
+                and err.code() != boost::asio::experimental::error::channel_cancelled
+                and err.code() != boost::asio::experimental::error::channel_closed) {
+              spdlog::error("[echo_demo] Transport unexpected error: {}", err.what());
             }
-          }(std::move(trans), c_slot),// NOLINT(performance-unnecessary-value-param) - c_slot reused across calls
-          boost::asio::detached);
-      };
+          }
+        }(std::move(trans), c_slot),// NOLINT(performance-unnecessary-value-param) - c_slot reused across calls
+        boost::asio::detached);
+    };
 
     spawn_orchestrator_loop(io_context, alice_orchestrator, cancel_slot);
     spawn_orchestrator_loop(io_context, bob_orchestrator, cancel_slot);
     spawn_transport_loop(io_context, alice_transport, cancel_slot);
     spawn_transport_loop(io_context, bob_transport, cancel_slot);
 
-    std::thread io_thread([&io_context]() {
+    std::thread io_thread([&io_context]() -> void {
       spdlog::debug("io_context thread started");
       io_context->run();
       spdlog::debug("io_context thread stopped");
@@ -345,10 +345,10 @@ auto main() -> int
       std::cout << "Alice received " << alice_events.size() << " events\n";
       std::cout << "Bob received " << bob_events.size() << " events\n";
 
-      const auto alice_messages = std::count_if(alice_events.begin(), alice_events.end(), [](const auto &evt) {
+      const auto alice_messages = std::count_if(alice_events.begin(), alice_events.end(), [](const auto &evt) -> auto {
         return std::holds_alternative<radix_relay::core::events::message_received>(evt);
       });
-      const auto bob_messages = std::count_if(bob_events.begin(), bob_events.end(), [](const auto &evt) {
+      const auto bob_messages = std::count_if(bob_events.begin(), bob_events.end(), [](const auto &evt) -> auto {
         return std::holds_alternative<radix_relay::core::events::message_received>(evt);
       });
 
@@ -368,7 +368,7 @@ auto main() -> int
     std::cout << "\nShutting down...\n";
 
     spdlog::debug("Posting cancellation signal to io_context thread...");
-    boost::asio::post(*io_context, [cancel_signal]() {
+    boost::asio::post(*io_context, [cancel_signal]() -> void {
       spdlog::debug("[echo_demo] Emitting cancellation signal on io_context thread");
       cancel_signal->emit(boost::asio::cancellation_type::all);
     });

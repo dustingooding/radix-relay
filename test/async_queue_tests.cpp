@@ -192,7 +192,7 @@ SCENARIO("async_queue handles concurrent multi-producer push", "[async_queue][co
       std::vector<std::thread> producers;
       producers.reserve(num_producers);
       for (int producer_id = 0; producer_id < num_producers; ++producer_id) {
-        producers.emplace_back([&queue, producer_id]() {
+        producers.emplace_back([&queue, producer_id]() -> void {
           for (int idx = 0; idx < items_per_producer; ++idx) { queue.push((producer_id * items_per_producer) + idx); }
         });
       }
@@ -246,7 +246,7 @@ SCENARIO("async_queue handles concurrent multi-producer push", "[async_queue][co
       for (int strand_id = 0; strand_id < num_strands; ++strand_id) {
         for (int idx = 0; idx < items_per_strand; ++idx) {
           boost::asio::post(strands[static_cast<std::size_t>(strand_id)],
-            [&queue, strand_id, idx]() { queue.push((strand_id * items_per_strand) + idx); });
+            [&queue, strand_id, idx]() -> void { queue.push((strand_id * items_per_strand) + idx); });
         }
       }
 

@@ -23,6 +23,7 @@ If you encounter issues:
 ### Build Failures
 
 Check that you have:
+
 - CMake 3.21+
 - C++20 compatible compiler
 - All dependencies installed
@@ -32,6 +33,7 @@ See [Installation](installation.md) for details.
 ### Test Failures
 
 Run tests with verbose output:
+
 ```bash
 ctest --preset=test-unixlike-clang-debug --output-on-failure
 ```

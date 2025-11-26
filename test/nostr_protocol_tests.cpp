@@ -8,7 +8,8 @@ auto string_to_bytes(const std::string &str) -> std::vector<std::byte>
 {
   std::vector<std::byte> bytes;
   bytes.resize(str.size());
-  std::ranges::transform(str, bytes.begin(), [](char character) { return std::bit_cast<std::byte>(character); });
+  std::ranges::transform(
+    str, bytes.begin(), [](char character) -> std::byte { return std::bit_cast<std::byte>(character); });
   return bytes;
 }
 

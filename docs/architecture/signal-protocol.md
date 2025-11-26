@@ -111,6 +111,7 @@ No manual intervention is required for pre-key pool management.
 ### X3DH Key Agreement
 
 Provides:
+
 - **Forward secrecy**: Compromise of long-term keys doesn't compromise past sessions
 - **Cryptographic deniability**: Participants can deny message authorship (within the encrypted channel)
 - **Asynchronous**: Peers can establish sessions without both being online simultaneously
@@ -118,6 +119,7 @@ Provides:
 ### Double Ratchet
 
 Provides:
+
 - **Per-message forward secrecy**: Each message uses a unique key
 - **Future secrecy**: Self-healing after key compromise
 - **Out-of-order message handling**: Messages can be received in any order
@@ -141,6 +143,7 @@ This metadata enables the system to avoid republishing identical bundles while e
 ### Bundle Publication
 
 Pre-key bundles are published as Nostr kind 30078 events (Parameterized Replaceable Events) with:
+
 - Tag `d:radix_prekey_bundle_v1` for identification
 - Tag `v:<version>` for version tracking
 - Base64-encoded bundle in the event content
@@ -150,6 +153,7 @@ The "parameterized replaceable" property ensures each node has exactly one curre
 ### Encrypted Messages
 
 Encrypted messages are published as Nostr kind 40001 events with:
+
 - Signal Protocol encrypted payload
 - Recipient public key in event tags
 - Sender's identity signature
@@ -196,6 +200,7 @@ Bundle republishing is designed to be lightweight:
 - Network overhead is minimal (~2KB per bundle)
 
 The system is optimized for:
+
 - Low CPU usage during normal operation
 - Minimal memory footprint
 - Efficient database operations

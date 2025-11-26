@@ -45,8 +45,9 @@ TEST_CASE("Signal Bridge Performance Benchmarks", "[benchmark][signal]")
 
       auto fresh_alice_bridge = std::make_shared<radix_relay::signal::bridge>(fresh_alice_db);
 
-      meter.measure(
-        [&] { return fresh_alice_bridge->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob"); });
+      meter.measure([&]() -> std::string {
+        return fresh_alice_bridge->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob");
+      });
 
       fresh_alice_bridge.reset();
       std::filesystem::remove(fresh_alice_db);
@@ -113,11 +114,13 @@ TEST_CASE("Signal Bridge Performance Benchmarks", "[benchmark][signal]")
     {
       std::vector<std::vector<uint8_t>> encrypted_messages;
       encrypted_messages.reserve(static_cast<std::size_t>(meter.runs()));
-      for (std::size_t i = 0; i < static_cast<std::size_t>(meter.runs()); ++i) {
+      for (std::size_t i = 0; std::cmp_less(i, meter.runs()); ++i) {
         encrypted_messages.push_back(alice_bridge->encrypt_message(bob_rdx, message_bytes));
       }
 
-      meter.measure([&](std::size_t idx) { return bob_bridge->decrypt_message(alice_rdx, encrypted_messages[idx]); });
+      meter.measure([&](std::size_t idx) -> decryption_result {
+        return bob_bridge->decrypt_message(alice_rdx, encrypted_messages[idx]);
+      });
     };
 
     alice_bridge.reset();

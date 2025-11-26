@@ -11,7 +11,8 @@ auto event_data::deserialize(std::span<const std::byte> bytes) -> std::optional<
 {
   std::string json_str;
   json_str.resize(bytes.size());
-  std::ranges::transform(bytes, json_str.begin(), [](std::byte byte_val) { return std::bit_cast<char>(byte_val); });
+  std::ranges::transform(
+    bytes, json_str.begin(), [](std::byte byte_val) -> char { return std::bit_cast<char>(byte_val); });
   return deserialize(json_str);
 }
 
@@ -80,7 +81,8 @@ auto event_data::serialize() const -> std::vector<std::byte>
   auto json_str = json_obj.dump();
   std::vector<std::byte> bytes;
   bytes.resize(json_str.size());
-  std::ranges::transform(json_str, bytes.begin(), [](char character) { return std::bit_cast<std::byte>(character); });
+  std::ranges::transform(
+    json_str, bytes.begin(), [](char character) -> std::byte { return std::bit_cast<std::byte>(character); });
   return bytes;
 }
 

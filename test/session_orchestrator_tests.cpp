@@ -23,7 +23,8 @@ auto string_to_bytes(const std::string &str) -> std::vector<std::byte>
 {
   std::vector<std::byte> bytes;
   bytes.resize(str.size());
-  std::ranges::transform(str, bytes.begin(), [](char character) { return std::bit_cast<std::byte>(character); });
+  std::ranges::transform(
+    str, bytes.begin(), [](char character) -> std::byte { return std::bit_cast<std::byte>(character); });
   return bytes;
 }
 
@@ -196,7 +197,7 @@ auto bytes_to_string(const std::vector<std::byte> &bytes) -> std::string
 {
   std::string result;
   result.resize(bytes.size());
-  std::ranges::transform(bytes, result.begin(), [](std::byte byte) { return std::bit_cast<char>(byte); });
+  std::ranges::transform(bytes, result.begin(), [](std::byte byte) -> char { return std::bit_cast<char>(byte); });
   return result;
 }
 
@@ -411,7 +412,8 @@ TEST_CASE("session_orchestrator handles subscribe_identities command", "[session
     const auto &send_cmd = std::get<core::events::transport::send>(transport_cmd.value());
     std::string json_str;
     json_str.resize(send_cmd.bytes.size());
-    std::ranges::transform(send_cmd.bytes, json_str.begin(), [](std::byte byte) { return std::bit_cast<char>(byte); });
+    std::ranges::transform(
+      send_cmd.bytes, json_str.begin(), [](std::byte byte) -> char { return std::bit_cast<char>(byte); });
 
     auto parsed = nlohmann::json::parse(json_str);
     REQUIRE(parsed.is_array());
@@ -450,7 +452,8 @@ TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_o
     const auto &send_cmd = std::get<core::events::transport::send>(transport_cmd.value());
     std::string json_str;
     json_str.resize(send_cmd.bytes.size());
-    std::ranges::transform(send_cmd.bytes, json_str.begin(), [](std::byte byte) { return std::bit_cast<char>(byte); });
+    std::ranges::transform(
+      send_cmd.bytes, json_str.begin(), [](std::byte byte) -> char { return std::bit_cast<char>(byte); });
 
     auto parsed = nlohmann::json::parse(json_str);
     REQUIRE(parsed.is_array());
@@ -987,8 +990,8 @@ TEST_CASE("encrypted message event structure contains correct sender and recipie
   REQUIRE(event_parsed.contains("tags"));
   REQUIRE(event_parsed["tags"].is_array());
 
-  auto p_tag =
-    std::ranges::find_if(event_parsed["tags"], [](const auto &tag) { return tag.is_array() and tag[0] == "p"; });
+  auto p_tag = std::ranges::find_if(
+    event_parsed["tags"], [](const auto &tag) -> auto { return tag.is_array() and tag[0] == "p"; });
   REQUIRE(p_tag != event_parsed["tags"].end());
 
   const std::string recipient_nostr_pubkey = (*p_tag)[1].template get<std::string>();
@@ -1254,7 +1257,7 @@ TEST_CASE("reply to unknown sender includes correct nostr pubkey in p tag",
   // Verify the p tag contains Bob's Nostr pubkey
   REQUIRE(reply_event.contains("tags"));
   auto p_tag = std::ranges::find_if(
-    reply_event["tags"], [](const auto &tag) { return tag.is_array() and tag.size() >= 2 and tag[0] == "p"; });
+    reply_event["tags"], [](const auto &tag) -> auto { return tag.is_array() and tag.size() >= 2 and tag[0] == "p"; });
 
   REQUIRE(p_tag != reply_event["tags"].end());
   const std::string recipient_nostr_pubkey = (*p_tag)[1].template get<std::string>();

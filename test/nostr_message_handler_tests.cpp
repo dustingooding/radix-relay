@@ -223,7 +223,7 @@ TEST_CASE("message_handler handles send command", "[message_handler]")
     std::string json_str;
     json_str.reserve(bytes.size());
     std::ranges::transform(
-      bytes, std::back_inserter(json_str), [](std::byte byte) { return std::bit_cast<char>(byte); });
+      bytes, std::back_inserter(json_str), [](std::byte byte) -> char { return std::bit_cast<char>(byte); });
     auto parsed = nlohmann::json::parse(json_str);
 
     CHECK(parsed.is_array());
@@ -237,9 +237,9 @@ TEST_CASE("message_handler handles send command", "[message_handler]")
 
     const auto &tags = parsed[1]["tags"];
     const bool found_p_tag =
-      std::ranges::any_of(tags, [](const auto &tag) { return tag.size() >= 2 and tag[0] == "p"; });
+      std::ranges::any_of(tags, [](const auto &tag) -> auto { return tag.size() >= 2 and tag[0] == "p"; });
     const bool found_version_tag =
-      std::ranges::any_of(tags, [](const auto &tag) { return tag.size() >= 2 and tag[0] == "radix_version"; });
+      std::ranges::any_of(tags, [](const auto &tag) -> auto { return tag.size() >= 2 and tag[0] == "radix_version"; });
     CHECK(found_p_tag);
     CHECK(found_version_tag);
   }
@@ -264,7 +264,7 @@ TEST_CASE("message_handler handles publish_identity command", "[message_handler]
     std::string json_str;
     json_str.reserve(result.bytes.size());
     std::ranges::transform(
-      result.bytes, std::back_inserter(json_str), [](std::byte byte) { return std::bit_cast<char>(byte); });
+      result.bytes, std::back_inserter(json_str), [](std::byte byte) -> char { return std::bit_cast<char>(byte); });
     auto parsed = nlohmann::json::parse(json_str);
 
     CHECK(parsed.is_array());
@@ -385,7 +385,7 @@ TEST_CASE("message_handler filters bundle announcements by version", "[message_h
       for (const auto &tag : event_json["tags"]) {
         std::vector<std::string> tag_vec;
         std::ranges::transform(
-          tag, std::back_inserter(tag_vec), [](const auto &item) { return item.template get<std::string>(); });
+          tag, std::back_inserter(tag_vec), [](const auto &item) -> auto { return item.template get<std::string>(); });
         event_data.tags.push_back(tag_vec);
       }
 
@@ -411,7 +411,7 @@ TEST_CASE("message_handler filters bundle announcements by version", "[message_h
       for (const auto &tag : event_json["tags"]) {
         std::vector<std::string> tag_vec;
         std::ranges::transform(
-          tag, std::back_inserter(tag_vec), [](const auto &item) { return item.template get<std::string>(); });
+          tag, std::back_inserter(tag_vec), [](const auto &item) -> auto { return item.template get<std::string>(); });
         event_data.tags.push_back(tag_vec);
       }
 
@@ -493,7 +493,7 @@ TEST_CASE("message_handler filters bundle announcements by content", "[message_h
       for (const auto &tag : event_json["tags"]) {
         std::vector<std::string> tag_vec;
         std::ranges::transform(
-          tag, std::back_inserter(tag_vec), [](const auto &item) { return item.template get<std::string>(); });
+          tag, std::back_inserter(tag_vec), [](const auto &item) -> auto { return item.template get<std::string>(); });
         event_data.tags.push_back(tag_vec);
       }
 

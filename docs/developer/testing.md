@@ -81,6 +81,7 @@ mod tests {
 ## Test Coverage
 
 Run with coverage:
+
 ```bash
 cmake --preset=unixlike-clang-debug -DENABLE_COVERAGE=ON
 cmake --build --preset=unixlike-clang-debug

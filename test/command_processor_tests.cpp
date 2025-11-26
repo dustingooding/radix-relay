@@ -44,7 +44,7 @@ TEST_CASE("command_processor construction", "[command_processor]")
 
   auto handler = std::make_shared<mock_handler>();
 
-  REQUIRE_NOTHROW([&]() { const command_processor<mock_handler> processor(io_context, in_queue, handler); }());
+  REQUIRE_NOTHROW([&]() -> void { const command_processor<mock_handler> processor(io_context, in_queue, handler); }());
 }
 
 TEST_CASE("command_processor run_once processes single command", "[command_processor]")

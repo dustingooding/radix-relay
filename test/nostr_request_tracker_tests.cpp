@@ -8,7 +8,7 @@ TEST_CASE("request_tracker track() stores pending request", "[nostr][request_tra
   radix_relay::nostr::request_tracker tracker(io_context);
 
   bool callback_invoked = false;
-  auto callback = [&callback_invoked](const radix_relay::nostr::protocol::ok &) { callback_invoked = true; };
+  auto callback = [&callback_invoked](const radix_relay::nostr::protocol::ok &) -> void { callback_invoked = true; };
 
   constexpr auto timeout = std::chrono::seconds(5);
   tracker.track("event_123", callback, timeout);
@@ -25,7 +25,7 @@ TEST_CASE("request_tracker resolve() invokes callback with response", "[nostr][r
   bool callback_invoked = false;
   radix_relay::nostr::protocol::ok received_response;
 
-  auto callback = [&callback_invoked, &received_response](const radix_relay::nostr::protocol::ok &response) {
+  auto callback = [&callback_invoked, &received_response](const radix_relay::nostr::protocol::ok &response) -> void {
     callback_invoked = true;
     received_response = response;
   };
@@ -50,7 +50,7 @@ TEST_CASE("request_tracker resolve() removes request from pending", "[nostr][req
   auto io_context = std::make_shared<boost::asio::io_context>();
   radix_relay::nostr::request_tracker tracker(io_context);
 
-  auto callback = [](const radix_relay::nostr::protocol::ok &) {};
+  auto callback = [](const radix_relay::nostr::protocol::ok &) -> void {};
 
   constexpr auto timeout = std::chrono::seconds(5);
   tracker.track("event_789", callback, timeout);
@@ -88,7 +88,7 @@ TEST_CASE("request_tracker timeout invokes callback with timeout error", "[nostr
   bool callback_invoked = false;
   radix_relay::nostr::protocol::ok received_response;
 
-  auto callback = [&callback_invoked, &received_response](const radix_relay::nostr::protocol::ok &response) {
+  auto callback = [&callback_invoked, &received_response](const radix_relay::nostr::protocol::ok &response) -> void {
     callback_invoked = true;
     received_response = response;
   };
@@ -112,7 +112,7 @@ TEST_CASE("request_tracker resolve() cancels timer", "[nostr][request_tracker]")
 
   int callback_count = 0;
 
-  auto callback = [&callback_count](const radix_relay::nostr::protocol::ok &) { ++callback_count; };
+  auto callback = [&callback_count](const radix_relay::nostr::protocol::ok &) -> void { ++callback_count; };
 
   constexpr auto timeout = std::chrono::seconds(10);
   tracker.track("event_cancel", callback, timeout);
@@ -151,7 +151,7 @@ TEST_CASE("request_tracker async_track() returns OK when response arrives", "[no
     }(std::ref(tracker), result, completed, timeout),
     boost::asio::detached);
 
-  boost::asio::post(*io_context, [&tracker]() {
+  boost::asio::post(*io_context, [&tracker]() -> void {
     radix_relay::nostr::protocol::ok response;
     response.event_id = "event_async";
     response.accepted = true;
@@ -220,7 +220,7 @@ TEST_CASE("request_tracker async_track() works with EOSE responses", "[nostr][re
     }(std::ref(tracker), result, completed, timeout),
     boost::asio::detached);
 
-  boost::asio::post(*io_context, [&tracker]() {
+  boost::asio::post(*io_context, [&tracker]() -> void {
     radix_relay::nostr::protocol::eose response;
     response.subscription_id = "sub_123";
     tracker.resolve("sub_123", response);

@@ -21,7 +21,7 @@ auto get_home_directory() -> std::string
   return "";
 #else
   static std::mutex env_mutex;
-  const std::lock_guard<std::mutex> lock(env_mutex);
+  const std::scoped_lock lock(env_mutex);
 
   auto *home = std::getenv("HOME");// NOLINT(concurrency-mt-unsafe)
   return home != nullptr ? std::string(home) : "";
@@ -40,7 +40,7 @@ auto get_temp_directory() -> std::string
   return "C:\\temp";
 #else
   static std::mutex env_mutex;
-  const std::lock_guard<std::mutex> lock(env_mutex);
+  const std::scoped_lock lock(env_mutex);
 
   const char *temp = std::getenv("TMPDIR");// NOLINT(concurrency-mt-unsafe)
   if (temp != nullptr) { return { temp }; }
