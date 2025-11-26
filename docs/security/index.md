@@ -38,6 +38,7 @@ See [Signal Protocol Documentation](../architecture/signal-protocol.md) for deta
 **Do not** report security vulnerabilities publicly.
 
 Instead:
+
 1. Email [radix-relay@proton.me](mailto:radix-relay@proton.me)
 2. Or create a private security advisory on GitHub
 3. Include steps to reproduce
@@ -46,6 +47,7 @@ Instead:
 ### Responsible Disclosure
 
 We follow a 90-day disclosure timeline:
+
 1. Report received and acknowledged
 2. Fix developed and tested
 3. Security advisory published
@@ -65,6 +67,7 @@ We follow a 90-day disclosure timeline:
 ## Security Updates
 
 Security updates will be announced via:
+
 - GitHub Security Advisories
 - Project README
 - Email to known users (when applicable)

@@ -89,7 +89,7 @@ auto main(int argc, char **argv) -> int
     auto presentation_proc_state =
       core::spawn_processor(io_context, presentation_evt_processor, cancel_slot, "presentation_processor");
 
-    std::thread io_thread([&io_context]() {
+    std::thread io_thread([&io_context]() -> void {
       spdlog::debug("io_context thread started");
       io_context->run();
       spdlog::debug("io_context thread stopped");
@@ -99,7 +99,7 @@ auto main(int argc, char **argv) -> int
     tui_processor.run();
 
     spdlog::debug("TUI exited, posting cancellation signal to io_context thread...");
-    boost::asio::post(*io_context, [cancel_signal]() {
+    boost::asio::post(*io_context, [cancel_signal]() -> void {
       spdlog::debug("[main] Emitting cancellation signal on io_context thread");
       cancel_signal->emit(boost::asio::cancellation_type::all);
     });

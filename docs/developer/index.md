@@ -56,6 +56,7 @@ git push origin feature/my-feature
 ## Build System
 
 Uses modern CMake with:
+
 - CMake 3.21+
 - Preset-based configuration
 - CPM for dependency management
@@ -77,4 +78,4 @@ radix-relay/
 
 - Check [Troubleshooting](../getting-started/troubleshooting.md)
 - Open an [Issue](https://github.com/dustingooding/radix-relay/issues)
-- Email: radix-relay@proton.me
+- Email: <radix-relay@proton.me>

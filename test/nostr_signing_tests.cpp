@@ -10,7 +10,8 @@ auto string_to_bytes(const std::string &str) -> std::vector<std::byte>
 {
   std::vector<std::byte> bytes;
   bytes.resize(str.size());
-  std::ranges::transform(str, bytes.begin(), [](char character) { return std::bit_cast<std::byte>(character); });
+  std::ranges::transform(
+    str, bytes.begin(), [](char character) -> std::byte { return std::bit_cast<std::byte>(character); });
   return bytes;
 }
 
@@ -31,7 +32,8 @@ TEST_CASE("Nostr Event Signing via Signal Bridge", "[nostr][signing]")
       auto json_bytes = event.serialize();
       std::string event_json;
       event_json.resize(json_bytes.size());
-      std::ranges::transform(json_bytes, event_json.begin(), [](std::byte byte) { return std::bit_cast<char>(byte); });
+      std::ranges::transform(
+        json_bytes, event_json.begin(), [](std::byte byte) -> char { return std::bit_cast<char>(byte); });
 
       auto signed_event_json = signal_bridge->sign_nostr_event(event_json);
 
@@ -77,8 +79,10 @@ TEST_CASE("Nostr Event Signing via Signal Bridge", "[nostr][signing]")
       std::string json2;
       json1.resize(json1_bytes.size());
       json2.resize(json2_bytes.size());
-      std::ranges::transform(json1_bytes, json1.begin(), [](std::byte byte) { return std::bit_cast<char>(byte); });
-      std::ranges::transform(json2_bytes, json2.begin(), [](std::byte byte) { return std::bit_cast<char>(byte); });
+      std::ranges::transform(
+        json1_bytes, json1.begin(), [](std::byte byte) -> char { return std::bit_cast<char>(byte); });
+      std::ranges::transform(
+        json2_bytes, json2.begin(), [](std::byte byte) -> char { return std::bit_cast<char>(byte); });
 
       auto signed1 = signal_bridge->sign_nostr_event(json1);
       auto signed2 = signal_bridge->sign_nostr_event(json2);

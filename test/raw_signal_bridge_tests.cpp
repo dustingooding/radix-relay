@@ -69,7 +69,7 @@ TEST_CASE("SignalBridge CXX Integration", "[signal][cxx]")
                      .string();
 
     {
-      REQUIRE_NOTHROW([&]() { auto bridge = radix_relay::new_signal_bridge(db_path.c_str()); }());
+      REQUIRE_NOTHROW([&]() -> void { auto bridge = radix_relay::new_signal_bridge(db_path.c_str()); }());
     }
 
     std::filesystem::remove(db_path);
@@ -143,11 +143,11 @@ TEST_CASE("SignalBridge CXX Integration", "[signal][cxx]")
         radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "bob");
       REQUIRE(std::string(bob_rdx).starts_with("RDX:"));
 
-      REQUIRE_NOTHROW([&]() { radix_relay::clear_peer_session(*alice, bob_rdx.c_str()); }());
+      REQUIRE_NOTHROW([&]() -> void { radix_relay::clear_peer_session(*alice, bob_rdx.c_str()); }());
 
-      REQUIRE_NOTHROW([&]() { radix_relay::clear_all_sessions(*alice); }());
+      REQUIRE_NOTHROW([&]() -> void { radix_relay::clear_all_sessions(*alice); }());
 
-      REQUIRE_NOTHROW([&]() { radix_relay::reset_identity(*alice); }());
+      REQUIRE_NOTHROW([&]() -> void { radix_relay::reset_identity(*alice); }());
     }
 
     std::filesystem::remove(alice_db);
@@ -211,7 +211,7 @@ TEST_CASE("SignalBridge Contact Management", "[signal][contacts][cxx]")
       auto bob_rdx =
         radix_relay::add_contact_and_establish_session(*alice, rust::Slice<const uint8_t>{ bob_bundle }, "");
 
-      REQUIRE_NOTHROW([&]() { radix_relay::assign_contact_alias(*alice, bob_rdx.c_str(), "bob"); }());
+      REQUIRE_NOTHROW([&]() -> void { radix_relay::assign_contact_alias(*alice, bob_rdx.c_str(), "bob"); }());
 
       auto contact_by_alias = radix_relay::lookup_contact(*alice, "bob");
       REQUIRE(std::string(contact_by_alias.rdx_fingerprint) == std::string(bob_rdx));

@@ -5,13 +5,19 @@ include(cmake/CPM.cmake)
 # targets
 function(radix_relay_setup_dependencies)
 
-  if(NOT TARGET fmtlib::fmtlib)
+  if(NOT TARGET fmt::fmt)
     cpmaddpackage(
       NAME fmt
       GITHUB_REPOSITORY fmtlib/fmt
       GIT_TAG 11.1.4
       SYSTEM YES
+      FIND_PACKAGE_ARGUMENTS "QUIET CONFIG"
     )
+    if(fmt_ADDED)
+      message(STATUS "System fmt not found, built from source via CPM")
+    else()
+      message(STATUS "Found system fmt ${fmt_VERSION}")
+    endif()
   endif()
 
   if(NOT TARGET spdlog::spdlog)
@@ -21,7 +27,13 @@ function(radix_relay_setup_dependencies)
       GITHUB_REPOSITORY "gabime/spdlog"
       OPTIONS "SPDLOG_FMT_EXTERNAL ON"
       SYSTEM YES
+      FIND_PACKAGE_ARGUMENTS "QUIET CONFIG"
     )
+    if(spdlog_ADDED)
+      message(STATUS "System spdlog not found, built from source via CPM")
+    else()
+      message(STATUS "Found system spdlog ${spdlog_VERSION}")
+    endif()
   endif()
 
   if(NOT TARGET Catch2::Catch2WithMain)
@@ -30,7 +42,13 @@ function(radix_relay_setup_dependencies)
       GITHUB_REPOSITORY catchorg/Catch2
       VERSION 3.8.1
       SYSTEM YES
+      FIND_PACKAGE_ARGUMENTS "QUIET CONFIG"
     )
+    if(Catch2_ADDED)
+      message(STATUS "System Catch2 not found, built from source via CPM")
+    else()
+      message(STATUS "Found system Catch2 ${Catch2_VERSION}")
+    endif()
   endif()
 
   if(NOT TARGET CLI11::CLI11)
@@ -39,7 +57,13 @@ function(radix_relay_setup_dependencies)
       GITHUB_REPOSITORY CLIUtils/CLI11
       VERSION 2.5.0
       SYSTEM YES
+      FIND_PACKAGE_ARGUMENTS "QUIET CONFIG"
     )
+    if(CLI11_ADDED)
+      message(STATUS "System CLI11 not found, built from source via CPM")
+    else()
+      message(STATUS "Found system CLI11 ${CLI11_VERSION}")
+    endif()
   endif()
 
   if(NOT TARGET replxx::replxx)
@@ -48,7 +72,13 @@ function(radix_relay_setup_dependencies)
       GITHUB_REPOSITORY AmokHuginnsson/replxx
       GIT_TAG release-0.0.4
       SYSTEM YES
+      FIND_PACKAGE_ARGUMENTS "QUIET CONFIG"
     )
+    if(replxx_ADDED)
+      message(STATUS "System replxx not found, built from source via CPM")
+    else()
+      message(STATUS "Found system replxx")
+    endif()
   endif()
 
   if(NOT TARGET tools::tools)
@@ -92,7 +122,39 @@ function(radix_relay_setup_dependencies)
     message(STATUS "  OpenSSL libraries: ${OPENSSL_LIBRARIES}")
   endif()
 
-  find_package(Boost 1.89.0 QUIET COMPONENTS asio beast date_time logic regex system uuid)
+  # Try to find system Boost
+  # Note: Arch Linux Boost packages provide CONFIG files but may not create all targets
+  find_package(Boost 1.89.0 QUIET CONFIG)
+
+  if(Boost_FOUND)
+    message(STATUS "Found system Boost ${Boost_VERSION} at ${Boost_INCLUDE_DIRS}")
+
+    # Create Boost::system target if it doesn't exist
+    # Note: Boost::system became header-only in Boost 1.69+, so no library file exists
+    if(NOT TARGET Boost::system)
+      add_library(Boost::system INTERFACE IMPORTED)
+      target_include_directories(Boost::system INTERFACE ${Boost_INCLUDE_DIRS})
+      message(STATUS "Created Boost::system header-only target")
+    else()
+      message(STATUS "Found Boost::system target")
+    endif()
+
+    # Header-only libraries don't create targets automatically, create them
+    if(NOT TARGET Boost::asio)
+      add_library(Boost::asio INTERFACE IMPORTED)
+      target_include_directories(Boost::asio INTERFACE ${Boost_INCLUDE_DIRS})
+    endif()
+
+    if(NOT TARGET Boost::beast)
+      add_library(Boost::beast INTERFACE IMPORTED)
+      target_include_directories(Boost::beast INTERFACE ${Boost_INCLUDE_DIRS})
+    endif()
+
+    if(NOT TARGET Boost::uuid)
+      add_library(Boost::uuid INTERFACE IMPORTED)
+      target_include_directories(Boost::uuid INTERFACE ${Boost_INCLUDE_DIRS})
+    endif()
+  endif()
 
   if(NOT Boost_FOUND)
     message(STATUS "System Boost not found, building from source via CPM...")
@@ -145,7 +207,13 @@ function(radix_relay_setup_dependencies)
       GITHUB_REPOSITORY nlohmann/json
       VERSION 3.12.0
       SYSTEM YES
+      FIND_PACKAGE_ARGUMENTS "QUIET CONFIG"
     )
+    if(nlohmann_json_ADDED)
+      message(STATUS "System nlohmann_json not found, built from source via CPM")
+    else()
+      message(STATUS "Found system nlohmann_json ${nlohmann_json_VERSION}")
+    endif()
   endif()
 
   if(NOT TARGET semver::semver)

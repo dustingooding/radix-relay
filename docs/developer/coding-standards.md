@@ -63,6 +63,7 @@ cmake --build --preset=unixlike-clang-debug --target quality
 ```
 
 This runs `clangd-tidy` which applies clang-format and clang-tidy checks configured in:
+
 - [.clang-format](.clang-format) - Code formatting rules
 - [.clang-tidy](.clang-tidy) - Static analysis configuration
 
@@ -82,6 +83,7 @@ Follow [Rust Style Guide](https://doc.rust-lang.org/beta/style-guide/)
 ### Formatting
 
 Uses `rustfmt` with project configuration:
+
 ```bash
 cargo fmt
 ```
@@ -89,6 +91,7 @@ cargo fmt
 ### Linting
 
 Uses `clippy` for additional checks:
+
 ```bash
 cargo clippy
 ```

@@ -9,15 +9,19 @@ Open-source communications system combining internet (Nostr) and local mesh (BLE
 ## Features
 
 ### Hybrid Transport
+
 Automatic failover between internet (Nostr) and local mesh (BLE) networks. Stay connected even when infrastructure fails.
 
 ### Signal Protocol Encryption
+
 End-to-end encryption with perfect forward secrecy. Your messages remain secure even if keys are compromised.
 
 ### Cross-Platform
+
 Built with modern C++ and Rust, supporting Linux, Windows, and macOS.
 
 ### Emergency Focus
+
 Designed for activists, disaster response teams, and anyone who needs reliable communications when traditional infrastructure is unavailable.
 
 ---

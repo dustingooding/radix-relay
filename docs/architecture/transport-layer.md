@@ -15,18 +15,21 @@ The transport layer provides a unified interface for multiple communication mech
 ### Components
 
 **WebSocket Transport** ([lib/transport/](https://github.com/dustingooding/radix-relay/tree/main/lib/transport))
+
 - Boost.Beast-based async WebSocket implementation
 - TLS/SSL support (wss:// required for security)
 - Connection lifecycle management
 - Read/write operations with coroutines
 
 **Nostr Protocol** ([lib/nostr/](https://github.com/dustingooding/radix-relay/tree/main/lib/nostr))
+
 - Event types: OK, EOSE, EVENT, REQ, CLOSE
 - Message kinds: encrypted_message (40001), bundle_announcement (30078)
 - JSON serialization/deserialization
 - Tag parsing and validation
 
 **Session Orchestrator**
+
 - Coordinates transport, Signal bridge, and presentation layers
 - Handles bundle discovery and session establishment
 - Message routing and decryption
@@ -35,18 +38,21 @@ The transport layer provides a unified interface for multiple communication mech
 ### Features
 
 ✅ **Connection Management**
+
 - Async connect to Nostr relays
 - TLS/SSL encryption (wss://)
 - Connection state tracking
 - Error handling and recovery
 
 ✅ **Message Handling**
+
 - Event-based architecture
 - Subscription management
 - Request tracking with timeouts
 - Duplicate message detection
 
 ✅ **Integration**
+
 - Works with Signal Protocol for E2E encryption
 - Contact management and aliases
 - Bundle announcement publishing

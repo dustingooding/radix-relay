@@ -16,21 +16,27 @@ The C++ API documentation is generated using Doxygen and provides detailed infor
 ## Main Components
 
 ### Core
+
 Event system, async queues, CLI utilities, and command processing.
 
 ### Signal
+
 Signal Protocol C++ bridge and FFI interface to Rust implementation.
 
 ### Nostr
+
 Nostr transport implementation including WebSocket handling and protocol events.
 
 ### Transport
+
 WebSocket transport abstraction layer.
 
 ### Platform
+
 Platform-specific utilities and environment helpers.
 
 ### TUI
+
 Terminal user interface components.
 
 ## Building Locally

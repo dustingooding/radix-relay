@@ -15,13 +15,16 @@ Intelligent routing between internet and mesh networks.
 ## Use Cases
 
 ### Urban Environment
+
 - Primary: Nostr (fast, long-range)
 - Fallback: BLE (infrastructure failure)
 
 ### Remote/Disaster Areas
+
 - Primary: BLE mesh (no infrastructure)
 - Bridge: Nodes with internet relay to Nostr
 
 ### Activist Operations
+
 - Flexible: Switch based on threat model
 - Mesh-only: Maximum privacy mode

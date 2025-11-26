@@ -16,7 +16,7 @@ auto bridge::list_contacts() const -> std::vector<core::contact_info>
   std::vector<core::contact_info> result;
   result.reserve(rust_contacts.size());
 
-  std::ranges::transform(rust_contacts, std::back_inserter(result), [](const auto &contact) {
+  std::ranges::transform(rust_contacts, std::back_inserter(result), [](const auto &contact) -> auto {
     return core::contact_info{
       .rdx_fingerprint = std::string(contact.rdx_fingerprint),
       .nostr_pubkey = std::string(contact.nostr_pubkey),
