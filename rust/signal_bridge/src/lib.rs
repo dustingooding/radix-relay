@@ -68,13 +68,19 @@ struct SerializablePreKeyBundle {
     pub kyber_pre_key_signature: Vec<u8>,
 }
 
+/// Result of decrypting an incoming message
 pub struct DecryptionResult {
+    /// Decrypted plaintext bytes
     pub plaintext: Vec<u8>,
+    /// Whether the sender needs this node to republish its bundle
     pub should_republish_bundle: bool,
 }
 
+/// Main bridge between C++ and Rust Signal Protocol implementation
 pub struct SignalBridge {
+    /// SQLite-backed Signal Protocol storage
     pub(crate) storage: SqliteStorage,
+    /// Contact/peer management
     contact_manager: ContactManager,
 }
 
@@ -901,20 +907,28 @@ impl Drop for SignalBridge {
     }
 }
 
+/// Errors that can occur in the Signal Protocol bridge
 #[derive(Debug, thiserror::Error)]
 pub enum SignalBridgeError {
+    /// Storage-related error
     #[error("Storage error: {0}")]
     Storage(String),
+    /// Signal Protocol operation error
     #[error("Signal Protocol error: {0}")]
     Protocol(String),
+    /// Serialization/deserialization error
     #[error("Serialization error: {0}")]
     Serialization(String),
+    /// Invalid input provided to function
     #[error("Invalid input: {0}")]
     InvalidInput(String),
+    /// Session not found for peer
     #[error("{0}")]
     SessionNotFound(String),
+    /// Key derivation failure
     #[error("Key derivation error: {0}")]
     KeyDerivation(String),
+    /// Database schema version too old
     #[error("Update your database to a newer schema version")]
     SchemaVersionTooOld,
 }
@@ -1100,6 +1114,10 @@ mod ffi {
     }
 }
 
+/// Creates a new Signal Protocol bridge with SQLite storage
+///
+/// # Arguments
+/// * `db_path` - Path to SQLite database file
 pub fn new_signal_bridge(db_path: &str) -> Result<Box<SignalBridge>, Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
@@ -1109,6 +1127,12 @@ pub fn new_signal_bridge(db_path: &str) -> Result<Box<SignalBridge>, Box<dyn std
     Ok(Box::new(bridge))
 }
 
+/// Encrypts a message for a peer using Signal Protocol
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `peer` - Recipient's RDX fingerprint or Nostr pubkey
+/// * `plaintext` - Message bytes to encrypt
 pub fn encrypt_message(
     bridge: &mut SignalBridge,
     peer: &str,
@@ -1120,6 +1144,12 @@ pub fn encrypt_message(
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+/// Decrypts an incoming Signal Protocol message
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `peer` - Sender's RDX fingerprint or Nostr pubkey (peer hint)
+/// * `ciphertext` - Encrypted message bytes
 pub fn decrypt_message(
     bridge: &mut SignalBridge,
     peer: &str,
@@ -1136,6 +1166,12 @@ pub fn decrypt_message(
     })
 }
 
+/// Establishes a Signal Protocol session from a prekey bundle
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `peer` - Peer's RDX fingerprint or Nostr pubkey
+/// * `bundle` - Serialized prekey bundle bytes
 pub fn establish_session(
     bridge: &mut SignalBridge,
     peer: &str,
@@ -1147,6 +1183,13 @@ pub fn establish_session(
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+/// Generates a new prekey bundle with metadata for publishing
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+///
+/// # Returns
+/// PreKeyBundleWithMetadata containing bundle bytes and key IDs
 pub fn generate_pre_key_bundle(
     bridge: &mut SignalBridge,
 ) -> Result<ffi::PreKeyBundleWithMetadata, Box<dyn std::error::Error>> {
@@ -1163,6 +1206,11 @@ pub fn generate_pre_key_bundle(
     })
 }
 
+/// Clears the Signal Protocol session with a specific peer
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `peer` - Peer's RDX fingerprint or Nostr pubkey
 pub fn clear_peer_session(
     bridge: &mut SignalBridge,
     peer: &str,
@@ -1173,6 +1221,10 @@ pub fn clear_peer_session(
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+/// Clears all Signal Protocol sessions
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
 pub fn clear_all_sessions(bridge: &mut SignalBridge) -> Result<(), Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
@@ -1180,6 +1232,10 @@ pub fn clear_all_sessions(bridge: &mut SignalBridge) -> Result<(), Box<dyn std::
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+/// Resets the node's Signal Protocol identity (generates new identity key)
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
 pub fn reset_identity(bridge: &mut SignalBridge) -> Result<(), Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
@@ -1187,6 +1243,13 @@ pub fn reset_identity(bridge: &mut SignalBridge) -> Result<(), Box<dyn std::erro
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+/// Performs periodic key rotation and cleanup
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+///
+/// # Returns
+/// KeyMaintenanceResult indicating which keys were rotated
 pub fn perform_key_maintenance(
     bridge: &mut SignalBridge,
 ) -> Result<ffi::KeyMaintenanceResult, Box<dyn std::error::Error>> {
@@ -1202,6 +1265,13 @@ pub fn perform_key_maintenance(
     })
 }
 
+/// Records a published bundle to track used keys
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `pre_key_id` - One-time prekey ID
+/// * `signed_pre_key_id` - Signed prekey ID
+/// * `kyber_pre_key_id` - Kyber prekey ID
 pub fn record_published_bundle(
     bridge: &mut SignalBridge,
     pre_key_id: u32,
@@ -1214,6 +1284,13 @@ pub fn record_published_bundle(
     Ok(())
 }
 
+/// Returns this node's RDX fingerprint
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+///
+/// # Returns
+/// Hex-encoded SHA-256 hash of node's identity public key
 pub fn generate_node_fingerprint(
     bridge: &mut SignalBridge,
 ) -> Result<String, Box<dyn std::error::Error>> {
@@ -1223,6 +1300,14 @@ pub fn generate_node_fingerprint(
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+/// Signs a Nostr event with node's private key
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `event_json` - Unsigned event JSON
+///
+/// # Returns
+/// Signed event JSON with id and sig fields
 pub fn sign_nostr_event(
     bridge: &mut SignalBridge,
     event_json: &str,
@@ -1260,6 +1345,17 @@ pub fn sign_nostr_event(
     serde_json::to_string(&event).map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+/// Creates and signs a Nostr encrypted message event
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `session_id` - Recipient's session identifier
+/// * `encrypted_content` - Hex-encoded encrypted content
+/// * `timestamp` - Unix timestamp
+/// * `project_version` - Protocol version string
+///
+/// # Returns
+/// Signed Nostr event JSON
 pub fn create_and_sign_encrypted_message(
     bridge: &mut SignalBridge,
     session_id: &str,
@@ -1298,6 +1394,15 @@ pub fn create_and_sign_encrypted_message(
     sign_nostr_event(bridge, &event_json_str)
 }
 
+/// Creates a Nostr subscription filter for messages to this node
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `subscription_id` - Subscription identifier
+/// * `since_timestamp` - Optional timestamp to filter messages since
+///
+/// # Returns
+/// REQ message JSON
 pub fn create_subscription_for_self(
     bridge: &mut SignalBridge,
     subscription_id: &str,
@@ -1309,6 +1414,11 @@ pub fn create_subscription_for_self(
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+/// Updates the timestamp of the last received message
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `timestamp` - Unix timestamp
 pub fn update_last_message_timestamp(
     bridge: &mut SignalBridge,
     timestamp: u64,
@@ -1319,6 +1429,14 @@ pub fn update_last_message_timestamp(
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+/// Looks up a contact by RDX fingerprint or alias
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `identifier` - Contact identifier (RDX fingerprint or user alias)
+///
+/// # Returns
+/// Contact information
 pub fn lookup_contact(
     bridge: &mut SignalBridge,
     identifier: &str,
@@ -1333,6 +1451,12 @@ pub fn lookup_contact(
     })
 }
 
+/// Assigns an alias to a contact
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `identifier` - Contact's RDX fingerprint
+/// * `new_alias` - User-friendly alias
 pub fn assign_contact_alias(
     bridge: &mut SignalBridge,
     identifier: &str,
@@ -1343,6 +1467,13 @@ pub fn assign_contact_alias(
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+/// Lists all known contacts
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+///
+/// # Returns
+/// Vector of contact information structs
 pub fn list_contacts(
     bridge: &mut SignalBridge,
 ) -> Result<Vec<ffi::ContactInfo>, Box<dyn std::error::Error>> {
@@ -1359,6 +1490,14 @@ pub fn list_contacts(
         .collect())
 }
 
+/// Generates a signed prekey bundle announcement
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `project_version` - Protocol version string
+///
+/// # Returns
+/// Bundle information with announcement JSON and prekey IDs
 pub fn generate_prekey_bundle_announcement(
     bridge: &mut SignalBridge,
     project_version: &str,
@@ -1368,6 +1507,14 @@ pub fn generate_prekey_bundle_announcement(
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+/// Generates an empty bundle announcement for unpublishing
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `project_version` - Protocol version string
+///
+/// # Returns
+/// Signed empty bundle announcement JSON
 pub fn generate_empty_bundle_announcement(
     bridge: &mut SignalBridge,
     project_version: &str,
@@ -1377,6 +1524,15 @@ pub fn generate_empty_bundle_announcement(
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+/// Adds a contact from a bundle and establishes a session
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `bundle_bytes` - Serialized prekey bundle
+/// * `user_alias` - Optional user-assigned alias
+///
+/// # Returns
+/// RDX fingerprint of the added contact
 pub fn add_contact_and_establish_session(
     bridge: &mut SignalBridge,
     bundle_bytes: &[u8],
@@ -1392,6 +1548,15 @@ pub fn add_contact_and_establish_session(
         .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })
 }
 
+/// Adds a contact from a base64-encoded bundle and establishes a session
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `bundle_base64` - Base64-encoded prekey bundle
+/// * `user_alias` - Optional user-assigned alias
+///
+/// # Returns
+/// RDX fingerprint of the added contact
 pub fn add_contact_and_establish_session_from_base64(
     bridge: &mut SignalBridge,
     bundle_base64: &str,
@@ -1410,6 +1575,14 @@ pub fn add_contact_and_establish_session_from_base64(
     add_contact_and_establish_session(bridge, &bundle_bytes, user_alias)
 }
 
+/// Extracts RDX fingerprint from a prekey bundle without adding contact
+///
+/// # Arguments
+/// * `_bridge` - Signal bridge instance (unused)
+/// * `bundle_bytes` - Serialized prekey bundle
+///
+/// # Returns
+/// RDX fingerprint
 pub fn extract_rdx_from_bundle(
     _bridge: &mut SignalBridge,
     bundle_bytes: &[u8],
@@ -1434,6 +1607,14 @@ pub fn extract_rdx_from_bundle(
     ))
 }
 
+/// Extracts RDX fingerprint from a base64-encoded prekey bundle
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `bundle_base64` - Base64-encoded prekey bundle
+///
+/// # Returns
+/// RDX fingerprint
 pub fn extract_rdx_from_bundle_base64(
     bridge: &mut SignalBridge,
     bundle_base64: &str,

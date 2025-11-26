@@ -5,12 +5,24 @@
 
 use libsignal_protocol::*;
 
+/// Generates a new Signal Protocol identity key pair
+///
+/// # Returns
+/// Identity key pair containing public and private Curve25519 keys
 pub async fn generate_identity_key_pair() -> Result<IdentityKeyPair, Box<dyn std::error::Error>> {
     let mut rng = rand::rng();
     let identity_key_pair = IdentityKeyPair::generate(&mut rng);
     Ok(identity_key_pair)
 }
 
+/// Generates a batch of one-time prekeys
+///
+/// # Arguments
+/// * `start_id` - Starting ID for the prekey sequence
+/// * `count` - Number of prekeys to generate
+///
+/// # Returns
+/// Vector of (key_id, KeyPair) tuples
 pub async fn generate_pre_keys(
     start_id: u32,
     count: u32,
@@ -27,6 +39,14 @@ pub async fn generate_pre_keys(
     Ok(pre_keys)
 }
 
+/// Generates a signed prekey with timestamp and signature
+///
+/// # Arguments
+/// * `identity_key_pair` - Identity key pair to sign the prekey
+/// * `signed_pre_key_id` - ID for this signed prekey
+///
+/// # Returns
+/// Signed prekey record with signature and timestamp
 pub async fn generate_signed_pre_key(
     identity_key_pair: &IdentityKeyPair,
     signed_pre_key_id: u32,

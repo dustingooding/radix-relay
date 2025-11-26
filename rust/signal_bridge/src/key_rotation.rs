@@ -10,11 +10,20 @@ use crate::storage_trait::{
 };
 use libsignal_protocol::*;
 
+/// Minimum pre-key count before replenishment is triggered
 pub const MIN_PRE_KEY_COUNT: usize = 50;
+/// Number of pre-keys to generate when replenishing
 pub const REPLENISH_COUNT: u32 = 100;
+/// Key rotation interval (7 days in seconds)
 pub const ROTATION_INTERVAL_SECS: u64 = 7 * 24 * 60 * 60;
+/// Grace period before deleting old keys (7 days in seconds)
 pub const GRACE_PERIOD_SECS: u64 = 7 * 24 * 60 * 60;
 
+/// Rotates the signed pre-key by generating and storing a new one
+///
+/// # Arguments
+/// * `storage` - Signal Protocol storage container
+/// * `identity_key_pair` - Identity key pair to sign the new pre-key
 pub async fn rotate_signed_pre_key<S: SignalStorageContainer>(
     storage: &mut S,
     identity_key_pair: &IdentityKeyPair,
@@ -35,6 +44,13 @@ pub async fn rotate_signed_pre_key<S: SignalStorageContainer>(
     Ok(())
 }
 
+/// Checks if the current signed pre-key needs rotation
+///
+/// # Arguments
+/// * `storage` - Signal Protocol storage container
+///
+/// # Returns
+/// true if key is older than rotation interval, false otherwise
 pub async fn signed_pre_key_needs_rotation<S: SignalStorageContainer>(
     storage: &mut S,
 ) -> Result<bool, Box<dyn std::error::Error>> {
@@ -61,6 +77,10 @@ pub async fn signed_pre_key_needs_rotation<S: SignalStorageContainer>(
     Ok(key_age_secs > ROTATION_INTERVAL_SECS)
 }
 
+/// Deletes signed pre-keys older than the grace period
+///
+/// # Arguments
+/// * `storage` - Signal Protocol storage container
 pub async fn cleanup_expired_signed_pre_keys<S: SignalStorageContainer>(
     storage: &mut S,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -92,6 +112,11 @@ pub async fn cleanup_expired_signed_pre_keys<S: SignalStorageContainer>(
     Ok(())
 }
 
+/// Consumes a pre-key and triggers replenishment if count falls below threshold
+///
+/// # Arguments
+/// * `storage` - Signal Protocol storage container
+/// * `pre_key_id` - ID of the pre-key to consume
 pub async fn consume_pre_key<S: SignalStorageContainer>(
     storage: &mut S,
     pre_key_id: PreKeyId,
@@ -106,6 +131,10 @@ pub async fn consume_pre_key<S: SignalStorageContainer>(
     Ok(())
 }
 
+/// Generates and stores new batch of pre-keys
+///
+/// # Arguments
+/// * `storage` - Signal Protocol storage container
 pub async fn replenish_pre_keys<S: SignalStorageContainer>(
     storage: &mut S,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -129,6 +158,11 @@ pub async fn replenish_pre_keys<S: SignalStorageContainer>(
     Ok(())
 }
 
+/// Rotates the Kyber post-quantum pre-key by generating and storing a new one
+///
+/// # Arguments
+/// * `storage` - Signal Protocol storage container
+/// * `identity_key_pair` - Identity key pair to sign the new Kyber pre-key
 pub async fn rotate_kyber_pre_key<S: SignalStorageContainer>(
     storage: &mut S,
     identity_key_pair: &IdentityKeyPair,
@@ -161,6 +195,13 @@ pub async fn rotate_kyber_pre_key<S: SignalStorageContainer>(
     Ok(())
 }
 
+/// Checks if the current Kyber pre-key needs rotation
+///
+/// # Arguments
+/// * `storage` - Signal Protocol storage container
+///
+/// # Returns
+/// true if key is older than rotation interval, false otherwise
 pub async fn kyber_pre_key_needs_rotation<S: SignalStorageContainer>(
     storage: &mut S,
 ) -> Result<bool, Box<dyn std::error::Error>> {
@@ -187,6 +228,10 @@ pub async fn kyber_pre_key_needs_rotation<S: SignalStorageContainer>(
     Ok(key_age_secs > ROTATION_INTERVAL_SECS)
 }
 
+/// Deletes Kyber pre-keys older than the grace period
+///
+/// # Arguments
+/// * `storage` - Signal Protocol storage container
 pub async fn cleanup_expired_kyber_pre_keys<S: SignalStorageContainer>(
     storage: &mut S,
 ) -> Result<(), Box<dyn std::error::Error>> {

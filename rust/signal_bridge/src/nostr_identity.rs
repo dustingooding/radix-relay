@@ -9,9 +9,17 @@ use libsignal_protocol::{IdentityKey, IdentityKeyPair};
 use nostr::{Keys, PublicKey, SecretKey};
 use sha2::Sha256;
 
+/// Nostr identity derivation utilities
 pub struct NostrIdentity;
 
 impl NostrIdentity {
+    /// Derives complete Nostr keypair from Signal Protocol identity
+    ///
+    /// # Arguments
+    /// * `identity_key_pair` - Signal Protocol identity key pair
+    ///
+    /// # Returns
+    /// Nostr Keys containing both secret and public keys
     pub fn derive_from_signal_identity(
         identity_key_pair: &IdentityKeyPair,
     ) -> Result<Keys, SignalBridgeError> {
@@ -28,6 +36,13 @@ impl NostrIdentity {
         Ok(Keys::new(secret_key))
     }
 
+    /// Derives Nostr public key from peer's Signal Protocol identity
+    ///
+    /// # Arguments
+    /// * `peer_identity` - Peer's Signal Protocol identity key
+    ///
+    /// # Returns
+    /// Nostr public key derived using HKDF
     pub fn derive_public_key_from_peer_identity(
         peer_identity: &IdentityKey,
     ) -> Result<PublicKey, SignalBridgeError> {
