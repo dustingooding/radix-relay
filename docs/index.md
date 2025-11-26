@@ -1,4 +1,4 @@
-# Radix Relay
+# [⇌] Radix Relay
 
 **Hybrid mesh communications when it matters most**
 
