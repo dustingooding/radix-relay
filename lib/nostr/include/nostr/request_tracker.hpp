@@ -11,18 +11,37 @@
 
 namespace radix_relay::nostr {
 
+/**
+ * @brief Tracks pending Nostr requests and matches them with responses.
+ *
+ * Associates event IDs with callbacks or coroutine awaitables, implementing
+ * timeout handling for requests that don't receive responses.
+ */
 class request_tracker
 {
 private:
+  /// Internal structure for pending request state
   struct pending_request
   {
-    std::function<void(const std::any &)> callback;
-    std::shared_ptr<boost::asio::steady_timer> timer;
+    std::function<void(const std::any &)> callback;///< Response callback
+    std::shared_ptr<boost::asio::steady_timer> timer;///< Timeout timer
   };
 
 public:
+  /**
+   * @brief Constructs a request tracker.
+   *
+   * @param io_context Boost.Asio io_context for timers
+   */
   explicit request_tracker(const std::shared_ptr<boost::asio::io_context> &io_context) : io_context_(io_context) {}
 
+  /**
+   * @brief Tracks a request with callback-based completion.
+   *
+   * @param event_id Event ID to track
+   * @param callback Function to call when OK response received
+   * @param timeout Maximum time to wait for response
+   */
   auto track(const std::string &event_id,
     std::function<void(const protocol::ok &)> callback,
     std::chrono::milliseconds timeout) -> void
@@ -40,14 +59,30 @@ public:
       .timer = timer };
   }
 
+  /**
+   * @brief Checks if an event ID has a pending request.
+   *
+   * @param event_id Event ID to check
+   * @return true if pending, false otherwise
+   */
   [[nodiscard]] auto has_pending(const std::string &event_id) const -> bool { return pending_.contains(event_id); }
 
+  /**
+   * @brief Cancels all pending requests.
+   */
   auto cancel_all_pending() -> void
   {
     for (auto &[event_id, request] : pending_) { request.timer->cancel(); }
     pending_.clear();
   }
 
+  /**
+   * @brief Resolves a pending request with a response.
+   *
+   * @tparam ResponseType Type of response (ok or eose)
+   * @param event_id Event ID to resolve
+   * @param response Response data
+   */
   template<typename ResponseType> auto resolve(const std::string &event_id, const ResponseType &response) -> void
   {
     auto iter = pending_.find(event_id);
@@ -58,6 +93,15 @@ public:
     }
   }
 
+  /**
+   * @brief Tracks a request with coroutine-based completion.
+   *
+   * @tparam ResponseType Type of response to await (ok or eose)
+   * @param event_id Event ID to track
+   * @param timeout Maximum time to wait for response
+   * @return Awaitable that yields the response
+   * @throws std::runtime_error on timeout
+   */
   template<typename ResponseType = protocol::ok>
   [[nodiscard]] auto async_track(std::string event_id, std::chrono::milliseconds timeout)
     -> boost::asio::awaitable<ResponseType>
@@ -90,6 +134,11 @@ public:
   }
 
 private:
+  /**
+   * @brief Handles timeout for a pending request.
+   *
+   * @param event_id Event ID that timed out
+   */
   auto handle_timeout(const std::string &event_id) -> void
   {
     auto iter = pending_.find(event_id);

@@ -18,6 +18,7 @@ use std::sync::{Arc, Mutex};
 /// Bundle metadata tuple: (pre_key_id, signed_pre_key_id, kyber_pre_key_id)
 type BundleMetadata = (u32, u32, u32);
 
+/// SQLite-backed Signal Protocol storage with data persistence
 pub struct SqliteStorage {
     connection: Arc<Mutex<Connection>>,
     session_store: Option<SqliteSessionStore>,
@@ -274,6 +275,7 @@ impl SignalStorageContainer for SqliteStorage {
     }
 }
 
+/// SQLite-backed session storage with data persistence
 pub struct SqliteSessionStore {
     connection: Arc<Mutex<Connection>>,
 }
@@ -398,6 +400,7 @@ impl ExtendedSessionStore for SqliteSessionStore {
     }
 }
 
+/// SQLite-backed identity key storage with data persistence
 pub struct SqliteIdentityStore {
     connection: Arc<Mutex<Connection>>,
 }
@@ -708,6 +711,7 @@ impl ExtendedIdentityStore for SqliteIdentityStore {
     }
 }
 
+/// SQLite-backed pre-key storage with data persistence
 pub struct SqlitePreKeyStore {
     connection: Arc<Mutex<Connection>>,
 }
@@ -837,6 +841,7 @@ impl ExtendedPreKeyStore for SqlitePreKeyStore {
     }
 }
 
+/// SQLite-backed signed pre-key storage with data persistence
 pub struct SqliteSignedPreKeyStore {
     connection: Arc<Mutex<Connection>>,
 }
@@ -994,6 +999,7 @@ impl ExtendedSignedPreKeyStore for SqliteSignedPreKeyStore {
     }
 }
 
+/// SQLite-backed Kyber post-quantum pre-key storage with data persistence
 pub struct SqliteKyberPreKeyStore {
     connection: Arc<Mutex<Connection>>,
 }

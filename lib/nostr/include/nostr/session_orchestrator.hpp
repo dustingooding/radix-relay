@@ -26,17 +26,41 @@
 
 namespace radix_relay::nostr {
 
+/**
+ * @brief Information about a discovered prekey bundle.
+ */
 struct discovered_bundle
 {
-  std::string rdx_fingerprint;
-  std::string nostr_pubkey;
-  std::string bundle_base64;
-  std::string event_id;
+  std::string rdx_fingerprint;///< RDX fingerprint from bundle
+  std::string nostr_pubkey;///< Nostr public key
+  std::string bundle_base64;///< Base64-encoded bundle data
+  std::string event_id;///< Nostr event ID
 };
 
+/**
+ * @brief Orchestrates Nostr sessions, message handling, and bundle management.
+ *
+ * @tparam Bridge Type satisfying the signal_bridge concept
+ * @tparam Tracker Type satisfying the request_tracker concept
+ *
+ * Coordinates between Signal Protocol operations, Nostr transport, and presentation layer.
+ * Handles incoming Nostr events, processes encrypted messages, manages bundle discovery,
+ * and publishes outgoing messages to relays.
+ */
 template<concepts::signal_bridge Bridge, concepts::request_tracker Tracker>
 struct session_orchestrator : public std::enable_shared_from_this<session_orchestrator<Bridge, Tracker>>
 {
+  /**
+   * @brief Constructs a session orchestrator.
+   *
+   * @param bridge Signal Protocol bridge
+   * @param tracker Request tracker for Nostr responses
+   * @param io_context Boost.Asio io_context
+   * @param in_queue Queue for incoming session orchestrator events
+   * @param transport_out_queue Queue for outgoing transport commands
+   * @param presentation_out_queue Queue for outgoing presentation events
+   * @param timeout Default timeout for relay requests
+   */
   session_orchestrator(const std::shared_ptr<Bridge> &bridge,
     const std::shared_ptr<Tracker> &tracker,
     const std::shared_ptr<boost::asio::io_context> &io_context,
@@ -48,6 +72,12 @@ struct session_orchestrator : public std::enable_shared_from_this<session_orches
       in_queue_(in_queue), transport_out_queue_(transport_out_queue), presentation_out_queue_(presentation_out_queue)
   {}
 
+  /**
+   * @brief Processes a single event from the queue.
+   *
+   * @param cancel_slot Optional cancellation slot
+   * @return Awaitable that completes after processing one event
+   */
   // NOLINTNEXTLINE(performance-unnecessary-value-param)
   auto run_once(std::shared_ptr<boost::asio::cancellation_slot> cancel_slot = nullptr) -> boost::asio::awaitable<void>
   {
@@ -56,6 +86,12 @@ struct session_orchestrator : public std::enable_shared_from_this<session_orches
     co_return;
   }
 
+  /**
+   * @brief Continuously processes events until cancelled.
+   *
+   * @param cancel_slot Optional cancellation slot
+   * @return Awaitable that runs until cancellation or error
+   */
   // NOLINTNEXTLINE(performance-unnecessary-value-param)
   auto run(std::shared_ptr<boost::asio::cancellation_slot> cancel_slot = nullptr) -> boost::asio::awaitable<void>
   {
@@ -75,6 +111,11 @@ struct session_orchestrator : public std::enable_shared_from_this<session_orches
   }
 
 private:
+  /**
+   * @brief Returns the list of discovered prekey bundles.
+   *
+   * @return Reference to discovered bundles vector
+   */
   [[nodiscard]] auto get_discovered_bundles() const -> const std::vector<discovered_bundle> &
   {
     return discovered_bundles_;
@@ -90,13 +131,28 @@ private:
   std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> presentation_out_queue_;
   std::vector<discovered_bundle> discovered_bundles_;
 
+  /**
+   * @brief Emits an event to the transport queue.
+   *
+   * @param evt Event to forward to transport layer
+   */
   auto emit_transport_event(core::events::transport::in_t evt) -> void { transport_out_queue_->push(std::move(evt)); }
 
+  /**
+   * @brief Emits an event to the presentation queue.
+   *
+   * @param evt Event to forward to presentation layer
+   */
   auto emit_presentation_event(core::events::presentation_event_variant_t evt) -> void
   {
     presentation_out_queue_->push(std::move(evt));
   }
 
+  /**
+   * @brief Handles a send command by encrypting and publishing a message.
+   *
+   * @param cmd Send command with peer and message content
+   */
   auto handle(const core::events::send &cmd) -> void
   {
     boost::asio::co_spawn(
@@ -121,6 +177,11 @@ private:
       boost::asio::detached);
   }
 
+  /**
+   * @brief Handles a publish identity command by generating and publishing a bundle.
+   *
+   * @param cmd Publish identity command
+   */
   auto handle(const core::events::publish_identity &cmd) -> void
   {
     boost::asio::co_spawn(
@@ -150,6 +211,11 @@ private:
       boost::asio::detached);
   }
 
+  /**
+   * @brief Handles an unpublish identity command by publishing an empty bundle.
+   *
+   * @param cmd Unpublish identity command
+   */
   auto handle(const core::events::unpublish_identity &cmd) -> void
   {
     boost::asio::co_spawn(
@@ -175,6 +241,11 @@ private:
       boost::asio::detached);
   }
 
+  /**
+   * @brief Handles a trust command by establishing session or updating alias.
+   *
+   * @param cmd Trust command with peer identifier and optional alias
+   */
   auto handle(const core::events::trust &cmd) -> void
   {
     bool contact_exists = false;
@@ -207,6 +278,11 @@ private:
     }
   }
 
+  /**
+   * @brief Handles a subscribe command by sending subscription request to relay.
+   *
+   * @param cmd Subscribe command with JSON filter
+   */
   auto handle(const core::events::subscribe &cmd) -> void
   {
     boost::asio::co_spawn(
@@ -231,6 +307,11 @@ private:
       boost::asio::detached);
   }
 
+  /**
+   * @brief Handles a subscribe identities command by subscribing to bundle announcements.
+   *
+   * @param cmd Subscribe identities command
+   */
   auto handle(const core::events::subscribe_identities & /*cmd*/) -> void
   {
     const auto subscription_id = core::uuid_generator::generate();
@@ -243,6 +324,11 @@ private:
     handle(core::events::subscribe{ .subscription_json = subscription_json });
   }
 
+  /**
+   * @brief Handles a bundle announcement received event by storing discovered bundle.
+   *
+   * @param event Bundle announcement event with pubkey and bundle data
+   */
   auto handle(const core::events::bundle_announcement_received &event) -> void
   {
     auto rdx_fingerprint = bridge_->extract_rdx_from_bundle_base64(event.bundle_content);
@@ -262,11 +348,21 @@ private:
     }
   }
 
+  /**
+   * @brief Handles a bundle announcement removed event by deleting discovered bundle.
+   *
+   * @param event Bundle removal event with pubkey
+   */
   auto handle(const core::events::bundle_announcement_removed &event) -> void
   {
     std::erase_if(discovered_bundles_, [&event](const auto &bundle) { return bundle.nostr_pubkey == event.pubkey; });
   }
 
+  /**
+   * @brief Handles a list identities command by emitting discovered identities.
+   *
+   * @param cmd List identities command
+   */
   auto handle(const core::events::list_identities & /*cmd*/) -> void
   {
     std::vector<core::events::discovered_identity> identities;
@@ -279,6 +375,11 @@ private:
     emit_presentation_event(core::events::identities_listed{ .identities = std::move(identities) });
   }
 
+  /**
+   * @brief Handles a subscribe messages command by subscribing to incoming messages.
+   *
+   * @param cmd Subscribe messages command
+   */
   auto handle(const core::events::subscribe_messages & /*cmd*/) -> void
   {
     const auto subscription_id = core::uuid_generator::generate();
@@ -288,6 +389,11 @@ private:
     handle(core::events::subscribe{ .subscription_json = subscription_json });
   }
 
+  /**
+   * @brief Handles incoming bytes by parsing and dispatching Nostr protocol messages.
+   *
+   * @param evt Bytes received event with raw data from transport
+   */
   auto handle(const core::events::transport::bytes_received &evt) noexcept -> void
   {
     try {
@@ -446,12 +552,22 @@ private:
     }
   }
 
+  /**
+   * @brief Handles a connect command by forwarding to transport layer.
+   *
+   * @param evt Connect event with relay URL
+   */
   auto handle(const core::events::connect &evt) -> void
   {
     spdlog::info("[session_orchestrator] Connecting to relay: {}", evt.relay);
     emit_transport_event(core::events::transport::connect{ .url = evt.relay });
   }
 
+  /**
+   * @brief Handles transport connected event by performing key maintenance and subscribing.
+   *
+   * @param evt Connected event from transport
+   */
   auto handle(const core::events::transport::connected & /*evt*/) -> void
   {
     spdlog::info("[session_orchestrator] Transport connected, performing key maintenance");
@@ -467,24 +583,44 @@ private:
     handle(core::events::subscribe_messages{});
   }
 
+  /**
+   * @brief Handles transport connection failure event.
+   *
+   * @param evt Connect failed event with error message
+   */
   auto handle(const core::events::transport::connect_failed &evt) -> void
   {
     spdlog::error("[session_orchestrator] Transport connect failed: {}", evt.error_message);
     std::ignore = bridge_;
   }
 
+  /**
+   * @brief Handles transport sent confirmation event.
+   *
+   * @param evt Sent event from transport
+   */
   auto handle(const core::events::transport::sent & /*evt*/) -> void
   {
     spdlog::debug("[session_orchestrator] Transport sent");
     std::ignore = bridge_;
   }
 
+  /**
+   * @brief Handles transport send failure event.
+   *
+   * @param evt Send failed event with error message
+   */
   auto handle(const core::events::transport::send_failed &evt) -> void
   {
     spdlog::error("[session_orchestrator] Transport send failed: {}", evt.error_message);
     std::ignore = bridge_;
   }
 
+  /**
+   * @brief Handles transport disconnection event.
+   *
+   * @param evt Disconnected event from transport
+   */
   auto handle(const core::events::transport::disconnected & /*evt*/) -> void
   {
     spdlog::info("[session_orchestrator] Transport disconnected");

@@ -6,6 +6,7 @@
 use async_trait::async_trait;
 use libsignal_protocol::*;
 
+/// Container trait for all Signal Protocol storage backends
 pub trait SignalStorageContainer {
     type SessionStore: SessionStore + ExtendedSessionStore;
     type IdentityStore: IdentityKeyStore + ExtendedIdentityStore;
@@ -30,6 +31,7 @@ pub trait SignalStorageContainer {
     fn storage_type(&self) -> &'static str;
 }
 
+/// High-level operations for session establishment and message encryption/decryption
 #[async_trait(?Send)]
 pub trait ExtendedStorageOps {
     async fn establish_session_from_bundle(
@@ -51,6 +53,7 @@ pub trait ExtendedStorageOps {
     ) -> Result<Vec<u8>, SignalProtocolError>;
 }
 
+/// Extended operations for session storage beyond libsignal's SessionStore
 #[async_trait(?Send)]
 pub trait ExtendedSessionStore {
     async fn session_count(&self) -> usize;
@@ -61,6 +64,7 @@ pub trait ExtendedSessionStore {
     ) -> Result<(), Box<dyn std::error::Error>>;
 }
 
+/// Extended operations for identity key storage beyond libsignal's IdentityKeyStore
 #[async_trait(?Send)]
 pub trait ExtendedIdentityStore {
     async fn identity_count(&self) -> usize;
@@ -84,6 +88,7 @@ pub trait ExtendedIdentityStore {
     async fn clear_local_identity(&mut self) -> Result<(), Box<dyn std::error::Error>>;
 }
 
+/// Extended operations for pre-key storage beyond libsignal's PreKeyStore
 #[async_trait(?Send)]
 pub trait ExtendedPreKeyStore {
     async fn pre_key_count(&self) -> usize;
@@ -92,6 +97,7 @@ pub trait ExtendedPreKeyStore {
     async fn delete_pre_key(&mut self, id: PreKeyId) -> Result<(), Box<dyn std::error::Error>>;
 }
 
+/// Extended operations for signed pre-key storage beyond libsignal's SignedPreKeyStore
 #[async_trait(?Send)]
 pub trait ExtendedSignedPreKeyStore {
     async fn signed_pre_key_count(&self) -> usize;
@@ -107,6 +113,7 @@ pub trait ExtendedSignedPreKeyStore {
     ) -> Result<Vec<SignedPreKeyId>, Box<dyn std::error::Error>>;
 }
 
+/// Extended operations for Kyber post-quantum pre-key storage beyond libsignal's KyberPreKeyStore
 #[async_trait(?Send)]
 pub trait ExtendedKyberPreKeyStore {
     async fn kyber_pre_key_count(&self) -> usize;

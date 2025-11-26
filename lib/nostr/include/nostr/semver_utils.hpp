@@ -7,6 +7,12 @@
 
 namespace radix_relay::nostr {
 
+/**
+ * @brief Extracts Radix protocol version from Nostr event tags.
+ *
+ * @param tags Event tags array
+ * @return Version string if "radix_version" tag found, std::nullopt otherwise
+ */
 [[nodiscard]] inline auto extract_version_from_tags(const std::vector<std::vector<std::string>> &tags)
   -> std::optional<std::string>
 {

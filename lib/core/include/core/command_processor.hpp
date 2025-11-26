@@ -11,15 +11,35 @@
 
 namespace radix_relay::core {
 
+/**
+ * @brief Processes raw commands from a queue using an event handler.
+ *
+ * @tparam EventHandler Type that handles raw_command events
+ *
+ * Continuously pulls commands from an async queue and dispatches them to the event handler.
+ */
 template<typename EventHandler> class command_processor
 {
 public:
+  /**
+   * @brief Constructs a command processor.
+   *
+   * @param io_context Boost.Asio io_context for async operations
+   * @param in_queue Queue containing incoming raw commands
+   * @param event_handler Handler to process commands
+   */
   command_processor(const std::shared_ptr<boost::asio::io_context> &io_context,
     const std::shared_ptr<async::async_queue<events::raw_command>> &in_queue,
     const std::shared_ptr<EventHandler> &event_handler)
     : io_context_(io_context), in_queue_(in_queue), event_handler_(event_handler)
   {}
 
+  /**
+   * @brief Processes a single command from the queue.
+   *
+   * @param cancel_slot Optional cancellation slot
+   * @return Awaitable that completes after processing one command
+   */
   // NOLINTNEXTLINE(performance-unnecessary-value-param)
   auto run_once(std::shared_ptr<boost::asio::cancellation_slot> cancel_slot = nullptr) -> boost::asio::awaitable<void>
   {
@@ -28,6 +48,12 @@ public:
     co_return;
   }
 
+  /**
+   * @brief Continuously processes commands until cancelled.
+   *
+   * @param cancel_slot Optional cancellation slot
+   * @return Awaitable that runs until cancellation or error
+   */
   // NOLINTNEXTLINE(performance-unnecessary-value-param)
   auto run(std::shared_ptr<boost::asio::cancellation_slot> cancel_slot = nullptr) -> boost::asio::awaitable<void>
   {

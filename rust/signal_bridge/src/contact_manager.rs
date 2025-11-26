@@ -12,25 +12,39 @@ use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Information about a known contact/peer
 #[derive(Clone, Debug)]
 pub struct ContactInfo {
+    /// RDX fingerprint (SHA-256 hash of identity key)
     pub rdx_fingerprint: String,
+    /// Nostr public key derived from Signal identity
     pub nostr_pubkey: String,
+    /// User-assigned alias or auto-generated name
     pub user_alias: Option<String>,
+    /// Whether an active Signal session exists with this contact
     pub has_active_session: bool,
 }
 
+/// Manages contact database operations separate from Signal Protocol
 pub struct ContactManager {
     storage: Arc<Mutex<rusqlite::Connection>>,
 }
 
 impl ContactManager {
+    /// Creates a new contact manager with the given database connection
     pub fn new(storage_connection: Arc<Mutex<rusqlite::Connection>>) -> Self {
         Self {
             storage: storage_connection,
         }
     }
 
+    /// Adds a contact from their Signal identity key
+    ///
+    /// # Arguments
+    /// * `identity_key` - Peer's Signal Protocol identity key
+    ///
+    /// # Returns
+    /// RDX fingerprint of the added contact
     pub async fn add_contact_from_identity_key(
         &mut self,
         identity_key: &IdentityKey,
@@ -58,6 +72,15 @@ impl ContactManager {
         Ok(rdx)
     }
 
+    /// Adds a contact from a prekey bundle
+    ///
+    /// # Arguments
+    /// * `bundle_bytes` - Serialized prekey bundle
+    /// * `user_alias` - Optional user-assigned alias
+    /// * `_session_store` - Session store (unused)
+    ///
+    /// # Returns
+    /// RDX fingerprint of the added contact
     pub async fn add_contact_from_bundle(
         &mut self,
         bundle_bytes: &[u8],
@@ -94,6 +117,11 @@ impl ContactManager {
         Ok(rdx)
     }
 
+    /// Looks up a contact by RDX fingerprint, Nostr pubkey, or alias
+    ///
+    /// # Arguments
+    /// * `identifier` - RDX fingerprint, Nostr pubkey, or user alias
+    /// * `session_store` - Session store to check for active sessions
     pub async fn lookup_contact(
         &mut self,
         identifier: &str,
@@ -131,6 +159,12 @@ impl ContactManager {
         })
     }
 
+    /// Assigns or updates an alias for a contact
+    ///
+    /// # Arguments
+    /// * `identifier` - RDX fingerprint, Nostr pubkey, or current alias
+    /// * `new_alias` - New alias to assign
+    /// * `session_store` - Session store for contact lookup
     pub async fn assign_contact_alias(
         &mut self,
         identifier: &str,
@@ -181,6 +215,10 @@ impl ContactManager {
         Ok(())
     }
 
+    /// Returns all known contacts ordered by last update
+    ///
+    /// # Arguments
+    /// * `session_store` - Session store to check for active sessions
     pub async fn list_contacts(
         &mut self,
         session_store: &mut impl SessionStore,
@@ -222,6 +260,13 @@ impl ContactManager {
         Ok(result)
     }
 
+    /// Generates an RDX fingerprint from a Signal identity key
+    ///
+    /// # Arguments
+    /// * `identity_key` - Signal Protocol identity key
+    ///
+    /// # Returns
+    /// RDX fingerprint (SHA-256 hash prefixed with "RDX:")
     pub fn generate_identity_fingerprint_from_key(identity_key: &IdentityKey) -> String {
         let mut hasher = Sha256::new();
         hasher.update(identity_key.serialize());

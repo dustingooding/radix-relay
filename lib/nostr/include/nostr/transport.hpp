@@ -21,8 +21,24 @@
 
 namespace radix_relay::nostr {
 
+/**
+ * @brief Nostr WebSocket transport layer.
+ *
+ * @tparam WebSocketStream Type satisfying the websocket_stream concept
+ *
+ * Manages WebSocket connection to Nostr relays, handling connection lifecycle,
+ * message sending/receiving, and forwarding parsed events to the session orchestrator.
+ */
 template<concepts::websocket_stream WebSocketStream> struct transport
 {
+  /**
+   * @brief Constructs a Nostr transport.
+   *
+   * @param websocket_stream WebSocket stream implementation
+   * @param io_context Boost.Asio io_context for async operations
+   * @param in_queue Queue for incoming transport commands
+   * @param to_session_queue Queue for outgoing events to session orchestrator
+   */
   transport(const std::shared_ptr<WebSocketStream> &websocket_stream,
     const std::shared_ptr<boost::asio::io_context> &io_context,
     const std::shared_ptr<async::async_queue<core::events::transport::in_t>> &in_queue,
@@ -44,6 +60,12 @@ template<concepts::websocket_stream WebSocketStream> struct transport
   transport(transport &&) = delete;
   auto operator=(transport &&) -> transport & = delete;
 
+  /**
+   * @brief Processes a single transport command from the queue.
+   *
+   * @param cancel_slot Optional cancellation slot
+   * @return Awaitable that completes after processing one command
+   */
   // NOLINTNEXTLINE(performance-unnecessary-value-param)
   auto run_once(std::shared_ptr<boost::asio::cancellation_slot> cancel_slot = nullptr) -> boost::asio::awaitable<void>
   {
@@ -52,6 +74,12 @@ template<concepts::websocket_stream WebSocketStream> struct transport
     co_return;
   }
 
+  /**
+   * @brief Continuously processes transport commands until cancelled.
+   *
+   * @param cancel_slot Optional cancellation slot
+   * @return Awaitable that runs until cancellation or error
+   */
   // NOLINTNEXTLINE(performance-unnecessary-value-param)
   auto run(std::shared_ptr<boost::asio::cancellation_slot> cancel_slot = nullptr) -> boost::asio::awaitable<void>
   {
@@ -84,8 +112,19 @@ private:
   std::string port_;
   std::string path_;
 
+  /**
+   * @brief Emits an event to the session orchestrator queue.
+   *
+   * @param evt Event to forward
+   */
   auto emit_event(core::events::session_orchestrator::in_t evt) -> void { to_session_queue_->push(std::move(evt)); }
 
+  /**
+   * @brief Parses a WebSocket URL into host, port, and path components.
+   *
+   * @param address URL to parse (supports wss:// scheme)
+   * @throws std::runtime_error if insecure ws:// scheme is used
+   */
   auto parse_url(const std::string_view address) -> void
   {
     std::string addr_str(address);
@@ -120,6 +159,9 @@ private:
     }
   }
 
+  /**
+   * @brief Initiates an asynchronous read operation.
+   */
   auto start_read() -> void
   {
     ws_->async_read(
@@ -128,6 +170,12 @@ private:
       });
   }
 
+  /**
+   * @brief Processes data from a completed read operation.
+   *
+   * @param error Error code from read operation
+   * @param bytes_transferred Number of bytes read
+   */
   auto process_read(const boost::system::error_code &error, std::size_t bytes_transferred) -> void
   {
     if (not error and bytes_transferred > 0) {
@@ -143,6 +191,11 @@ private:
     }
   }
 
+  /**
+   * @brief Handles a connect command by establishing WebSocket connection.
+   *
+   * @param evt Connect event with relay URL
+   */
   auto handle(const core::events::transport::connect &evt) noexcept -> void
   {
     try {
@@ -167,6 +220,11 @@ private:
       });
   }
 
+  /**
+   * @brief Handles a send command by transmitting bytes over WebSocket.
+   *
+   * @param evt Send event with message ID and data bytes
+   */
   auto handle(const core::events::transport::send &evt) noexcept -> void
   {
     if (not connected_) {
@@ -200,6 +258,11 @@ private:
       });
   }
 
+  /**
+   * @brief Handles a disconnect command by closing the WebSocket connection.
+   *
+   * @param evt Disconnect event
+   */
   auto handle(const core::events::transport::disconnect & /*evt*/) noexcept -> void
   {
     if (connected_) {

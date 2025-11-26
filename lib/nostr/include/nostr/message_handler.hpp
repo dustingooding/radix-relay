@@ -21,22 +21,42 @@
 
 namespace radix_relay::nostr {
 
+/**
+ * @brief Result of publishing a bundle to Nostr.
+ */
 struct publish_bundle_result
 {
-  std::string event_id;
-  std::vector<std::byte> bytes;
-  std::uint32_t pre_key_id;
-  std::uint32_t signed_pre_key_id;
-  std::uint32_t kyber_pre_key_id;
+  std::string event_id;///< Nostr event ID
+  std::vector<std::byte> bytes;///< Serialized event bytes
+  std::uint32_t pre_key_id;///< One-time prekey ID used
+  std::uint32_t signed_pre_key_id;///< Signed prekey ID used
+  std::uint32_t kyber_pre_key_id;///< Kyber prekey ID used
 };
 
+/**
+ * @brief Handles processing of incoming and outgoing Nostr messages.
+ *
+ * @tparam Bridge Type satisfying the signal_bridge concept
+ *
+ * Converts between Nostr events and internal event types, handling encryption/decryption,
+ * bundle management, and event serialization.
+ */
 template<concepts::signal_bridge Bridge> class message_handler
 {
 public:
+  /**
+   * @brief Constructs a message handler.
+   *
+   * @param bridge Signal Protocol bridge for crypto operations
+   */
   explicit message_handler(std::shared_ptr<Bridge> bridge) : bridge_(bridge) {}
 
-  // Incoming Nostr events (called by Session on session_strand)
-  // Returns optional event to post to main_strand
+  /**
+   * @brief Handles an incoming encrypted message event.
+   *
+   * @param event Encrypted message from Nostr relay
+   * @return message_received event if decryption successful, std::nullopt on failure
+   */
   [[nodiscard]] auto handle(const nostr::events::incoming::encrypted_message &event)
     -> std::optional<core::events::message_received>
   {
@@ -67,6 +87,13 @@ public:
       .should_republish_bundle = result.should_republish_bundle };
   }
 
+  /**
+   * @brief Handles an incoming bundle announcement event.
+   *
+   * @param event Bundle announcement from Nostr relay
+   * @return bundle_announcement_received if non-empty, bundle_announcement_removed if empty, std::nullopt on version
+   * mismatch
+   */
   [[nodiscard]] static auto handle(const nostr::events::incoming::bundle_announcement &event) -> std::optional<
     std::variant<core::events::bundle_announcement_received, core::events::bundle_announcement_removed>>
   {
@@ -86,8 +113,12 @@ public:
     };
   }
 
-  // Command events (called by Session on session_strand)
-  // Returns pair of <event_id, bytes> to track and send
+  /**
+   * @brief Handles a send command by encrypting and serializing a message.
+   *
+   * @param cmd Send command containing peer and message
+   * @return Pair of event ID and serialized event bytes
+   */
   [[nodiscard]] auto handle(const core::events::send &cmd) -> std::pair<std::string, std::vector<std::byte>>
   {
     std::vector<uint8_t> plaintext_bytes(cmd.message.begin(), cmd.message.end());
@@ -127,6 +158,12 @@ public:
     return { event_id, bytes };
   }
 
+  /**
+   * @brief Handles a publish identity command by generating and serializing a bundle.
+   *
+   * @param command Publish identity command
+   * @return Result containing event ID, bytes, and prekey IDs
+   */
   [[nodiscard]] auto handle(const core::events::publish_identity & /*command*/) -> publish_bundle_result
   {
     const std::string version_str{ radix_relay::cmake::project_version };
@@ -164,6 +201,12 @@ public:
       .kyber_pre_key_id = bundle_info.kyber_pre_key_id };
   }
 
+  /**
+   * @brief Handles an unpublish identity command by generating an empty bundle.
+   *
+   * @param command Unpublish identity command
+   * @return Pair of event ID and serialized event bytes
+   */
   [[nodiscard]] auto handle(const core::events::unpublish_identity & /*command*/)
     -> std::pair<std::string, std::vector<std::byte>>
   {
@@ -198,10 +241,19 @@ public:
     return { event_id, bytes };
   }
 
-  // Local operation (no networking, just updates DB)
+  /**
+   * @brief Handles a trust command by assigning an alias to a peer.
+   *
+   * @param cmd Trust command containing peer and alias
+   */
   auto handle(const core::events::trust &cmd) -> void { bridge_->assign_contact_alias(cmd.peer, cmd.alias); }
 
-  // Establish session from bundle data (returns session_established event)
+  /**
+   * @brief Handles session establishment from bundle data.
+   *
+   * @param cmd Establish session command with bundle data
+   * @return session_established event with peer RDX fingerprint
+   */
   [[nodiscard]] auto handle(const core::events::establish_session &cmd)
     -> std::optional<core::events::session_established>
   {
@@ -209,7 +261,12 @@ public:
     return core::events::session_established{ peer_rdx };
   }
 
-  // Subscription request returns subscription_id + bytes
+  /**
+   * @brief Handles a subscription request.
+   *
+   * @param cmd Subscribe command with JSON filter
+   * @return Pair of subscription ID and serialized request bytes
+   */
   [[nodiscard]] static auto handle(const core::events::subscribe &cmd) -> std::pair<std::string, std::vector<std::byte>>
   {
     std::vector<std::byte> bytes;
@@ -223,6 +280,11 @@ public:
     return { subscription_id, bytes };
   }
 
+  /**
+   * @brief Handles an incoming OK response (logs only).
+   *
+   * @param event OK response from relay
+   */
   static auto handle(const nostr::events::incoming::ok &event) -> void
   {
     spdlog::debug("[nostr_handler] OK received: event_id={}, accepted={}, message={}",
@@ -231,23 +293,55 @@ public:
       event.message);
   }
 
+  /**
+   * @brief Handles an incoming EOSE marker (logs only).
+   *
+   * @param event EOSE marker from relay
+   */
   static auto handle(const nostr::events::incoming::eose &event) -> void
   {
     spdlog::debug("[nostr_handler] EOSE received: subscription_id={}", event.subscription_id);
   }
 
+  /**
+   * @brief Handles an unknown message type (logs warning).
+   *
+   * @param event Unknown message event
+   */
   static auto handle(const nostr::events::incoming::unknown_message &event) -> void
   {
     spdlog::warn("[nostr_handler] Unknown message kind: {}", static_cast<std::uint16_t>(event.kind));
   }
 
+  /**
+   * @brief Handles an unknown protocol message (logs warning).
+   *
+   * @param event Unknown protocol event
+   */
   static auto handle(const nostr::events::incoming::unknown_protocol &event) -> void
   {
     spdlog::warn("[nostr_handler] Unknown protocol message: {}", event.message);
   }
 
+  /**
+   * @brief Handles an incoming identity announcement (no-op).
+   *
+   * @param event Identity announcement from relay
+   */
   static auto handle(const nostr::events::incoming::identity_announcement & /*event*/) -> void {}
+
+  /**
+   * @brief Handles an incoming session request (no-op).
+   *
+   * @param event Session request from relay
+   */
   static auto handle(const nostr::events::incoming::session_request & /*event*/) -> void {}
+
+  /**
+   * @brief Handles an incoming node status update (no-op).
+   *
+   * @param event Node status from relay
+   */
   static auto handle(const nostr::events::incoming::node_status & /*event*/) -> void {}
 
 private:

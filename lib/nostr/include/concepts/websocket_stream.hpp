@@ -13,6 +13,12 @@ struct websocket_connection_params;
 
 namespace radix_relay::concepts {
 
+/**
+ * @brief Concept defining the interface for WebSocket stream operations.
+ *
+ * Types satisfying this concept provide async operations for WebSocket connections,
+ * including connect, read, write, and close.
+ */
 template<typename T>
 concept websocket_stream = requires(T &stream,
   const transport::websocket_connection_params params,

@@ -4,6 +4,11 @@
 
 namespace radix_relay::concepts {
 
+/**
+ * @brief Concept defining the interface for handling CLI commands.
+ *
+ * Types satisfying this concept must provide handle() overloads for all core command event types.
+ */
 template<typename T>
 concept command_handler = requires(T handler,
   const core::events::help &help_cmd,

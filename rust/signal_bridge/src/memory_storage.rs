@@ -14,6 +14,7 @@ fn address_key(address: &ProtocolAddress) -> String {
     format!("{}:{}", address.name(), u32::from(address.device_id()))
 }
 
+/// In-memory session storage (data lost on process termination)
 pub struct MemorySessionStore {
     sessions: Arc<Mutex<HashMap<String, SessionRecord>>>,
 }
@@ -78,6 +79,7 @@ impl ExtendedSessionStore for MemorySessionStore {
     }
 }
 
+/// In-memory identity key storage (data lost on process termination)
 pub struct MemoryIdentityStore {
     identity_keys: Arc<Mutex<HashMap<String, IdentityKey>>>,
     local_identity_key_pair: Arc<Mutex<Option<IdentityKeyPair>>>,
@@ -223,6 +225,7 @@ impl ExtendedIdentityStore for MemoryIdentityStore {
     }
 }
 
+/// In-memory pre-key storage (data lost on process termination)
 pub struct MemoryPreKeyStore {
     pre_keys: Arc<Mutex<HashMap<u32, KeyPair>>>,
 }
@@ -294,6 +297,7 @@ impl ExtendedPreKeyStore for MemoryPreKeyStore {
     }
 }
 
+/// In-memory signed pre-key storage (data lost on process termination)
 pub struct MemorySignedPreKeyStore {
     signed_pre_keys: Arc<Mutex<HashMap<u32, SignedPreKeyRecord>>>,
 }
@@ -380,6 +384,7 @@ impl ExtendedSignedPreKeyStore for MemorySignedPreKeyStore {
     }
 }
 
+/// In-memory Kyber post-quantum pre-key storage (data lost on process termination)
 pub struct MemoryKyberPreKeyStore {
     kyber_pre_keys: Arc<Mutex<HashMap<u32, KyberPreKeyRecord>>>,
 }
@@ -475,6 +480,7 @@ impl ExtendedKyberPreKeyStore for MemoryKyberPreKeyStore {
     }
 }
 
+/// Complete in-memory Signal Protocol storage implementation
 pub struct MemoryStorage {
     pub session_store: MemorySessionStore,
     pub identity_store: MemoryIdentityStore,

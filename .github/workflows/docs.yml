@@ -78,7 +78,7 @@ jobs:
           cp -r rust/target/doc/* out/site/api/rust/ || true
 
       - name: Build MkDocs documentation
-        run: mkdocs build
+        run: mkdocs build --dirty
 
       - name: Deploy to GitHub Pages
         run: mkdocs gh-deploy --force

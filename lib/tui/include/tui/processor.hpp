@@ -12,8 +12,25 @@
 
 namespace radix_relay::tui {
 
+/**
+ * @brief Text-based user interface processor with REPL.
+ *
+ * @tparam Bridge Type satisfying the signal_bridge concept
+ *
+ * Provides an interactive command-line interface using Replxx for command input,
+ * history management, and display message output.
+ */
 template<concepts::signal_bridge Bridge> struct processor
 {
+  /**
+   * @brief Constructs a TUI processor.
+   *
+   * @param node_id Node identifier for display
+   * @param mode Network mode (internet/mesh/hybrid)
+   * @param bridge Signal Protocol bridge
+   * @param command_queue Queue for outgoing user commands
+   * @param display_queue Queue for incoming display messages
+   */
   processor(std::string node_id,
     std::string mode,
     const std::shared_ptr<Bridge> &bridge,
@@ -30,6 +47,11 @@ template<concepts::signal_bridge Bridge> struct processor
   processor(processor &&) = delete;
   auto operator=(processor &&) -> processor & = delete;
 
+  /**
+   * @brief Runs the interactive REPL loop.
+   *
+   * Starts message polling thread and processes user input until quit command.
+   */
   auto run() -> void
   {
     setup_replxx();
@@ -79,6 +101,9 @@ template<concepts::signal_bridge Bridge> struct processor
     save_history();
   }
 
+  /**
+   * @brief Stops the TUI processor and message polling thread.
+   */
   auto stop() -> void
   {
     if (running_.exchange(false)) {
@@ -86,9 +111,17 @@ template<concepts::signal_bridge Bridge> struct processor
     }
   }
 
+  /**
+   * @brief Returns the current network mode.
+   *
+   * @return Network mode string (internet/mesh/hybrid)
+   */
   [[nodiscard]] auto get_mode() const -> const std::string & { return mode_; }
 
 private:
+  /**
+   * @brief Configures Replxx with history and command completion.
+   */
   auto setup_replxx() -> void
   {
     prompt_ = std::string(GREEN) + "[⇌] " + RESET;
@@ -113,6 +146,11 @@ private:
     });
   }
 
+  /**
+   * @brief Displays a message in the TUI.
+   *
+   * @param message Message text to display
+   */
   auto print_message(const std::string &message) -> void
   {
     auto msg = message;
@@ -121,6 +159,11 @@ private:
     rx_.write(formatted.c_str(), static_cast<int>(formatted.size()));
   }
 
+  /**
+   * @brief Processes user input and dispatches commands.
+   *
+   * @param input User command string
+   */
   auto process_command(const std::string &input) -> void
   {
     constexpr auto mode_cmd = "mode ";
@@ -138,6 +181,9 @@ private:
     command_queue_->push(core::events::raw_command{ .input = std::string(input) });
   }
 
+  /**
+   * @brief Saves command history to disk.
+   */
   auto save_history() -> void { rx_.history_save(HISTORY_FILE); }
 
   static constexpr const char *GREEN = "\033[32m";

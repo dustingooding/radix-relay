@@ -14,11 +14,25 @@
 
 namespace radix_relay::async {
 
+/**
+ * @brief Thread-safe asynchronous queue for message passing between coroutines.
+ *
+ * @tparam T The type of elements stored in the queue
+ *
+ * Provides thread-safe push/pop operations using Boost.Asio concurrent channels.
+ * Supports coroutine-based async pop operations with optional cancellation.
+ */
 template<typename T> class async_queue
 {
 public:
+  /// Maximum number of elements the queue can hold
   static const std::size_t channel_size{ 1024 };
 
+  /**
+   * @brief Constructs a new async queue.
+   *
+   * @param io_context Shared pointer to the Boost.Asio io_context for async operations
+   */
   explicit async_queue(const std::shared_ptr<boost::asio::io_context> &io_context)
     : io_context_(io_context), channel_(*io_context_, channel_size), size_(0)
   {}
@@ -29,12 +43,24 @@ public:
   auto operator=(async_queue &&) -> async_queue & = delete;
   ~async_queue() = default;
 
+  /**
+   * @brief Pushes a value onto the queue (non-blocking).
+   *
+   * @param value The value to push (moved into the queue)
+   */
   auto push(T value) -> void
   {
     channel_.try_send(boost::system::error_code{}, std::move(value));
     ++size_;
   }
 
+  /**
+   * @brief Asynchronously pops a value from the queue (coroutine).
+   *
+   * @param cancel_slot Optional cancellation slot for operation cancellation
+   * @return Awaitable that yields the next value from the queue
+   * @throws boost::system::system_error on cancellation or channel errors
+   */
   auto pop(std::shared_ptr<boost::asio::cancellation_slot> cancel_slot = nullptr) -> boost::asio::awaitable<T>
   {
     boost::system::error_code err;
@@ -53,9 +79,13 @@ public:
     }
   }
 
-  // Non-blocking pop: returns std::nullopt if queue is empty
-  // Use for draining queues or when you need to check without blocking.
-  // For event-driven processing, prefer pop() in a coroutine loop.
+  /**
+   * @brief Attempts to pop a value without blocking.
+   *
+   * @return Optional containing the value if available, std::nullopt if queue is empty
+   *
+   * Use for draining queues or non-blocking checks. For event-driven processing, prefer pop().
+   */
   auto try_pop() -> std::optional<T>
   {
     T value;
@@ -69,10 +99,23 @@ public:
     return std::nullopt;
   }
 
+  /**
+   * @brief Checks if the queue is empty.
+   *
+   * @return true if the queue contains no elements, false otherwise
+   */
   [[nodiscard]] auto empty() const -> bool { return size_.load() == 0; }
 
+  /**
+   * @brief Returns the current number of elements in the queue.
+   *
+   * @return Current queue size
+   */
   [[nodiscard]] auto size() const -> std::size_t { return size_.load(); }
 
+  /**
+   * @brief Closes the queue, preventing further operations.
+   */
   auto close() -> void { channel_.close(); }
 
 private:

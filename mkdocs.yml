@@ -16,7 +16,7 @@ theme:
     primary: black
     accent: green
   font:
-    text: Roboto Mono
+    text: Source Sans Pro
     code: Fira Code
   features:
     - navigation.instant

@@ -5,6 +5,13 @@
 
 namespace radix_relay::core {
 
+/**
+ * @brief Checks if a version meets a minimum version requirement.
+ *
+ * @param version_str Version string in semantic versioning format (e.g., "1.2.3")
+ * @param minimum_version_str Minimum required version string
+ * @return true if version >= minimum_version, false otherwise or on parse error
+ */
 [[nodiscard]] inline auto is_version_compatible(const std::string &version_str, const std::string &minimum_version_str)
   -> bool
 {
