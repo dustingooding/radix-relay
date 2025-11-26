@@ -81,4 +81,8 @@ jobs:
         run: mkdocs build --dirty
 
       - name: Deploy to GitHub Pages
-        run: mkdocs gh-deploy --force
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./out/site
+          force_orphan: true
