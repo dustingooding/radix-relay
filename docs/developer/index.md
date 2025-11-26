@@ -67,7 +67,6 @@ Uses modern CMake with:
 ```
 radix-relay/
 ├── src/              # C++ source files
-├── include/          # Public headers
 ├── lib/              # Libraries (Signal Protocol bridge)
 ├── rust/             # Rust components
 ├── test/             # Tests
@@ -78,4 +77,4 @@ radix-relay/
 
 - Check [Troubleshooting](../getting-started/troubleshooting.md)
 - Open an [Issue](https://github.com/dustingooding/radix-relay/issues)
-- Email: <radix-relay@proton.me>
+- Email: [radix-relay@proton.me](mailto:radix-relay@proton.me)

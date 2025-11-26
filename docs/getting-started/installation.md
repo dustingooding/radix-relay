@@ -1,222 +1,277 @@
 # Dependencies
 
-Note about install commands:
+This guide covers the dependencies required to build Radix Relay from source.
 
-- for Windows, we use [choco](https://chocolatey.org/install).
-- for macOS, we use [brew](https://brew.sh/).
-- In case of an error in cmake, make sure that the dependencies are on the PATH.
+## Quick Setup Options
 
-## Too Long, Didn't Install
+### Docker (Recommended)
 
-This is a really long list of dependencies, and it's easy to mess up. That's why:
+The easiest way to get started is using Docker, which includes all dependencies pre-configured:
 
-### Docker
-
-We have a Docker image that's already set up for you. See the [Docker instructions](docker.md).
-
-### Setup-cpp
-
-We have [setup-cpp](https://github.com/aminya/setup-cpp) that is a cross-platform tool to install all the compilers and dependencies on the system.
-
-Please check [the setup-cpp documentation](https://github.com/aminya/setup-cpp) for more information.
-
-For example, on Windows, you can run the following to install llvm, cmake, ninja, ccache, and cppcheck.
-
-```ps1
-# windows example (open shell as admin)
-curl -LJO "https://github.com/aminya/setup-cpp/releases/download/v0.5.7/setup_cpp_windows.exe"
-./setup_cpp_windows --compiler llvm --cmake true --ninja true --ccache true --cppcheck true
-
-RefreshEnv.cmd # reload the environment
+```bash
+docker compose up dev
 ```
 
-## Necessary Dependencies
+See [Docker instructions](docker.md) for details.
 
-1. A C++ compiler that supports C++20.
-See [cppreference.com](https://en.cppreference.com/w/cpp/compiler_support)
-to see which features are supported by each compiler.
-The following compilers should work:
+### Automated Installation (setup-cpp)
 
-    - [gcc 7+](https://gcc.gnu.org/)
+For automated dependency installation, use [setup-cpp](https://github.com/aminya/setup-cpp):
 
-        **Install command:**
+**Linux/macOS:**
+```bash
+curl -sL https://github.com/aminya/setup-cpp/releases/latest/download/setup_cpp_linux -o setup_cpp
+chmod +x setup_cpp
+./setup_cpp --compiler llvm-19 --cmake true --ninja true --ccache true --clangtidy 19.1.1 --cppcheck true
+```
 
-        - Debian/Ubuntu:
+**Windows (PowerShell as admin):**
+```powershell
+curl -LJO "https://github.com/aminya/setup-cpp/releases/latest/download/setup_cpp_windows.exe"
+./setup_cpp_windows --compiler llvm-19 --cmake true --ninja true --ccache true --clangtidy 19.1.1 --cppcheck true
+RefreshEnv.cmd
+```
 
-          ```bash
-          sudo apt install build-essential
-          ```
+## Manual Installation
 
-        - Windows:
+### Required Dependencies
 
-          ```cmd
-          choco install mingw -y
-          ```
+#### 1. C++20 Compiler
 
-        - MacOS:
+One of the following:
 
-          ```bash
-          brew install gcc
-          ```
+- **Clang 19.1.1** (recommended) or GCC 14+
+- **MSVC 2022** (Windows only - required for libsignal compatibility)
 
-    - [clang 6+](https://clang.llvm.org/)
+**Linux (Ubuntu/Debian):**
+```bash
+# Clang 19
+bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
 
-        **Install command:**
+# Or GCC 14
+sudo apt install build-essential gcc-14 g++-14
+```
 
-        - Debian/Ubuntu:
+**macOS:**
+```bash
+# Clang (via Xcode Command Line Tools)
+xcode-select --install
 
-           ```bash
-           bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
-           ```
+# Or via Homebrew
+brew install llvm@19
+```
 
-        - Windows:
+**Windows:**
 
-          Visual Studio 2019 ships with LLVM (see the Visual Studio section). However, to install LLVM separately:
+Install Visual Studio 2022 with C++ Desktop Development workload:
+```powershell
+choco install visualstudio2022community --package-parameters "--add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended"
+```
 
-          ```cmd
-          choco install llvm -y
-          ```
+**Note:** Windows builds require MSVC due to libsignal compatibility. GCC/Clang are not supported on Windows.
 
-          llvm-utils for using external LLVM with Visual Studio generator:
+#### 2. CMake 3.21+
 
-          ```cmd
-          git clone https://github.com/zufuliu/llvm-utils.git
-          cd llvm-utils/VS2017
-          .\install.bat
-          ```
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt install cmake
+```
 
-        - MacOS:
+**macOS:**
+```bash
+brew install cmake
+```
 
-           ```bash
-           brew install llvm
-           ```
+**Windows:**
+```powershell
+choco install cmake
+```
 
-    - [Visual Studio 2019 or higher](https://visualstudio.microsoft.com/)
+#### 3. Ninja Build System
 
-        **Install command + Environment setup:**
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt install ninja-build
+```
 
-        On Windows, you need to install Visual Studio 2019 because of the SDK and libraries that ship with it.
+**macOS:**
+```bash
+brew install ninja
+```
 
-        Visual Studio IDE - 2019 Community (installs Clang too):
+**Windows:**
+```powershell
+choco install ninja
+```
 
-        ```cmd
-        choco install -y visualstudio2019community --package-parameters "add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended --includeOptional --passive --locale en-US"
-        ```
+#### 4. Rust (stable)
 
-        Put MSVC compiler, Clang compiler, and vcvarsall.bat on the path:
+Required for Signal Protocol implementation.
 
-        ```powershell
-        choco install vswhere -y
-        refreshenv
+**All platforms:**
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
 
-        # change to x86 for 32bit
-        $clpath = vswhere -products * -latest -prerelease -find **/Hostx64/x64/*
-        $clangpath = vswhere -products * -latest -prerelease -find **/Llvm/bin/*
-        $vcvarsallpath =  vswhere -products * -latest -prerelease -find **/Auxiliary/Build/*
+Or visit [rustup.rs](https://rustup.rs/)
 
-        $path = [System.Environment]::GetEnvironmentVariable("PATH", "User")
-        [Environment]::SetEnvironmentVariable("Path", $path + ";$clpath" + ";$clangpath" + ";$vcvarsallpath", "User")
-        refreshenv
-        ```
+After installation:
+```bash
+rustup component add clippy rustfmt
+```
 
-2. [CMake 3.21+](https://cmake.org/)
+#### 5. Protocol Buffers
 
-    **Install Command:**
+Required by Signal Protocol dependencies.
 
-    - Debian/Ubuntu:
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt install protobuf-compiler libprotobuf-dev
+```
 
-       ```bash
-       sudo apt-get install cmake
-       ```
+**macOS:**
+```bash
+brew install protobuf
+```
 
-    - Windows:
+**Windows:**
 
-       ```cmd
-       choco install cmake -y
-       ```
+Protocol Buffers is installed automatically via vcpkg during the build process.
 
-    - MacOS:
+### Optional Dependencies
 
-       ```bash
-       brew install cmake
-       ```
+#### Documentation Tools
 
-## Optional Dependencies
+Required only if building documentation locally:
 
-### C++ Tools
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt install doxygen graphviz python3-pip
+pip install mkdocs mkdocs-material
+```
 
-- [Doxygen](http://doxygen.nl/)
+**macOS:**
+```bash
+brew install doxygen graphviz python
+pip3 install mkdocs mkdocs-material
+```
 
-    **Install Command:**
+**Windows:**
+```powershell
+choco install doxygen.install graphviz python
+pip install mkdocs mkdocs-material
+```
 
-  - Debian/Ubuntu:
+#### Development Tools (Optional but Recommended)
 
-       ```bash
-       sudo apt-get install doxygen
-       sudo apt-get install graphviz
-       ```
+**ccache** - Speeds up recompilation:
 
-  - Windows:
+```bash
+# Linux
+sudo apt install ccache
 
-       ```cmd
-       choco install doxygen.install -y
-       choco install graphviz -y
-       ```
+# macOS
+brew install ccache
 
-  - MacOS:
+# Windows
+choco install ccache
+```
 
-       ```bash
-       brew install doxygen
-       brew install graphviz
-       ```
+**cppcheck** - Static analysis:
 
-- [ccache](https://ccache.dev/)
+```bash
+# Linux
+sudo apt install cppcheck
 
-    **Install Command:**
+# macOS
+brew install cppcheck
 
-  - Debian/Ubuntu:
+# Windows
+choco install cppcheck
+```
 
-       ```bash
-       sudo apt-get install ccache
-       ```
+**clang-tidy 19.1.1** - Linting and static analysis (matches CI):
 
-  - Windows:
+```bash
+# Linux
+sudo apt install clang-tidy-19
 
-       ```cmd
-       choco install ccache -y
-       ```
+# macOS
+brew install llvm@19
 
-  - MacOS:
+# Windows
+# Included with Visual Studio 2022 LLVM toolset
+```
 
-       ```bash
-       brew install ccache
-       ```
+## Version Requirements Summary
 
-- [Cppcheck](http://cppcheck.sourceforge.net/)
+| Dependency | Minimum Version | Recommended |
+|------------|----------------|-------------|
+| CMake | 3.21 | Latest |
+| C++ Compiler | C++20 support | Clang 19.1.1, GCC 14, or MSVC 2022 |
+| Rust | stable | Latest stable |
+| Protocol Buffers | 3.x | Latest |
+| Python (for docs) | 3.8 | 3.12+ |
 
-    **Install Command:**
+## Verification
 
-  - Debian/Ubuntu:
+After installation, verify all dependencies:
 
-       ```bash
-       sudo apt-get install cppcheck
-       ```
+```bash
+cmake --version          # Should be 3.21+
+ninja --version         # Any version
+rustc --version         # Should show stable
+cargo --version         # Should match rustc
+protoc --version        # Should be 3.x+
 
-  - Windows:
+# Compiler check
+clang++ --version       # 19.1.1+ (Linux/macOS)
+# or
+g++ --version          # 14+ (Linux)
+# or
+cl                     # MSVC 2022 (Windows)
+```
 
-       ```cmd
-       choco install cppcheck -y
-       ```
+## Next Steps
 
-  - MacOS:
+Once dependencies are installed, proceed to [Building](building.md).
 
-       ```bash
-       brew install cppcheck
-       ```
+## Package Manager Notes
 
-- [include-what-you-use](https://include-what-you-use.org/)
+- **Linux**: Commands shown for Debian/Ubuntu (apt). For other distributions:
+  - Fedora/RHEL: Replace `apt` with `dnf`
+  - Arch: Replace `apt` with `pacman`
+- **macOS**: Requires [Homebrew](https://brew.sh/)
+- **Windows**: Requires [Chocolatey](https://chocolatey.org/)
 
-     **Install Command:**
+## Troubleshooting
 
-     Follow instructions here:
-     <https://github.com/include-what-you-use/include-what-you-use#how-to-install>
+### CMake can't find dependencies
+
+Ensure dependency binaries are on your PATH:
+
+```bash
+# Linux/macOS
+echo $PATH
+
+# Windows (PowerShell)
+$env:PATH
+```
+
+### Rust components missing
+
+Install required Rust components:
+```bash
+rustup component add clippy rustfmt
+```
+
+### Protocol Buffers not found
+
+Verify protoc is installed and on PATH:
+```bash
+protoc --version
+which protoc  # Linux/macOS
+where protoc  # Windows
+```
+
+If issues persist, see the [GitHub Issues](https://github.com/dustingooding/radix-relay/issues) or join discussions.

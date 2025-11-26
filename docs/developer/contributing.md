@@ -74,7 +74,7 @@ A good bug report shouldn't leave others needing to chase you up for more inform
 <!-- omit in toc -->
 #### How Do I Submit a Good Bug Report?
 
-> You must never report security related issues, vulnerabilities or bugs including sensitive information to the issue tracker, or elsewhere in public. Instead sensitive bugs must be sent by email to <radix-relay@proton.me>.
+> You must never report security related issues, vulnerabilities or bugs including sensitive information to the issue tracker, or elsewhere in public. Instead sensitive bugs must be sent by email to [radix-relay@proton.me](mailto:radix-relay@proton.me).
 
 We use GitHub issues to track bugs and errors. If you run into an issue with the project:
 
@@ -132,7 +132,7 @@ Use https://cbea.ms/git-commit/ as guidance on how to write a good commit messag
 
 ## Join The Project Team
 
-We're still early in the project, but help is always welcome.  Reach out at <radix-relay@proton.me> and we can work together!
+We're still early in the project, but help is always welcome.  Reach out at [radix-relay@proton.me](mailto:radix-relay@proton.me) and we can work together!
 
 <!-- omit in toc -->
 ## Attribution
