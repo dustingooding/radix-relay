@@ -1,0 +1,64 @@
+import { VerticalBox, HorizontalBox, ScrollView, ListView, LineEdit, Button } from "std-widgets.slint";
+
+export struct Message {
+    content: string,
+    timestamp: string,
+}
+
+export component MainWindow inherits Window {
+    in-out property <string> node-fingerprint: "";
+    in-out property <string> current-mode: "hybrid";
+    in property <[Message]> messages: [];
+
+    callback send-command(string);
+
+    title: "Radix Relay - " + node-fingerprint;
+    preferred-width: 800px;
+    preferred-height: 600px;
+
+    VerticalBox {
+        padding: 10px;
+        spacing: 10px;
+
+        HorizontalBox {
+            Text {
+                text: "Node: " + node-fingerprint + " | Mode: " + current-mode;
+                font-size: 14px;
+            }
+        }
+
+        ScrollView {
+            VerticalBox {
+                for msg in messages: HorizontalBox {
+                    padding: 5px;
+                    Text {
+                        text: "[" + msg.timestamp + "] " + msg.content;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+
+        HorizontalBox {
+            spacing: 5px;
+
+            input := LineEdit {
+                placeholder-text: "Type command...";
+                horizontal-stretch: 1;
+
+                accepted => {
+                    send-command(self.text);
+                    self.text = "";
+                }
+            }
+
+            Button {
+                text: "Send";
+                clicked => {
+                    send-command(input.text);
+                    input.text = "";
+                }
+            }
+        }
+    }
+}

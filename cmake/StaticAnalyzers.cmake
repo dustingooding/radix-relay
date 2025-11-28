@@ -14,10 +14,13 @@ macro(radix_relay_enable_cppcheck WARNINGS_AS_ERRORS CPPCHECK_OPTIONS)
       # Normalize path separators to native format
       file(TO_NATIVE_PATH "*/_deps/*" SUPPRESS_DEPS_DIR)
       file(TO_NATIVE_PATH "*/corrosion_generated/*" SUPPRESS_CORROSION_DIR)
+      file(TO_NATIVE_PATH "*/build/*" SUPPRESS_BUILD)
       set(SUPPRESS_DEPS_DIR "*:${SUPPRESS_DEPS_DIR}")
       set(SUPPRESS_CORROSION_DIR "*:${SUPPRESS_CORROSION_DIR}")
+      set(SUPPRESS_BUILD "*:${SUPPRESS_BUILD}")
       message(STATUS "CPPCHECK_OPTIONS suppress: ${SUPPRESS_DEPS_DIR}")
       message(STATUS "CPPCHECK_OPTIONS suppress: ${SUPPRESS_CORROSION_DIR}")
+      message(STATUS "CPPCHECK_OPTIONS suppress: ${SUPPRESS_BUILD}")
       set(CMAKE_CXX_CPPCHECK
           ${CPPCHECK}
           --template=${CPPCHECK_TEMPLATE}
@@ -38,7 +41,8 @@ macro(radix_relay_enable_cppcheck WARNINGS_AS_ERRORS CPPCHECK_OPTIONS)
           --suppress=knownConditionTrueFalse
           --inconclusive
           --suppress=${SUPPRESS_DEPS_DIR}
-          --suppress=${SUPPRESS_CORROSION_DIR})
+          --suppress=${SUPPRESS_CORROSION_DIR}
+          --suppress=${SUPPRESS_BUILD})
     else()
       # if the user provides a CPPCHECK_OPTIONS with a template specified, it will override this template
       set(CMAKE_CXX_CPPCHECK ${CPPCHECK} --template=${CPPCHECK_TEMPLATE} ${CPPCHECK_OPTIONS})

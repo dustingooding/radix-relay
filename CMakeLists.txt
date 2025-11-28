@@ -24,6 +24,16 @@ endif()
 # when compiling with PCH enabled
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Enable PIC for all targets (required for shared libraries on Unix)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# Shared libs on Windows are terrible.
+if(WIN32)
+  set(BUILD_SHARED_LIBS OFF)
+else()
+  set(BUILD_SHARED_LIBS ON)
+endif()
+
 # Read version from VERSION file
 file(READ ${CMAKE_CURRENT_SOURCE_DIR}/VERSION PROJECT_VERSION_FROM_FILE)
 string(STRIP "${PROJECT_VERSION_FROM_FILE}" PROJECT_VERSION_FROM_FILE)
@@ -52,9 +62,6 @@ setup_rust_workspace()
 
 radix_relay_local_options()
 
-# don't know if this should be set globally from here or not...
-set(CMAKE_CXX_VISIBILITY_PRESET hidden)
-
 set(GIT_SHA
     "Unknown"
     CACHE STRING "SHA this build was generated from")
@@ -79,6 +86,7 @@ add_subdirectory(lib/transport)
 add_subdirectory(lib/platform)
 add_subdirectory(lib/core)
 add_subdirectory(lib/tui)
+add_subdirectory(lib/slint_ui)
 
 # Adding the src:
 add_subdirectory(src)

@@ -24,7 +24,7 @@ Checks: "*,
         -clang-analyzer-core.NullDereference
 "
 WarningsAsErrors: ''
-HeaderFilterRegex: '^(?!.*test/)(?!.*_deps/).*$'
+HeaderFilterRegex: '^(?!.*test/)(?!.*_deps/)(?!.*build/).*$'
 FormatStyle:     none
 
 CheckOptions:

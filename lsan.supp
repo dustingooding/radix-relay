@@ -1,0 +1,14 @@
+# Suppress all leaks in Slint’s Rust runtime
+leak:libslint_cpp.so
+
+# Suppress Rust stdlib Vec/alloc growth (Rust alloc::raw_vec::*)
+leak:alloc::raw_vec
+
+# Suppress Wayland client leaks (these are known and not fixable)
+leak:libwayland-client.so
+
+# Suppress leaks from the wayland-backend crate
+leak:wayland_backend
+
+# Suppress leaks from asan's thread start wrapper caused by Rust runtime
+leak:asan_thread_start
