@@ -155,7 +155,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy, rustfmt
-          cache-workspaces: rust
+          cache-workspaces: false
 
       - name: Verify Rust installation
         run: |

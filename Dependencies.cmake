@@ -225,4 +225,31 @@ function(radix_relay_setup_dependencies)
     )
   endif()
 
+  if(NOT TARGET Slint::Slint)
+    cpmaddpackage(
+      NAME Slint
+      GITHUB_REPOSITORY slint-ui/slint
+      GIT_TAG v1.14.1
+      OPTIONS
+        "SLINT_BUILD_COMPILER ON"
+        "SLINT_BUILD_RUNTIME ON"
+        "SLINT_FEATURE_BACKEND_WINIT ON"
+        "SLINT_FEATURE_RENDERER_SOFTWARE ON"
+        "SLINT_FEATURE_INTERPRETER OFF"
+        "SLINT_BUILD_EXAMPLES OFF"
+        "SLINT_BUILD_TESTING OFF"
+        "SLINT_FEATURE_BACKEND_QT OFF"
+        "SLINT_FEATURE_RENDERER_FEMTOVG OFF"
+        "SLINT_FEATURE_ACCESSIBILITY OFF"
+        "SLINT_FEATURE_EXPERIMENTAL OFF"
+        "SLINT_FEATURE_TESTING OFF"
+      SYSTEM YES
+    )
+    if(Slint_ADDED)
+      message(STATUS "System Slint not found, built from source via CPM")
+    else()
+      message(STATUS "Found system Slint ${Slint_VERSION}")
+    endif()
+  endif()
+
 endfunction()

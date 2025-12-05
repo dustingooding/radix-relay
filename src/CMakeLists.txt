@@ -43,3 +43,21 @@ target_link_system_libraries(
 if(MSVC)
   target_compile_options(echo_demo PRIVATE /bigobj)
 endif()
+
+add_executable(slint-demo slint_demo.cpp)
+
+target_link_libraries(
+  slint-demo
+  PRIVATE radix_relay::radix_relay_options
+          radix_relay::radix_relay_warnings
+          radix_relay::slint_ui)
+
+target_link_system_libraries(
+  slint-demo
+  PRIVATE
+          fmt::fmt
+          spdlog::spdlog)
+
+if(MSVC)
+  target_compile_options(slint-demo PRIVATE /bigobj)
+endif()

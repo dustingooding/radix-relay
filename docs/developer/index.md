@@ -17,9 +17,39 @@ Welcome to the Radix Relay developer documentation.
 git clone https://github.com/dustingooding/radix-relay.git
 cd radix-relay
 
-# direnv will automatically set up the environment
+# Create .envrc for your development environment
+# See example below
 direnv allow
 ```
+
+#### Example `.envrc`
+
+Create a `.envrc` file in the project root with your environment configuration:
+
+```bash
+# Development environment
+export CMAKE_GENERATOR=Ninja
+
+# Python virtual environment
+layout python python3
+pip install -q -r requirements.txt
+
+# Install pre-commit hooks
+pre-commit install
+
+# Rust environment
+export PATH="$HOME/.cargo/bin:$PATH"
+
+# LeakSanitizer suppressions for known false positives
+export LSAN_OPTIONS="suppressions=lsan.supp"
+
+# Ensure Rust quality tools are installed
+if command -v rustup &> /dev/null; then
+    rustup component add clippy rustfmt 2>/dev/null || true
+fi
+```
+
+The `lsan.supp` file contains suppressions for known false positives from Slint's Rust runtime, Wayland client libraries, and Rust standard library allocations.
 
 ### 2. Make Changes
 
