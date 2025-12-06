@@ -20,6 +20,7 @@ target_link_system_libraries(
   radix_relay_core
   PUBLIC
           Boost::asio
+          Boost::system
           Boost::uuid
           fmt::fmt
           CLI11::CLI11
