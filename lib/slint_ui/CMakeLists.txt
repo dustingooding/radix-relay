@@ -36,14 +36,12 @@ set_target_properties(radix_relay_slint_ui_gen PROPERTIES
   CXX_INCLUDE_WHAT_YOU_USE ""
 )
 
-# Main library containing the processor implementation
-add_library(radix_relay_slint_ui)
+# Main library containing the processor implementation (header-only)
+add_library(radix_relay_slint_ui INTERFACE)
 add_library(radix_relay::slint_ui ALIAS radix_relay_slint_ui)
 
 target_sources(radix_relay_slint_ui
-  PRIVATE
-    src/processor.cpp
-  PUBLIC
+  INTERFACE
     FILE_SET HEADERS
     BASE_DIRS include
     FILES
@@ -51,21 +49,18 @@ target_sources(radix_relay_slint_ui
 )
 
 target_link_libraries(radix_relay_slint_ui
-  PUBLIC
+  INTERFACE
     radix_relay::radix_relay_options
     radix_relay::radix_relay_warnings
     radix_relay::core
-)
-
-target_link_system_libraries(radix_relay_slint_ui
-  PUBLIC
+    radix_relay::platform
     radix_relay::slint_ui_gen
     fmt::fmt
     spdlog::spdlog
 )
 
 target_include_directories(radix_relay_slint_ui
-  PUBLIC
+  INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
