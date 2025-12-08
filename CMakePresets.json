@@ -219,28 +219,40 @@
             "displayName": "Strict",
             "description": "Enable output and stop on failure",
             "inherits": "test-common",
-            "configurePreset": "unixlike-gcc-debug"
+            "configurePreset": "unixlike-gcc-debug",
+            "environment": {
+                "ASAN_OPTIONS": "use_odr_indicator=1"
+            }
         },
         {
             "name": "test-unixlike-gcc-release",
             "displayName": "Strict",
             "description": "Enable output and stop on failure",
             "inherits": "test-common",
-            "configurePreset": "unixlike-gcc-release"
+            "configurePreset": "unixlike-gcc-release",
+            "environment": {
+                "ASAN_OPTIONS": "use_odr_indicator=1"
+            }
         },
         {
             "name": "test-unixlike-clang-debug",
             "displayName": "Strict",
             "description": "Enable output and stop on failure",
             "inherits": "test-common",
-            "configurePreset": "unixlike-clang-debug"
+            "configurePreset": "unixlike-clang-debug",
+            "environment": {
+                "ASAN_OPTIONS": "use_odr_indicator=1"
+            }
         },
         {
             "name": "test-unixlike-clang-release",
             "displayName": "Strict",
             "description": "Enable output and stop on failure",
             "inherits": "test-common",
-            "configurePreset": "unixlike-clang-release"
+            "configurePreset": "unixlike-clang-release",
+            "environment": {
+                "ASAN_OPTIONS": "use_odr_indicator=1"
+            }
         },
         {
             "name": "test-windows-msvc-debug-user-mode",

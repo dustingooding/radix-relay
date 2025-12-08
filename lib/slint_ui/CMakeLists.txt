@@ -1,6 +1,14 @@
+# Workaround: Slint's BUILD_RPATH doesn't propagate when used via CPM/FetchContent
+# This ensures executables can find libslint_cpp.dylib at build time on macOS
+# See: slint-ui/slint api/cpp/CMakeLists.txt lines 167-181
+# Note: CACHE FORCE required so the value propagates to sibling directories (e.g., test/)
+if(APPLE AND BUILD_SHARED_LIBS)
+  set(CMAKE_BUILD_RPATH "${CMAKE_BUILD_RPATH};${CMAKE_BINARY_DIR}/_deps/slint-build/api/cpp" CACHE STRING "" FORCE)
+endif()
+
 # Library containing only the Slint UI definitions and generated code
 # This is marked as a SYSTEM library to exclude generated code from linting
-add_library(radix_relay_slint_ui_gen STATIC)
+add_library(radix_relay_slint_ui_gen)
 add_library(radix_relay::slint_ui_gen ALIAS radix_relay_slint_ui_gen)
 
 slint_target_sources(radix_relay_slint_ui_gen
@@ -43,11 +51,6 @@ add_library(radix_relay::slint_ui ALIAS radix_relay_slint_ui)
 target_sources(radix_relay_slint_ui
   PRIVATE
     src/processor.cpp
-  PUBLIC
-    FILE_SET HEADERS
-    BASE_DIRS include
-    FILES
-      include/slint_ui/processor.hpp
 )
 
 target_link_libraries(radix_relay_slint_ui
@@ -55,6 +58,7 @@ target_link_libraries(radix_relay_slint_ui
     radix_relay::radix_relay_options
     radix_relay::radix_relay_warnings
     radix_relay::core
+    radix_relay::platform
 )
 
 target_link_system_libraries(radix_relay_slint_ui

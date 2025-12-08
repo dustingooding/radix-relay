@@ -159,7 +159,7 @@ function(radix_relay_setup_dependencies)
   if(NOT Boost_FOUND)
     message(STATUS "System Boost not found, building from source via CPM...")
     if(NOT TARGET Boost::asio)
-      cpmaddpackage(s
+      cpmaddpackage(
         NAME Boost
         GITHUB_REPOSITORY boostorg/boost
         VERSION 1.89.0
@@ -241,8 +241,8 @@ function(radix_relay_setup_dependencies)
         "SLINT_FEATURE_BACKEND_QT OFF"
         "SLINT_FEATURE_RENDERER_FEMTOVG OFF"
         "SLINT_FEATURE_ACCESSIBILITY OFF"
-        "SLINT_FEATURE_EXPERIMENTAL OFF"
-        "SLINT_FEATURE_TESTING OFF"
+        "SLINT_FEATURE_EXPERIMENTAL ON"
+        "SLINT_FEATURE_TESTING ON"
       SYSTEM YES
     )
     if(Slint_ADDED)
