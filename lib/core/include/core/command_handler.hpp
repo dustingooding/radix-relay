@@ -61,42 +61,47 @@ private:
   auto handle_impl(const events::help & /*command*/) const -> void
   {
     std::ignore = initialized_;
-    emit("Interactive Commands:\n");
-    emit("  send <peer> <message>     Send encrypted message to peer\n");
-    emit("  broadcast <message>       Send to all local peers\n");
-    emit("  peers                     List discovered peers\n");
-    emit("  status                    Show network status\n");
-    emit("  sessions                  Show encrypted sessions\n");
-    emit("  identities                List discovered identities\n");
-    emit("  publish                   Publish identity to network\n");
-    emit("  mode <internet|mesh|hybrid>  Switch transport mode\n");
-    emit("  scan                      Force peer discovery\n");
-    emit("  connect <relay>           Add Nostr relay\n");
-    emit("  disconnect                Disconnect from Nostr relay\n");
-    emit("  trust <peer> [alias]      Establish session with peer\n");
-    emit("  verify <peer>             Show safety numbers\n");
-    emit("  version                   Show version information\n");
-    emit("  quit                      Exit interactive mode\n");
+    emit(
+      "Interactive Commands:\n"
+      "  send <peer> <message>     Send encrypted message to peer\n"
+      "  broadcast <message>       Send to all local peers\n"
+      "  peers                     List discovered peers\n"
+      "  status                    Show network status\n"
+      "  sessions                  Show encrypted sessions\n"
+      "  identities                List discovered identities\n"
+      "  publish                   Publish identity to network\n"
+      "  mode <internet|mesh|hybrid>  Switch transport mode\n"
+      "  scan                      Force peer discovery\n"
+      "  connect <relay>           Add Nostr relay\n"
+      "  disconnect                Disconnect from Nostr relay\n"
+      "  trust <peer> [alias]      Establish session with peer\n"
+      "  verify <peer>             Show safety numbers\n"
+      "  version                   Show version information\n"
+      "  quit                      Exit interactive mode\n");
   }
 
   auto handle_impl(const events::peers & /*command*/) const -> void
   {
     std::ignore = initialized_;
-    emit("Connected Peers: (transport layer not implemented)\n");
-    emit("  No peers discovered yet\n");
+    emit(
+      "Connected Peers: (transport layer not implemented)\n"
+      "  No peers discovered yet\n");
   }
 
   auto handle_impl(const events::status & /*command*/) const -> void
   {
     std::ignore = initialized_;
-    emit("Network Status:\n");
-    emit("  Internet: Not connected\n");
-    emit("  BLE Mesh: Not initialized\n");
-    emit("  Active Sessions: 0\n");
+    emit(
+      "Network Status:\n"
+      "  Internet: Not connected\n"
+      "  BLE Mesh: Not initialized\n"
+      "  Active Sessions: 0\n");
 
-    emit("\nCrypto Status:\n");
     std::string node_fingerprint = bridge_->get_node_fingerprint();
-    emit("  Node Fingerprint: {}\n", node_fingerprint);
+    emit(
+      "\nCrypto Status:\n"
+      "  Node Fingerprint: {}\n",
+      node_fingerprint);
   }
 
   auto handle_impl(const events::sessions & /*command*/) const -> void
@@ -142,8 +147,9 @@ private:
   auto handle_impl(const events::scan & /*command*/) const -> void
   {
     std::ignore = initialized_;
-    emit("Scanning for BLE peers... (BLE transport not implemented)\n");
-    emit("No peers found\n");
+    emit(
+      "Scanning for BLE peers... (BLE transport not implemented)\n"
+      "  No peers found\n");
   }
 
   auto handle_impl(const events::version & /*command*/) const -> void

@@ -8,7 +8,8 @@ target_link_libraries(
           radix_relay::nostr
           radix_relay::signal
           radix_relay::transport
-          radix_relay::tui)
+          radix_relay::tui
+          radix_relay::slint_ui)
 
 target_link_system_libraries(
   radix-relay
@@ -19,45 +20,4 @@ target_link_system_libraries(
 
 if(MSVC)
   target_compile_options(radix-relay PRIVATE /bigobj)
-endif()
-
-add_executable(echo_demo echo_demo.cpp)
-
-target_link_libraries(
-  echo_demo
-  PRIVATE radix_relay::radix_relay_options
-          radix_relay::radix_relay_warnings
-          radix_relay::core
-          radix_relay::nostr
-          radix_relay::platform
-          radix_relay::signal
-          radix_relay::transport)
-
-target_link_system_libraries(
-  echo_demo
-  PRIVATE
-          fmt::fmt
-          spdlog::spdlog
-          nlohmann_json::nlohmann_json)
-
-if(MSVC)
-  target_compile_options(echo_demo PRIVATE /bigobj)
-endif()
-
-add_executable(slint-demo slint_demo.cpp)
-
-target_link_libraries(
-  slint-demo
-  PRIVATE radix_relay::radix_relay_options
-          radix_relay::radix_relay_warnings
-          radix_relay::slint_ui)
-
-target_link_system_libraries(
-  slint-demo
-  PRIVATE
-          fmt::fmt
-          spdlog::spdlog)
-
-if(MSVC)
-  target_compile_options(slint-demo PRIVATE /bigobj)
 endif()

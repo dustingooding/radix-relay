@@ -14,6 +14,7 @@ struct cli_args
 {
   std::string identity_path = "~/.radix/identity.db";///< Path to identity database file
   std::string mode = "hybrid";///< Transport mode (internet/mesh/hybrid)
+  std::string ui_mode = "gui";///< UI mode (tui/gui)
   bool verbose = false;///< Enable verbose logging
   bool show_version = false;///< Display version and exit
 
@@ -64,6 +65,7 @@ inline auto setup_cli_app(CLI::App &app, cli_args &args) -> void
   app.add_option("-i,--identity", args.identity_path, "Path to identity key file");
   app.add_option("-m,--mode", args.mode, "transport mode: internet, mesh, hybrid")
     ->check(CLI::IsMember({ "internet", "mesh", "hybrid" }));
+  app.add_option("-u,--ui", args.ui_mode, "UI mode: tui, gui")->check(CLI::IsMember({ "tui", "gui" }));
   app.add_flag("-v,--verbose", args.verbose, "Enable verbose logging");
   app.add_flag("--version", args.show_version, "Show version information");
 
@@ -89,6 +91,11 @@ inline auto setup_cli_app(CLI::App &app, cli_args &args) -> void
 {
   if (args.mode != "internet" and args.mode != "mesh" and args.mode != "hybrid") {
     spdlog::error("Invalid mode: {}", args.mode);
+    return false;
+  }
+
+  if (args.ui_mode != "tui" and args.ui_mode != "gui") {
+    spdlog::error("Invalid UI mode: {}", args.ui_mode);
     return false;
   }
 

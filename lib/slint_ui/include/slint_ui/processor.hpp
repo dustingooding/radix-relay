@@ -57,26 +57,6 @@ template<concepts::signal_bridge Bridge> struct processor
   {
     running_.store(true);
 
-    Message welcome_msg;
-    welcome_msg.content = slint::SharedString("Radix Relay - Interactive Mode");
-    welcome_msg.timestamp = slint::SharedString(platform::format_current_time_hms());
-    message_model_->push_back(welcome_msg);
-
-    Message node_msg;
-    node_msg.content = slint::SharedString(fmt::format("Node: {}", node_id_));
-    node_msg.timestamp = slint::SharedString(platform::format_current_time_hms());
-    message_model_->push_back(node_msg);
-
-    Message mode_msg;
-    mode_msg.content = slint::SharedString(fmt::format("Mode: {}", mode_));
-    mode_msg.timestamp = slint::SharedString(platform::format_current_time_hms());
-    message_model_->push_back(mode_msg);
-
-    Message help_msg;
-    help_msg.content = slint::SharedString("Type 'help' for available commands, 'quit' to exit");
-    help_msg.timestamp = slint::SharedString(platform::format_current_time_hms());
-    message_model_->push_back(help_msg);
-
     setup_timer();
 
     window_->run();
@@ -94,11 +74,21 @@ template<concepts::signal_bridge Bridge> struct processor
 
   auto poll_display_messages() -> void
   {
-    while (auto msg = display_queue_->try_pop()) {
+    constexpr std::size_t max_messages_per_poll = 10;
+    std::size_t processed = 0;
+
+    while (processed < max_messages_per_poll) {
+      auto msg = display_queue_->try_pop();
+      if (not msg.has_value()) { break; }
+
+      auto content = msg->message;
+      content.erase(content.find_last_not_of("\r\n") + 1);
+
       Message ui_msg;
-      ui_msg.content = slint::SharedString(msg->message);
+      ui_msg.content = slint::SharedString(content);
       ui_msg.timestamp = slint::SharedString(platform::format_current_time_hms());
       message_model_->push_back(ui_msg);
+      ++processed;
     }
   }
 

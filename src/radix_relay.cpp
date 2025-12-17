@@ -12,10 +12,13 @@
 #include <core/presentation_processor.hpp>
 #include <core/processor_runner.hpp>
 #include <cstdlib>
+#include <main_window.h>
 #include <nostr/request_tracker.hpp>
 #include <nostr/session_orchestrator.hpp>
 #include <nostr/transport.hpp>
 #include <signal/signal_bridge.hpp>
+#include <slint.h>
+#include <slint_ui/processor.hpp>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <thread>
@@ -95,10 +98,22 @@ auto main(int argc, char **argv) -> int
       spdlog::debug("io_context thread stopped");
     });
 
-    tui::processor<bridge_t> tui_processor(node_fingerprint, args.mode, bridge, command_queue, display_queue);
-    tui_processor.run();
+    if (args.ui_mode == "gui") {
+      auto window = MainWindow::create();
+      auto message_model = std::make_shared<slint::VectorModel<Message>>();
 
-    spdlog::debug("TUI exited, posting cancellation signal to io_context thread...");
+      slint_ui::processor<bridge_t> slint_processor(
+        node_fingerprint, args.mode, bridge, command_queue, display_queue, window, message_model);
+      slint_processor.run();
+
+      spdlog::debug("GUI exited, posting cancellation signal to io_context thread...");
+    } else {
+      tui::processor<bridge_t> tui_processor(node_fingerprint, args.mode, bridge, command_queue, display_queue);
+      tui_processor.run();
+
+      spdlog::debug("TUI exited, posting cancellation signal to io_context thread...");
+    }
+
     boost::asio::post(*io_context, [cancel_signal]() -> void {
       spdlog::debug("[main] Emitting cancellation signal on io_context thread");
       cancel_signal->emit(boost::asio::cancellation_type::all);
