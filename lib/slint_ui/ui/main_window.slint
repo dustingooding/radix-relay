@@ -1,4 +1,4 @@
-import { VerticalBox, HorizontalBox, ScrollView, ListView, LineEdit, Button } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, ScrollView, LineEdit, Button, Palette, TextEdit } from "std-widgets.slint";
 
 export struct Message {
     content: string,
@@ -9,54 +9,129 @@ export component MainWindow inherits Window {
     in-out property <string> node-fingerprint: "";
     in-out property <string> current-mode: "hybrid";
     in property <[Message]> messages: [];
+    property <int> message-count: messages.length;
+    property <bool> auto-scroll-enabled: true;
 
     callback send-command(string);
 
-    title: "Radix Relay - " + node-fingerprint;
-    preferred-width: 800px;
-    preferred-height: 600px;
+    title: "Radix Relay";
+    min-width: 600px;
+    min-height: 400px;
+    preferred-width: 1000px;
+    preferred-height: 700px;
+    background: Palette.background;
 
     VerticalBox {
-        padding: 10px;
-        spacing: 10px;
+        padding: 16px;
+        spacing: 12px;
 
-        HorizontalBox {
-            Text {
-                text: "Node: " + node-fingerprint + " | Mode: " + current-mode;
-                font-size: 14px;
+        Rectangle {
+            height: 32px;
+            background: Palette.alternate-background;
+            border-radius: 4px;
+
+            HorizontalBox {
+                padding-left: 12px;
+                padding-right: 12px;
+                alignment: start;
+
+                Text {
+                    text: "Node: " + node-fingerprint + " | Mode: " + current-mode;
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: Palette.foreground;
+                    vertical-alignment: center;
+                }
             }
         }
 
-        ScrollView {
-            VerticalBox {
-                for msg in messages: HorizontalBox {
-                    padding: 5px;
-                    Text {
-                        text: "[" + msg.timestamp + "] " + msg.content;
-                        wrap: word-wrap;
+        message-scroll := ScrollView {
+            vertical-stretch: 1;
+
+            property <length> max-scroll: min(0px, -message-box.preferred-height + message-scroll.visible-height);
+            property <length> threshold: 50px;
+            property <int> last-count: message-count;
+
+            changed viewport-y => {
+                auto-scroll-enabled = abs(self.viewport-y - max-scroll) < threshold;
+            }
+
+            changed last-count => {
+                if (auto-scroll-enabled) {
+                    self.viewport-y = max-scroll;
+                }
+            }
+
+            message-box := VerticalBox {
+                spacing: 0px;
+                padding: 4px;
+                alignment: start;
+
+                for msg in messages: Rectangle {
+                    height: self.preferred-height;
+                    background: transparent;
+
+                    HorizontalBox {
+                        spacing: 8px;
+
+                        Text {
+                            width: 80px;
+                            text: msg.timestamp;
+                            font-size: 11px;
+                            color: Palette.foreground.transparentize(0.3);
+                            horizontal-alignment: right;
+                            vertical-alignment: top;
+                        }
+
+                        Text {
+                            text: msg.content;
+                            font-size: 13px;
+                            color: Palette.foreground;
+                            vertical-alignment: top;
+                            wrap: word-wrap;
+                            horizontal-stretch: 1;
+                        }
                     }
                 }
             }
         }
 
-        HorizontalBox {
-            spacing: 5px;
+        Rectangle {
+            height: 48px;
+            background: Palette.alternate-background;
+            border-radius: 4px;
 
-            input := LineEdit {
-                placeholder-text: "Type command...";
-                horizontal-stretch: 1;
+            HorizontalBox {
+                padding: 8px;
+                spacing: 8px;
 
-                accepted => {
-                    send-command(self.text);
-                    self.text = "";
+                Text {
+                    text: "[⇌]";
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: Palette.foreground;
+                    vertical-alignment: center;
                 }
-            }
 
-            Button {
-                text: "Send";
-                clicked => {
-                    send-command(input.text);
-                    input.text = "";
+                input := LineEdit {
+                    placeholder-text: "Type command...";
+                    horizontal-stretch: 1;
+                    font-size: 13px;
+
+                    accepted => {
+                        send-command(self.text);
+                        self.text = "";
+                    }
+                }
+
+                Button {
+                    text: "Send";
+                    min-width: 80px;
+
+                    clicked => {
+                        send-command(input.text);
+                        input.text = "";
+                    }
                 }
             }
         }

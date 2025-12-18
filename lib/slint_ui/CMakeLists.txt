@@ -22,6 +22,7 @@ target_link_system_libraries(radix_relay_slint_ui_gen
 
 if(WIN32)
   target_link_libraries(radix_relay_slint_ui_gen PRIVATE
+    opengl32       # OpenGL WGL functions
     dwrite         # DirectWrite
     propsys        # PropVariantToBSTR, VariantToPropVariant
     imm32          # IME functions
