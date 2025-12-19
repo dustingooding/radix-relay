@@ -93,6 +93,28 @@ cmake --build --preset=unixlike-clang-debug --target quality-rust
 
 **Note**: Rust quality tools (clippy and rustfmt) are automatically installed via `.envrc` when using direnv.
 
+## Running the Application
+
+After building, run Radix Relay in either GUI or TUI mode:
+
+### GUI Mode (Default)
+
+Modern graphical interface with terminal aesthetic (Fira Code font, green/black theme):
+
+```bash
+./out/build/unixlike-clang-debug/src/radix-relay --ui-mode gui
+```
+
+### TUI Mode
+
+Terminal-based command-line interface:
+
+```bash
+./out/build/unixlike-clang-debug/src/radix-relay --ui-mode tui
+```
+
+Both modes provide the same functionality with different presentation styles.
+
 ## Running the Tests
 
 Run tests using test presets:

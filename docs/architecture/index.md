@@ -4,9 +4,9 @@ Radix Relay implements a layered architecture for hybrid mesh communications.
 
 ## System Overview
 
-```
+```text
 ┌─────────────────────────────────────────────┐
-│              CLI Interface                  │
+│          GUI/TUI Interface                  │
 └─────────────────┬───────────────────────────┘
                   │
 ┌─────────────────▼───────────────────────────┐
@@ -28,6 +28,18 @@ Radix Relay implements a layered architecture for hybrid mesh communications.
 ```
 
 ## Key Components
+
+### User Interface Layer
+
+**Graphical UI (GUI)** - Modern graphical interface built with Slint framework:
+
+- Cross-platform support (Windows, macOS, Linux)
+- Message scrolling with auto-scroll
+- Bundled fonts for consistent appearance
+
+**Terminal UI (TUI)** - Command-line interface for headless environments and SSH sessions.
+
+Both interfaces share the same backend event system and provide identical functionality.
 
 ### [Signal Protocol](signal-protocol.md)
 

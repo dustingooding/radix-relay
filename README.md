@@ -8,12 +8,15 @@ Open-source hybrid mesh communications system combining internet (Nostr) and loc
 
 **Status**: Phase 1A Complete (Nostr + Signal Protocol functional), Phase 1B Planned (BLE transport)
 
+![Radix Relay UI](docs/images/radix-relay-ui.png)
+
 ## Security Notice
 
 This is pre-release software. Do not use for sensitive communications until Phase 1 security audit is complete.
 
 ## Features
 
+- **Dual Interface**: Modern GUI with terminal aesthetic or command-line TUI
 - **Hybrid Transport**: Automatic failover between internet (Nostr) and local mesh (BLE)
 - **Signal Protocol**: End-to-end encryption with perfect forward secrecy
 - **Cross-Platform**: Linux, Windows, macOS support
