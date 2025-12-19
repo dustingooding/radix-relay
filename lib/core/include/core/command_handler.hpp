@@ -63,21 +63,21 @@ private:
     std::ignore = initialized_;
     emit(
       "Interactive Commands:\n"
-      "  send <peer> <message>     Send encrypted message to peer\n"
-      "  broadcast <message>       Send to all local peers\n"
-      "  peers                     List discovered peers\n"
-      "  status                    Show network status\n"
-      "  sessions                  Show encrypted sessions\n"
-      "  identities                List discovered identities\n"
-      "  publish                   Publish identity to network\n"
+      "  broadcast <message>          Send to all local peers\n"
+      "  connect <relay>              Add Nostr relay\n"
+      "  disconnect                   Disconnect from Nostr relay\n"
+      "  identities                   List discovered identities\n"
       "  mode <internet|mesh|hybrid>  Switch transport mode\n"
-      "  scan                      Force peer discovery\n"
-      "  connect <relay>           Add Nostr relay\n"
-      "  disconnect                Disconnect from Nostr relay\n"
-      "  trust <peer> [alias]      Establish session with peer\n"
-      "  verify <peer>             Show safety numbers\n"
-      "  version                   Show version information\n"
-      "  quit                      Exit interactive mode\n");
+      "  peers                        List discovered peers\n"
+      "  publish                      Publish identity to network\n"
+      "  scan                         Force peer discovery\n"
+      "  send <peer> <message>        Send encrypted message to peer\n"
+      "  sessions                     Show encrypted sessions\n"
+      "  status                       Show network status\n"
+      "  trust <peer> [alias]         Establish session with peer\n"
+      "  verify <peer>                Show safety numbers\n"
+      "  version                      Show version information\n"
+      "  quit                         Exit interactive mode\n");
   }
 
   auto handle_impl(const events::peers & /*command*/) const -> void

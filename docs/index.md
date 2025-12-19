@@ -4,6 +4,8 @@
 
 Open-source communications system combining internet (Nostr) and local mesh (BLE) transports with Signal Protocol encryption for activists, disaster response, and infrastructure-independent communications.
 
+![Radix Relay UI](images/radix-relay-ui.png)
+
 ---
 
 ## Features
@@ -68,7 +70,8 @@ For security issues, please email [radix-relay@proton.me](mailto:radix-relay@pro
 - ✅ Message encryption/decryption
 - ✅ Session establishment and messaging
 - ✅ Contact management
-- ✅ Working end-to-end demo
+- ✅ Slint GUI with terminal aesthetic
+- ✅ TUI for command-line usage
 
 **Phase 1B Planned** - BLE transport
 

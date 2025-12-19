@@ -1,4 +1,19 @@
 import { VerticalBox, HorizontalBox, ScrollView, LineEdit, Button, Palette, TextEdit } from "std-widgets.slint";
+import "./fonts/FiraCode-Regular.ttf";
+import "./fonts/FiraCode-Bold.ttf";
+
+export global AppColors {
+    out property <color> background: #0a0e0f;
+    out property <color> surface: #121a1d;
+    out property <color> surface-elevated: #1a2428;
+    out property <color> primary-green: #00ff41;
+    out property <color> secondary-green: #00cc33;
+    out property <color> dim-green: #00802a;
+    out property <color> text-primary: #00ff41;
+    out property <color> text-secondary: #7a9e88;
+    out property <color> text-dim: #4a6658;
+    out property <color> border: #1e3a2f;
+}
 
 export struct Message {
     content: string,
@@ -19,7 +34,8 @@ export component MainWindow inherits Window {
     min-height: 400px;
     preferred-width: 1000px;
     preferred-height: 700px;
-    background: Palette.background;
+    background: AppColors.background;
+    default-font-family: "Fira Code";
 
     VerticalBox {
         padding: 16px;
@@ -27,8 +43,10 @@ export component MainWindow inherits Window {
 
         Rectangle {
             height: 32px;
-            background: Palette.alternate-background;
+            background: AppColors.surface;
             border-radius: 4px;
+            border-width: 1px;
+            border-color: AppColors.border;
 
             HorizontalBox {
                 padding-left: 12px;
@@ -39,7 +57,7 @@ export component MainWindow inherits Window {
                     text: "Node: " + node-fingerprint + " | Mode: " + current-mode;
                     font-size: 13px;
                     font-weight: 600;
-                    color: Palette.foreground;
+                    color: AppColors.text-primary;
                     vertical-alignment: center;
                 }
             }
@@ -78,7 +96,7 @@ export component MainWindow inherits Window {
                             width: 80px;
                             text: msg.timestamp;
                             font-size: 11px;
-                            color: Palette.foreground.transparentize(0.3);
+                            color: AppColors.text-dim;
                             horizontal-alignment: right;
                             vertical-alignment: top;
                         }
@@ -86,7 +104,7 @@ export component MainWindow inherits Window {
                         Text {
                             text: msg.content;
                             font-size: 13px;
-                            color: Palette.foreground;
+                            color: AppColors.text-secondary;
                             vertical-alignment: top;
                             wrap: word-wrap;
                             horizontal-stretch: 1;
@@ -98,8 +116,10 @@ export component MainWindow inherits Window {
 
         Rectangle {
             height: 48px;
-            background: Palette.alternate-background;
+            background: AppColors.surface;
             border-radius: 4px;
+            border-width: 1px;
+            border-color: AppColors.border;
 
             HorizontalBox {
                 padding: 8px;
@@ -109,7 +129,7 @@ export component MainWindow inherits Window {
                     text: "[⇌]";
                     font-size: 14px;
                     font-weight: 600;
-                    color: Palette.foreground;
+                    color: AppColors.primary-green;
                     vertical-alignment: center;
                 }
 
