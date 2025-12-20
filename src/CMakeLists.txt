@@ -9,7 +9,7 @@ target_link_libraries(
           radix_relay::signal
           radix_relay::transport
           radix_relay::tui
-          radix_relay::slint_ui)
+          radix_relay::gui)
 
 target_link_system_libraries(
   radix-relay

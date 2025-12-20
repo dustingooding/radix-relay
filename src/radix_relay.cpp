@@ -12,13 +12,11 @@
 #include <core/presentation_processor.hpp>
 #include <core/processor_runner.hpp>
 #include <cstdlib>
-#include <main_window.h>
+#include <gui/processor.hpp>
 #include <nostr/request_tracker.hpp>
 #include <nostr/session_orchestrator.hpp>
 #include <nostr/transport.hpp>
 #include <signal/signal_bridge.hpp>
-#include <slint.h>
-#include <slint_ui/processor.hpp>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <thread>
@@ -99,12 +97,12 @@ auto main(int argc, char **argv) -> int
     });
 
     if (args.ui_mode == "gui") {
-      auto window = MainWindow::create();
-      auto message_model = std::make_shared<slint::VectorModel<Message>>();
+      auto window = gui::make_window();
+      auto message_model = gui::make_message_model();
 
-      slint_ui::processor<bridge_t> slint_processor(
+      gui::processor<bridge_t> gui_processor(
         node_fingerprint, args.mode, bridge, command_queue, display_queue, window, message_model);
-      slint_processor.run();
+      gui_processor.run();
 
       spdlog::debug("GUI exited, posting cancellation signal to io_context thread...");
     } else {

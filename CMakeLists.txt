@@ -86,7 +86,7 @@ add_subdirectory(lib/transport)
 add_subdirectory(lib/platform)
 add_subdirectory(lib/core)
 add_subdirectory(lib/tui)
-add_subdirectory(lib/slint_ui)
+add_subdirectory(lib/gui)
 
 # Adding the src:
 add_subdirectory(src)

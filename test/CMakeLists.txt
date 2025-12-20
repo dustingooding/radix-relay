@@ -83,7 +83,7 @@ add_catch_test(NAME session_orchestrator_tests SOURCES session_orchestrator_test
 add_catch_test(NAME signal_bridge_tests SOURCES signal_bridge_tests.cpp LIBS radix_relay::platform;radix_relay::signal;nlohmann_json::nlohmann_json PREFIX signal)
 add_catch_test(NAME presentation_handler_tests SOURCES presentation_handler_tests.cpp)
 add_catch_test(NAME presentation_processor_tests SOURCES presentation_processor_tests.cpp)
-add_catch_test(NAME slint_ui_processor_tests SOURCES slint_ui_processor_tests.cpp LIBS radix_relay::signal;radix_relay::slint_ui)
+add_catch_test(NAME gui_processor_tests SOURCES gui_processor_tests.cpp LIBS radix_relay::signal;radix_relay::gui)
 add_catch_test(NAME tui_processor_tests SOURCES tui_processor_tests.cpp LIBS radix_relay::signal;radix_relay::tui)
 
 if(MSVC)
