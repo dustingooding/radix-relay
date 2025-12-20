@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-namespace radix_relay::slint_ui {
+namespace radix_relay::gui {
 
 template<concepts::signal_bridge Bridge> struct processor
 {
@@ -68,7 +68,7 @@ template<concepts::signal_bridge Bridge> struct processor
   {
     if (running_.exchange(false)) {
       if (timer_) { timer_.reset(); }
-      spdlog::debug("Slint UI processor stopped");
+      spdlog::debug("GUI processor stopped");
     }
   }
 
@@ -123,4 +123,11 @@ private:
   std::shared_ptr<slint::Timer> timer_;
 };
 
-}// namespace radix_relay::slint_ui
+[[nodiscard]] inline auto make_window() -> slint::ComponentHandle<MainWindow> { return MainWindow::create(); }
+
+[[nodiscard]] inline auto make_message_model() -> std::shared_ptr<slint::VectorModel<Message>>
+{
+  return std::make_shared<slint::VectorModel<Message>>();
+}
+
+}// namespace radix_relay::gui

@@ -2,10 +2,9 @@
 #include <boost/asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <core/events.hpp>
-#include <main_window.h>
+#include <gui/processor.hpp>
 #include <memory>
 #include <slint-testing.h>
-#include <slint_ui/processor.hpp>
 
 #include "test_doubles/test_double_signal_bridge.hpp"
 
@@ -18,7 +17,7 @@ struct slint_test_init
 [[maybe_unused]] const slint_test_init slint_init_once;
 }// namespace
 
-TEST_CASE("processor polls display_queue and updates message model", "[slint_ui][processor]")
+TEST_CASE("processor polls display_queue and updates message model", "[gui][processor]")
 {
 
   auto io_context = std::make_shared<boost::asio::io_context>();
@@ -27,10 +26,10 @@ TEST_CASE("processor polls display_queue and updates message model", "[slint_ui]
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
   auto display_queue =
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
-  auto window = MainWindow::create();
-  auto message_model = std::make_shared<slint::VectorModel<Message>>();
+  auto window = radix_relay::gui::make_window();
+  auto message_model = radix_relay::gui::make_message_model();
 
-  radix_relay::slint_ui::processor<radix_relay_test::test_double_signal_bridge> processor(
+  radix_relay::gui::processor<radix_relay_test::test_double_signal_bridge> processor(
     "RDX:test123", "hybrid", bridge, command_queue, display_queue, window, message_model);
 
   display_queue->push(radix_relay::core::events::display_message{ .message = "Test message 1" });
@@ -41,7 +40,7 @@ TEST_CASE("processor polls display_queue and updates message model", "[slint_ui]
   CHECK(message_model->row_count() == 2);
 }
 
-TEST_CASE("processor handles /quit command", "[slint_ui][processor]")
+TEST_CASE("processor handles /quit command", "[gui][processor]")
 {
   auto io_context = std::make_shared<boost::asio::io_context>();
   auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
@@ -49,10 +48,10 @@ TEST_CASE("processor handles /quit command", "[slint_ui][processor]")
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
   auto display_queue =
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
-  auto window = MainWindow::create();
-  auto message_model = std::make_shared<slint::VectorModel<Message>>();
+  auto window = radix_relay::gui::make_window();
+  auto message_model = radix_relay::gui::make_message_model();
 
-  const radix_relay::slint_ui::processor<radix_relay_test::test_double_signal_bridge> processor(
+  const radix_relay::gui::processor<radix_relay_test::test_double_signal_bridge> processor(
     "RDX:test123", "hybrid", bridge, command_queue, display_queue, window, message_model);
 
   window->invoke_send_command("/quit");
@@ -60,7 +59,7 @@ TEST_CASE("processor handles /quit command", "[slint_ui][processor]")
   CHECK(processor.is_running() == false);
 }
 
-TEST_CASE("processor pushes commands to command queue", "[slint_ui][processor]")
+TEST_CASE("processor pushes commands to command queue", "[gui][processor]")
 {
   auto io_context = std::make_shared<boost::asio::io_context>();
   auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
@@ -68,10 +67,10 @@ TEST_CASE("processor pushes commands to command queue", "[slint_ui][processor]")
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
   auto display_queue =
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
-  auto window = MainWindow::create();
-  auto message_model = std::make_shared<slint::VectorModel<Message>>();
+  auto window = radix_relay::gui::make_window();
+  auto message_model = radix_relay::gui::make_message_model();
 
-  const radix_relay::slint_ui::processor<radix_relay_test::test_double_signal_bridge> processor(
+  const radix_relay::gui::processor<radix_relay_test::test_double_signal_bridge> processor(
     "RDX:test123", "hybrid", bridge, command_queue, display_queue, window, message_model);
 
   window->invoke_send_command("/help");
@@ -81,7 +80,7 @@ TEST_CASE("processor pushes commands to command queue", "[slint_ui][processor]")
   if (cmd.has_value()) { CHECK(cmd->input == "/help"); }
 }
 
-TEST_CASE("processor rate-limits message processing to prevent UI starvation", "[slint_ui][processor]")
+TEST_CASE("processor rate-limits message processing to prevent UI starvation", "[gui][processor]")
 {
   auto io_context = std::make_shared<boost::asio::io_context>();
   auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
@@ -89,10 +88,10 @@ TEST_CASE("processor rate-limits message processing to prevent UI starvation", "
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
   auto display_queue =
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
-  auto window = MainWindow::create();
-  auto message_model = std::make_shared<slint::VectorModel<Message>>();
+  auto window = radix_relay::gui::make_window();
+  auto message_model = radix_relay::gui::make_message_model();
 
-  radix_relay::slint_ui::processor<radix_relay_test::test_double_signal_bridge> processor(
+  radix_relay::gui::processor<radix_relay_test::test_double_signal_bridge> processor(
     "RDX:test123", "hybrid", bridge, command_queue, display_queue, window, message_model);
 
   constexpr std::size_t total_messages = 25;
