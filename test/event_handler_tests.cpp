@@ -13,11 +13,11 @@ SCENARIO("Event handler processes raw command events correctly", "[events][handl
 
     WHEN("handling simple raw commands")
     {
-      auto help_event = radix_relay::core::events::raw_command{ .input = "help" };
-      auto version_event = radix_relay::core::events::raw_command{ .input = "version" };
-      auto peers_event = radix_relay::core::events::raw_command{ .input = "peers" };
-      auto identities_event = radix_relay::core::events::raw_command{ .input = "identities" };
-      auto publish_event = radix_relay::core::events::raw_command{ .input = "publish" };
+      auto help_event = radix_relay::core::events::raw_command{ .input = "/help" };
+      auto version_event = radix_relay::core::events::raw_command{ .input = "/version" };
+      auto peers_event = radix_relay::core::events::raw_command{ .input = "/peers" };
+      auto identities_event = radix_relay::core::events::raw_command{ .input = "/identities" };
+      auto publish_event = radix_relay::core::events::raw_command{ .input = "/publish" };
 
       THEN("handler should parse and route commands correctly")
       {
@@ -44,11 +44,11 @@ SCENARIO("Event handler processes raw command events correctly", "[events][handl
 
     WHEN("handling parameterized raw commands")
     {
-      auto mode_event = radix_relay::core::events::raw_command{ .input = "mode internet" };
-      auto send_event = radix_relay::core::events::raw_command{ .input = "send alice hello" };
-      auto broadcast_event = radix_relay::core::events::raw_command{ .input = "broadcast test message" };
-      auto connect_event = radix_relay::core::events::raw_command{ .input = "connect wss://relay.example.com" };
-      auto disconnect_event = radix_relay::core::events::raw_command{ .input = "disconnect" };
+      auto mode_event = radix_relay::core::events::raw_command{ .input = "/mode internet" };
+      auto send_event = radix_relay::core::events::raw_command{ .input = "/send alice hello" };
+      auto broadcast_event = radix_relay::core::events::raw_command{ .input = "/broadcast test message" };
+      auto connect_event = radix_relay::core::events::raw_command{ .input = "/connect wss://relay.example.com" };
+      auto disconnect_event = radix_relay::core::events::raw_command{ .input = "/disconnect" };
 
       THEN("handler should parse parameters correctly and route to command handler")
       {
@@ -89,8 +89,8 @@ SCENARIO("Event handler processes raw command events correctly", "[events][handl
     WHEN("handling malformed raw commands")
     {
       auto empty_event = radix_relay::core::events::raw_command{ .input = "" };
-      auto incomplete_send = radix_relay::core::events::raw_command{ .input = "send alice" };
-      auto incomplete_mode = radix_relay::core::events::raw_command{ .input = "mode" };
+      auto incomplete_send = radix_relay::core::events::raw_command{ .input = "/send alice" };
+      auto incomplete_mode = radix_relay::core::events::raw_command{ .input = "/mode" };
 
       THEN("handler should process gracefully and route malformed send commands")
       {

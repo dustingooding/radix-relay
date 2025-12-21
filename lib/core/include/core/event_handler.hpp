@@ -36,50 +36,50 @@ template<concepts::command_handler CmdHandler> struct event_handler
   {
     const auto &input = event.input;
 
-    if (input == "help") {
+    if (input == "/help") {
       command_handler_->handle(events::help{});
       return;
     }
-    if (input == "peers") {
+    if (input == "/peers") {
       command_handler_->handle(events::peers{});
       return;
     }
-    if (input == "status") {
+    if (input == "/status") {
       command_handler_->handle(events::status{});
       return;
     }
-    if (input == "sessions") {
+    if (input == "/sessions") {
       command_handler_->handle(events::sessions{});
       return;
     }
-    if (input == "scan") {
+    if (input == "/scan") {
       command_handler_->handle(events::scan{});
       return;
     }
-    if (input == "version") {
+    if (input == "/version") {
       command_handler_->handle(events::version{});
       return;
     }
-    if (input == "identities") {
+    if (input == "/identities") {
       command_handler_->handle(events::identities{});
       return;
     }
-    if (input == "publish") {
+    if (input == "/publish") {
       command_handler_->handle(events::publish_identity{});
       return;
     }
-    if (input == "unpublish") {
+    if (input == "/unpublish") {
       command_handler_->handle(events::unpublish_identity{});
       return;
     }
 
-    constexpr auto mode_cmd = "mode ";
+    constexpr auto mode_cmd = "/mode ";
     if (input.starts_with(mode_cmd)) {
       command_handler_->handle(events::mode{ .new_mode = input.substr(std::string_view(mode_cmd).length()) });
       return;
     }
 
-    constexpr auto send_cmd = "send ";
+    constexpr auto send_cmd = "/send ";
     if (input.starts_with(send_cmd)) {
       const auto args = input.substr(std::string_view(send_cmd).length());
       const auto first_space = args.find(' ');
@@ -92,24 +92,24 @@ template<concepts::command_handler CmdHandler> struct event_handler
       return;
     }
 
-    constexpr auto broadcast_cmd = "broadcast ";
+    constexpr auto broadcast_cmd = "/broadcast ";
     if (input.starts_with(broadcast_cmd)) {
       command_handler_->handle(events::broadcast{ .message = input.substr(std::string_view(broadcast_cmd).length()) });
       return;
     }
 
-    constexpr auto connect_cmd = "connect ";
+    constexpr auto connect_cmd = "/connect ";
     if (input.starts_with(connect_cmd)) {
       command_handler_->handle(events::connect{ .relay = input.substr(std::string_view(connect_cmd).length()) });
       return;
     }
 
-    if (input == "disconnect") {
+    if (input == "/disconnect") {
       command_handler_->handle(events::disconnect{});
       return;
     }
 
-    constexpr auto trust_cmd = "trust ";
+    constexpr auto trust_cmd = "/trust ";
     if (input.starts_with(trust_cmd)) {
       const auto args = input.substr(std::string_view(trust_cmd).length());
       const auto first_space = args.find(' ');
@@ -122,7 +122,7 @@ template<concepts::command_handler CmdHandler> struct event_handler
       return;
     }
 
-    constexpr auto verify_cmd = "verify ";
+    constexpr auto verify_cmd = "/verify ";
     if (input.starts_with(verify_cmd)) {
       command_handler_->handle(events::verify{ .peer = input.substr(std::string_view(verify_cmd).length()) });
       return;
