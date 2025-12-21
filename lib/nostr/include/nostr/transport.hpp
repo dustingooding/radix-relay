@@ -201,7 +201,9 @@ private:
     try {
       parse_url(evt.url);
     } catch (const std::runtime_error &e) {
-      core::events::transport::connect_failed failed{ .url = evt.url, .error_message = e.what() };
+      core::events::transport::connect_failed failed{
+        .url = evt.url, .error_message = e.what(), .type = core::events::transport_type::internet
+      };
       emit_event(std::move(failed));
       return;
     }
@@ -211,10 +213,13 @@ private:
         if (not error_code) {
           connected_ = true;
           start_read();
-          core::events::transport::connected connected_evt{ .url = url };
+          core::events::transport::connected connected_evt{ .url = url,
+            .type = core::events::transport_type::internet };
           emit_event(std::move(connected_evt));
         } else {
-          core::events::transport::connect_failed failed{ .url = url, .error_message = error_code.message() };
+          core::events::transport::connect_failed failed{
+            .url = url, .error_message = error_code.message(), .type = core::events::transport_type::internet
+          };
           emit_event(std::move(failed));
         }
       });
@@ -228,7 +233,9 @@ private:
   auto handle(const core::events::transport::send &evt) noexcept -> void
   {
     if (not connected_) {
-      core::events::transport::send_failed failed{ .message_id = evt.message_id, .error_message = "Not connected" };
+      core::events::transport::send_failed failed{
+        .message_id = evt.message_id, .error_message = "Not connected", .type = core::events::transport_type::internet
+      };
       emit_event(std::move(failed));
       return;
     }
@@ -237,7 +244,9 @@ private:
     try {
       data = std::make_shared<std::vector<std::byte>>(evt.bytes);
     } catch (const std::bad_alloc &e) {
-      core::events::transport::send_failed failed{ .message_id = evt.message_id, .error_message = e.what() };
+      core::events::transport::send_failed failed{
+        .message_id = evt.message_id, .error_message = e.what(), .type = core::events::transport_type::internet
+      };
       emit_event(std::move(failed));
       return;
     }
@@ -248,11 +257,14 @@ private:
       [this, data, message_id](const boost::system::error_code &error, std::size_t bytes_transferred) {
         if (error) {
           spdlog::error("[transport] Write failed: {} (attempted {} bytes)", error.message(), data->size());
-          core::events::transport::send_failed failed{ .message_id = message_id, .error_message = error.message() };
+          core::events::transport::send_failed failed{
+            .message_id = message_id, .error_message = error.message(), .type = core::events::transport_type::internet
+          };
           emit_event(std::move(failed));
         } else {
           spdlog::trace("[transport] Wrote {} bytes", bytes_transferred);
-          core::events::transport::sent sent_evt{ .message_id = message_id };
+          core::events::transport::sent sent_evt{ .message_id = message_id,
+            .type = core::events::transport_type::internet };
           emit_event(std::move(sent_evt));
         }
       });
@@ -268,11 +280,11 @@ private:
     if (connected_) {
       connected_ = false;
       ws_->async_close([this](const boost::system::error_code & /*error*/, std::size_t /*bytes*/) {
-        core::events::transport::disconnected evt{};
+        core::events::transport::disconnected evt{ .type = core::events::transport_type::internet };
         emit_event(evt);
       });
     } else {
-      core::events::transport::disconnected evt{};
+      core::events::transport::disconnected evt{ .type = core::events::transport_type::internet };
       emit_event(evt);
     }
   }

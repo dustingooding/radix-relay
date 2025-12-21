@@ -59,6 +59,7 @@ struct session_orchestrator : public std::enable_shared_from_this<session_orches
    * @param in_queue Queue for incoming session orchestrator events
    * @param transport_out_queue Queue for outgoing transport commands
    * @param presentation_out_queue Queue for outgoing presentation events
+   * @param connection_monitor_out_queue Queue for outgoing transport status events
    * @param timeout Default timeout for relay requests
    */
   session_orchestrator(const std::shared_ptr<Bridge> &bridge,
@@ -67,9 +68,11 @@ struct session_orchestrator : public std::enable_shared_from_this<session_orches
     const std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> &in_queue,
     const std::shared_ptr<async::async_queue<core::events::transport::in_t>> &transport_out_queue,
     const std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> &presentation_out_queue,
+    const std::shared_ptr<async::async_queue<core::events::connection_monitor::in_t>> &connection_monitor_out_queue,
     std::chrono::milliseconds timeout = std::chrono::seconds(15))
     : bridge_(bridge), handler_(bridge_), tracker_(tracker), request_timeout_(timeout), io_context_(io_context),
-      in_queue_(in_queue), transport_out_queue_(transport_out_queue), presentation_out_queue_(presentation_out_queue)
+      in_queue_(in_queue), transport_out_queue_(transport_out_queue), presentation_out_queue_(presentation_out_queue),
+      connection_monitor_out_queue_(connection_monitor_out_queue)
   {}
 
   /**
@@ -129,6 +132,7 @@ private:
   std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> in_queue_;
   std::shared_ptr<async::async_queue<core::events::transport::in_t>> transport_out_queue_;
   std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> presentation_out_queue_;
+  std::shared_ptr<async::async_queue<core::events::connection_monitor::in_t>> connection_monitor_out_queue_;
   std::vector<discovered_bundle> discovered_bundles_;
 
   /**
@@ -146,6 +150,16 @@ private:
   auto emit_presentation_event(core::events::presentation_event_variant_t evt) -> void
   {
     presentation_out_queue_->push(std::move(evt));
+  }
+
+  /**
+   * @brief Emits a transport status event for connection monitoring.
+   *
+   * @param evt Event to forward to connection monitor
+   */
+  auto emit_connection_monitor_event(core::events::connection_monitor::in_t evt) -> void
+  {
+    connection_monitor_out_queue_->push(std::move(evt));
   }
 
   /**
@@ -568,8 +582,10 @@ private:
    *
    * @param evt Connected event from transport
    */
-  auto handle(const core::events::transport::connected & /*evt*/) -> void
+  auto handle(const core::events::transport::connected &evt) -> void
   {
+    emit_connection_monitor_event(evt);
+
     spdlog::info("[session_orchestrator] Transport connected, performing key maintenance");
     auto maintenance_result = bridge_->perform_key_maintenance();
 
@@ -590,6 +606,8 @@ private:
    */
   auto handle(const core::events::transport::connect_failed &evt) -> void
   {
+    emit_connection_monitor_event(evt);
+
     spdlog::error("[session_orchestrator] Transport connect failed: {}", evt.error_message);
     std::ignore = bridge_;
   }
@@ -612,6 +630,8 @@ private:
    */
   auto handle(const core::events::transport::send_failed &evt) -> void
   {
+    emit_connection_monitor_event(evt);
+
     spdlog::error("[session_orchestrator] Transport send failed: {}", evt.error_message);
     std::ignore = bridge_;
   }
@@ -621,8 +641,10 @@ private:
    *
    * @param evt Disconnected event from transport
    */
-  auto handle(const core::events::transport::disconnected & /*evt*/) -> void
+  auto handle(const core::events::transport::disconnected &evt) -> void
   {
+    emit_connection_monitor_event(evt);
+
     spdlog::info("[session_orchestrator] Transport disconnected");
     std::ignore = bridge_;
   }

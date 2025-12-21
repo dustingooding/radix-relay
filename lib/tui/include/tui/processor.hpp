@@ -60,7 +60,7 @@ template<concepts::signal_bridge Bridge> struct processor
     print_message("Node: " + node_id_);
     print_message("Mode: " + mode_);
     print_message("");
-    print_message("Type 'help' for available commands, 'quit' to exit");
+    print_message("Type '/help' for available commands, '/quit' to exit");
     print_message("");
 
     running_.store(true);
@@ -87,7 +87,7 @@ template<concepts::signal_bridge Bridge> struct processor
 
       if (command.empty()) { continue; }
 
-      if (command == "quit" or command == "exit" or command == "q") {
+      if (command == "/quit" or command == "/exit" or command == "/q") {
         print_message("Goodbye!");
         running_.store(false);
         break;
@@ -134,9 +134,18 @@ private:
     rx_.set_completion_callback([](const std::string &input, int & /*context*/) {
       replxx::Replxx::completions_t completions;
 
-      std::vector<std::string> commands = {
-        "connect", "send", "trust", "list", "publish", "unpublish", "subscribe", "help", "mode", "quit", "exit"
-      };
+      std::vector<std::string> commands = { "/connect",
+        "/send",
+        "/trust",
+        "/list",
+        "/publish",
+        "/unpublish",
+        "/subscribe",
+        "/help",
+        "/mode",
+        "/quit",
+        "/exit",
+        "/status" };
 
       std::copy_if(commands.begin(), commands.end(), std::back_inserter(completions), [&input](const std::string &cmd) {
         return cmd.starts_with(input);

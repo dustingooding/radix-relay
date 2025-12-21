@@ -55,6 +55,7 @@ SCENARIO("Queue-based transport processes connect command", "[nostr][transport][
         REQUIRE(std::holds_alternative<core::events::transport::connected>(event));
         const auto &connected_evt = std::get<core::events::transport::connected>(event);
         REQUIRE(connected_evt.url == "wss://relay.damus.io");
+        REQUIRE(connected_evt.type == core::events::transport_type::internet);
       }
     }
   }

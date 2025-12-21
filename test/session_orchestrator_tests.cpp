@@ -36,6 +36,7 @@ template<typename Bridge> struct orchestrator_fixture
   std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> in_queue;
   std::shared_ptr<async::async_queue<core::events::transport::in_t>> transport_out_queue;
   std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> presentation_out_queue;
+  std::shared_ptr<async::async_queue<core::events::connection_monitor::in_t>> connection_monitor_out_queue;
   std::shared_ptr<radix_relay::nostr::session_orchestrator<Bridge, radix_relay::nostr::request_tracker>> orchestrator;
   std::string db_path;
 
@@ -56,6 +57,8 @@ template<typename Bridge> struct orchestrator_fixture
     transport_out_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
     presentation_out_queue =
       std::make_shared<async::async_queue<core::events::presentation_event_variant_t>>(io_context);
+    connection_monitor_out_queue =
+      std::make_shared<async::async_queue<core::events::connection_monitor::in_t>>(io_context);
     orchestrator =
       std::make_shared<radix_relay::nostr::session_orchestrator<Bridge, radix_relay::nostr::request_tracker>>(bridge,
         tracker,
@@ -63,6 +66,7 @@ template<typename Bridge> struct orchestrator_fixture
         in_queue,
         transport_out_queue,
         presentation_out_queue,
+        connection_monitor_out_queue,
         std::chrono::milliseconds(short_timeout));
   }
 
@@ -102,6 +106,7 @@ struct two_bridge_fixture
   std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> alice_in;
   std::shared_ptr<async::async_queue<core::events::transport::in_t>> alice_transport_out;
   std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> alice_presentation_out;
+  std::shared_ptr<async::async_queue<core::events::connection_monitor::in_t>> alice_transport_status_out;
   std::shared_ptr<radix_relay::nostr::request_tracker> alice_tracker;
   std::shared_ptr<
     radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>
@@ -110,6 +115,7 @@ struct two_bridge_fixture
   std::shared_ptr<boost::asio::io_context> bob_io;
   std::shared_ptr<async::async_queue<core::events::session_orchestrator::in_t>> bob_in;
   std::shared_ptr<async::async_queue<core::events::transport::in_t>> bob_transport_out;
+  std::shared_ptr<async::async_queue<core::events::connection_monitor::in_t>> bob_transport_status_out;
   std::shared_ptr<async::async_queue<core::events::presentation_event_variant_t>> bob_presentation_out;
   std::shared_ptr<radix_relay::nostr::request_tracker> bob_tracker;
   std::shared_ptr<
@@ -142,6 +148,7 @@ struct two_bridge_fixture
     alice_in = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(alice_io);
     alice_transport_out = std::make_shared<async::async_queue<core::events::transport::in_t>>(alice_io);
     alice_presentation_out = std::make_shared<async::async_queue<core::events::presentation_event_variant_t>>(alice_io);
+    alice_transport_status_out = std::make_shared<async::async_queue<core::events::connection_monitor::in_t>>(alice_io);
     alice_tracker = std::make_shared<radix_relay::nostr::request_tracker>(alice_io);
     alice_orch = std::make_shared<
       radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
@@ -151,12 +158,14 @@ struct two_bridge_fixture
       alice_in,
       alice_transport_out,
       alice_presentation_out,
+      alice_transport_status_out,
       std::chrono::milliseconds(short_timeout));
 
     bob_io = std::make_shared<boost::asio::io_context>();
     bob_in = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(bob_io);
     bob_transport_out = std::make_shared<async::async_queue<core::events::transport::in_t>>(bob_io);
     bob_presentation_out = std::make_shared<async::async_queue<core::events::presentation_event_variant_t>>(bob_io);
+    bob_transport_status_out = std::make_shared<async::async_queue<core::events::connection_monitor::in_t>>(bob_io);
     bob_tracker = std::make_shared<radix_relay::nostr::request_tracker>(bob_io);
     bob_orch = std::make_shared<
       radix_relay::nostr::session_orchestrator<radix_relay::signal::bridge, radix_relay::nostr::request_tracker>>(
@@ -166,6 +175,7 @@ struct two_bridge_fixture
       bob_in,
       bob_transport_out,
       bob_presentation_out,
+      bob_transport_status_out,
       std::chrono::milliseconds(short_timeout));
   }
 
@@ -304,7 +314,8 @@ TEST_CASE("Queue-based session_orchestrator processes transport sent event", "[c
 {
   const test_double_fixture_t fixture;
 
-  fixture.in_queue->push(core::events::transport::sent{ .message_id = "test_msg_id" });
+  fixture.in_queue->push(
+    core::events::transport::sent{ .message_id = "test_msg_id", .type = core::events::transport_type::internet });
 
   boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
 
@@ -319,8 +330,8 @@ TEST_CASE("Queue-based session_orchestrator processes transport send_failed even
 {
   const test_double_fixture_t fixture;
 
-  fixture.in_queue->push(
-    core::events::transport::send_failed{ .message_id = "test_msg_id", .error_message = "test reason" });
+  fixture.in_queue->push(core::events::transport::send_failed{
+    .message_id = "test_msg_id", .error_message = "test reason", .type = core::events::transport_type::internet });
 
   boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
 
@@ -335,7 +346,8 @@ TEST_CASE("Queue-based session_orchestrator processes transport connect_failed e
 {
   const test_double_fixture_t fixture;
 
-  fixture.in_queue->push(core::events::transport::connect_failed{ .url = "test_url", .error_message = "test reason" });
+  fixture.in_queue->push(core::events::transport::connect_failed{
+    .url = "test_url", .error_message = "test reason", .type = core::events::transport_type::internet });
 
   boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
 
@@ -496,7 +508,8 @@ TEST_CASE("session_orchestrator sends subscriptions when transport connects", "[
 {
   const test_double_fixture_t fixture;
 
-  fixture.in_queue->push(core::events::transport::connected{ .url = "wss://relay.example.com" });
+  fixture.in_queue->push(core::events::transport::connected{
+    .url = "wss://relay.example.com", .type = core::events::transport_type::internet });
 
   boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
   fixture.io_context->run();
@@ -1130,7 +1143,8 @@ TEST_CASE("session_orchestrator republishes bundle on connection if keys rotated
   fixture.bridge->set_maintenance_result(
     { .signed_pre_key_rotated = true, .kyber_pre_key_rotated = false, .pre_keys_replenished = false });
 
-  fixture.in_queue->push(core::events::transport::connected{ .url = "wss://relay.example.com" });
+  fixture.in_queue->push(core::events::transport::connected{
+    .url = "wss://relay.example.com", .type = core::events::transport_type::internet });
 
   boost::asio::co_spawn(*fixture.io_context, fixture.orchestrator->run_once(), boost::asio::detached);
   fixture.io_context->run();
