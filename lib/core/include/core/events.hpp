@@ -196,6 +196,9 @@ struct subscription_established
   std::string subscription_id;///< Subscription identifier
 };
 
+/// Transport type discriminator
+enum class transport_type { internet, bluetooth };
+
 /// Transport layer events and commands
 namespace transport {
 
@@ -209,6 +212,7 @@ namespace transport {
   struct connected
   {
     std::string url;///< Connected transport endpoint URL
+    transport_type type;///< Type of transport
   };
 
   /// Notification of failed connection attempt
@@ -216,6 +220,7 @@ namespace transport {
   {
     std::string url;///< Transport endpoint URL
     std::string error_message;///< Failure reason
+    transport_type type;///< Type of transport
   };
 
   /// Command to send data through transport
@@ -229,6 +234,7 @@ namespace transport {
   struct sent
   {
     std::string message_id;///< Message identifier
+    transport_type type;///< Type of transport
   };
 
   /// Notification of failed send attempt
@@ -236,6 +242,7 @@ namespace transport {
   {
     std::string message_id;///< Message identifier
     std::string error_message;///< Failure reason
+    transport_type type;///< Type of transport
   };
 
   /// Notification of received data from transport
@@ -252,6 +259,7 @@ namespace transport {
   /// Notification of disconnection
   struct disconnected
   {
+    transport_type type;///< Type of transport
   };
 
   /// Concept for transport command types
@@ -267,6 +275,21 @@ namespace transport {
   using in_t = std::variant<connect, send, disconnect>;
 
 }// namespace transport
+
+namespace connection_monitor {
+  /// Request current connection status
+  struct query_status
+  {
+  };
+
+  /// Variant type for connection monitor input events
+  using in_t = std::variant<transport::connected,
+    transport::connect_failed,
+    transport::disconnected,
+    transport::send_failed,
+    query_status>;
+
+}// namespace connection_monitor
 
 /// Concept for user command event types
 template<typename T>

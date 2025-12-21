@@ -8,6 +8,7 @@
 #include "test_doubles/test_double_signal_bridge.hpp"
 #include <async/async_queue.hpp>
 #include <core/command_handler.hpp>
+#include <core/connection_monitor.hpp>
 #include <core/events.hpp>
 #include <platform/env_utils.hpp>
 #include <signal/signal_bridge.hpp>
@@ -20,6 +21,8 @@ struct command_handler_fixture
   std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::session_orchestrator::in_t>>
     session_out_queue;
   std::shared_ptr<radix_relay_test::test_double_signal_bridge> bridge;
+  std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::connection_monitor::in_t>>
+    connection_monitor_queue;
   radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge> handler;
 
   command_handler_fixture()
@@ -32,7 +35,10 @@ struct command_handler_fixture
         std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::session_orchestrator::in_t>>(
           io_context)),
       bridge(std::make_shared<radix_relay_test::test_double_signal_bridge>()),
-      handler(bridge, display_out_queue, transport_out_queue, session_out_queue)
+      connection_monitor_queue(
+        std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::connection_monitor::in_t>>(
+          io_context)),
+      handler(bridge, display_out_queue, transport_out_queue, session_out_queue, connection_monitor_queue)
   {}
 
   [[nodiscard]] auto get_all_output() const -> std::string
@@ -89,14 +95,20 @@ SCENARIO("Command handler processes simple commands correctly", "[commands][hand
     {
       auto status_command = radix_relay::core::events::status{};
 
-      THEN("handler outputs network and crypto status")
+      THEN("handler forwards query to connection monitor and outputs crypto status")
       {
         const command_handler_fixture fixture;
         fixture.handler.handle(status_command);
+
+        auto monitor_event = fixture.connection_monitor_queue->try_pop();
+        REQUIRE(monitor_event.has_value());
+        if (monitor_event.has_value()) {
+          CHECK(std::holds_alternative<radix_relay::core::events::connection_monitor::query_status>(*monitor_event));
+        }
+
         const auto output = fixture.get_all_output();
-        REQUIRE(output.find("Network Status") != std::string::npos);
-        REQUIRE(output.find("Node Fingerprint") != std::string::npos);
-        REQUIRE(output.find("RDX:") != std::string::npos);
+        CHECK(output.find("Node Fingerprint") != std::string::npos);
+        CHECK(output.find("RDX:") != std::string::npos);
       }
     }
 

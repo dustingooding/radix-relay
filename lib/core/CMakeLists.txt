@@ -3,7 +3,8 @@ configure_file("configured_files/config.hpp.in" "${CMAKE_CURRENT_BINARY_DIR}/inc
 
 # Core library with concepts, utilities, and event handling
 add_library(radix_relay_core
-  src/uuid_generator.cpp)
+  src/uuid_generator.cpp
+  src/connection_monitor.cpp)
 
 add_library(radix_relay::core ALIAS radix_relay_core)
 

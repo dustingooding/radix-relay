@@ -6,6 +6,8 @@
 #include <cli_utils/cli_parser.hpp>
 #include <core/command_handler.hpp>
 #include <core/command_processor.hpp>
+#include <core/connection_monitor.hpp>
+#include <core/connection_monitor_processor.hpp>
 #include <core/event_handler.hpp>
 #include <core/events.hpp>
 #include <core/presentation_handler.hpp>
@@ -46,9 +48,13 @@ auto main(int argc, char **argv) -> int
     auto transport_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
     auto session_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
     auto command_queue = std::make_shared<async::async_queue<core::events::raw_command>>(io_context);
+    auto connection_monitor_queue =
+      std::make_shared<async::async_queue<core::events::connection_monitor::in_t>>(io_context);
 
-    auto command_handler =
-      std::make_shared<core::command_handler<bridge_t>>(bridge, display_queue, transport_queue, session_queue);
+    auto connection_monitor = std::make_shared<core::connection_monitor>(display_queue);
+
+    auto command_handler = std::make_shared<core::command_handler<bridge_t>>(
+      bridge, display_queue, transport_queue, session_queue, connection_monitor_queue);
 
     if (cli_utils::execute_cli_command(args, command_handler)) {
       cli_utils::configure_logging(args);
@@ -60,11 +66,19 @@ auto main(int argc, char **argv) -> int
     auto presentation_event_queue =
       std::make_shared<async::async_queue<core::events::presentation_event_variant_t>>(io_context);
 
+    auto connection_monitor_proc =
+      std::make_shared<core::connection_monitor_processor>(io_context, connection_monitor_queue, connection_monitor);
+
     auto request_tracker = std::make_shared<nostr::request_tracker>(io_context);
     auto websocket = std::make_shared<transport::websocket_stream>(io_context);
 
-    auto orchestrator = std::make_shared<nostr::session_orchestrator<bridge_t, nostr::request_tracker>>(
-      bridge, request_tracker, io_context, session_queue, transport_queue, presentation_event_queue);
+    auto orchestrator = std::make_shared<nostr::session_orchestrator<bridge_t, nostr::request_tracker>>(bridge,
+      request_tracker,
+      io_context,
+      session_queue,
+      transport_queue,
+      presentation_event_queue,
+      connection_monitor_queue);
 
     auto transport = std::make_shared<nostr::transport<transport::websocket_stream>>(
       websocket, io_context, transport_queue, session_queue);
@@ -89,6 +103,8 @@ auto main(int argc, char **argv) -> int
     auto cmd_proc_state = core::spawn_processor(io_context, cmd_processor, cancel_slot, "command_processor");
     auto presentation_proc_state =
       core::spawn_processor(io_context, presentation_evt_processor, cancel_slot, "presentation_processor");
+    auto conn_mon_proc_state =
+      core::spawn_processor(io_context, connection_monitor_proc, cancel_slot, "connection_monitor_processor");
 
     std::thread io_thread([&io_context]() -> void {
       spdlog::debug("io_context thread started");
@@ -123,18 +139,20 @@ auto main(int argc, char **argv) -> int
     session_queue->close();
     transport_queue->close();
     presentation_event_queue->close();
+    connection_monitor_queue->close();
 
     spdlog::debug("Waiting for coroutines to complete...");
     auto start = std::chrono::steady_clock::now();
     constexpr auto timeout = std::chrono::seconds(2);
     while ((orch_state->started != orch_state->done) or (transport_state->started != transport_state->done)
            or (cmd_proc_state->started != cmd_proc_state->done)
-           or (presentation_proc_state->started != presentation_proc_state->done)) {
+           or (presentation_proc_state->started != presentation_proc_state->done)
+           or (conn_mon_proc_state->started != conn_mon_proc_state->done)) {
       const auto coroutine_complete_wait{ 10 };
       std::this_thread::sleep_for(std::chrono::milliseconds(coroutine_complete_wait));
       if (std::chrono::steady_clock::now() - start > timeout) {
         spdlog::warn("Timeout waiting for coroutines to complete, forcing shutdown");
-        spdlog::debug("Coroutine states: orch({}/{}), transport({}/{}), cmd({}/{}), evt({}/{})",
+        spdlog::debug("Coroutine states: orch({}/{}), transport({}/{}), cmd({}/{}), pres({}/{}), conn_mon({}/{})",
           orch_state->started.load(),
           orch_state->done.load(),
           transport_state->started.load(),
@@ -142,7 +160,9 @@ auto main(int argc, char **argv) -> int
           cmd_proc_state->started.load(),
           cmd_proc_state->done.load(),
           presentation_proc_state->started.load(),
-          presentation_proc_state->done.load());
+          presentation_proc_state->done.load(),
+          conn_mon_proc_state->started.load(),
+          conn_mon_proc_state->done.load());
         break;
       }
     }

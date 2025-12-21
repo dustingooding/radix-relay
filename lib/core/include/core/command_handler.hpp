@@ -28,13 +28,15 @@ template<concepts::signal_bridge Bridge> struct command_handler
    * @param display_out_queue Queue for display messages
    * @param transport_out_queue Queue for transport commands
    * @param session_out_queue Queue for session orchestrator commands
+   * @param connection_monitor_out_queue Queue for connection monitor commands
    */
   explicit command_handler(const std::shared_ptr<Bridge> &bridge,
     const std::shared_ptr<async::async_queue<events::display_message>> &display_out_queue,
     const std::shared_ptr<async::async_queue<events::transport::in_t>> &transport_out_queue,
-    const std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> &session_out_queue)
+    const std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> &session_out_queue,
+    const std::shared_ptr<async::async_queue<events::connection_monitor::in_t>> &connection_monitor_out_queue)
     : bridge_(bridge), display_out_queue_(display_out_queue), transport_out_queue_(transport_out_queue),
-      session_out_queue_(session_out_queue)
+      session_out_queue_(session_out_queue), connection_monitor_out_queue_(connection_monitor_out_queue)
   {}
 
   /**
@@ -91,17 +93,11 @@ private:
   auto handle_impl(const events::status & /*command*/) const -> void
   {
     std::ignore = initialized_;
-    emit(
-      "Network Status:\n"
-      "  Internet: Not connected\n"
-      "  BLE Mesh: Not initialized\n"
-      "  Active Sessions: 0\n");
+
+    connection_monitor_out_queue_->push(events::connection_monitor::query_status{});
 
     std::string node_fingerprint = bridge_->get_node_fingerprint();
-    emit(
-      "\nCrypto Status:\n"
-      "  Node Fingerprint: {}\n",
-      node_fingerprint);
+    emit("\nCrypto Status:\n  Node Fingerprint: {}\n", node_fingerprint);
   }
 
   auto handle_impl(const events::sessions & /*command*/) const -> void
@@ -232,6 +228,7 @@ private:
   std::shared_ptr<async::async_queue<events::display_message>> display_out_queue_;
   std::shared_ptr<async::async_queue<events::transport::in_t>> transport_out_queue_;
   std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> session_out_queue_;
+  std::shared_ptr<async::async_queue<events::connection_monitor::in_t>> connection_monitor_out_queue_;
   bool initialized_ = true;
 };
 
