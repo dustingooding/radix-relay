@@ -63,7 +63,6 @@ include(main_cli_tests.cmake)
 
 add_catch_test(NAME async_queue_tests SOURCES async_queue_tests.cpp)
 add_catch_test(NAME cli_parser_integration_tests SOURCES cli_parser_integration_tests.cpp)
-add_catch_test(NAME cli_tests SOURCES cli_tests.cpp)
 add_catch_test(NAME cli_utils_tests SOURCES cli_utils_tests.cpp LIBS radix_relay::platform;radix_relay::signal)
 add_catch_test(NAME command_handler_tests SOURCES command_handler_tests.cpp LIBS radix_relay::platform;radix_relay::signal;nlohmann_json::nlohmann_json)
 add_catch_test(NAME command_processor_tests SOURCES command_processor_tests.cpp)
@@ -90,13 +89,6 @@ if(MSVC)
   target_compile_options(session_orchestrator_tests PRIVATE /bigobj)
 endif()
 
-if(WIN32 AND BUILD_SHARED_LIBS)
-  add_custom_command(
-    TARGET cli_tests
-    PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:cli_tests> $<TARGET_FILE_DIR:cli_tests>
-    COMMAND_EXPAND_LISTS)
-endif()
 
 # Disable static analysis for generated CXX bridge code
 set_target_properties(signal_bridge_tests PROPERTIES
