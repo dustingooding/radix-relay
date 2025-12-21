@@ -166,7 +166,7 @@ private:
    */
   auto process_command(const std::string &input) -> void
   {
-    constexpr auto mode_cmd = "mode ";
+    constexpr auto mode_cmd = "/mode ";
     if (input.starts_with(mode_cmd)) {
       const auto new_mode = input.substr(std::string_view(mode_cmd).length());
       if (new_mode == "internet" or new_mode == "mesh" or new_mode == "hybrid") {
