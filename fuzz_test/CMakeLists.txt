@@ -3,21 +3,20 @@
 
 find_package(fmt)
 
-add_executable(fuzz_tester fuzz_tester.cpp)
+add_executable(fuzz_event_handler fuzz_event_handler.cpp)
 target_link_libraries(
-  fuzz_tester
+  fuzz_event_handler
   PRIVATE radix_relay_options
           radix_relay_warnings
           radix_relay::core
-          radix_relay::signal
           fmt::fmt
           -coverage
           -fsanitize=fuzzer)
-target_compile_options(fuzz_tester PRIVATE -fsanitize=fuzzer)
+target_compile_options(fuzz_event_handler PRIVATE -fsanitize=fuzzer)
 
 # Allow short runs during automated testing to see if something new breaks
 set(FUZZ_RUNTIME
     10
     CACHE STRING "Number of seconds to run fuzz tests during ctest run") # Default of 10 seconds
 
-add_test(NAME fuzz_tester_run COMMAND fuzz_tester -max_total_time=${FUZZ_RUNTIME})
+add_test(NAME fuzz_event_handler_run COMMAND fuzz_event_handler -max_total_time=${FUZZ_RUNTIME})
