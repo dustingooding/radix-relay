@@ -117,8 +117,12 @@ TEST_CASE("execute_cli_command handles version flag", "[cli_utils][app_init]")
     auto connection_monitor_queue =
       std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::connection_monitor::in_t>>(
         io_context);
-    auto command_handler = std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(
-      bridge_wrapper, output_queue, transport_queue, session_queue, connection_monitor_queue);
+    auto command_handler =
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper,
+        radix_relay::core::command_handler<radix_relay::signal::bridge>::out_queues_t{ .display = output_queue,
+          .transport = transport_queue,
+          .session = session_queue,
+          .connection_monitor = connection_monitor_queue });
     radix_relay::cli_utils::cli_args args;
     args.show_version = true;
 
@@ -143,8 +147,12 @@ TEST_CASE("execute_cli_command handles send command", "[cli_utils][app_init]")
     auto connection_monitor_queue =
       std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::connection_monitor::in_t>>(
         io_context);
-    auto command_handler = std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(
-      bridge_wrapper, output_queue, transport_queue, session_queue, connection_monitor_queue);
+    auto command_handler =
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper,
+        radix_relay::core::command_handler<radix_relay::signal::bridge>::out_queues_t{ .display = output_queue,
+          .transport = transport_queue,
+          .session = session_queue,
+          .connection_monitor = connection_monitor_queue });
     radix_relay::cli_utils::cli_args args;
     args.send_parsed = true;
     args.send_recipient = "alice";
@@ -171,8 +179,12 @@ TEST_CASE("execute_cli_command handles peers command", "[cli_utils][app_init]")
     auto connection_monitor_queue =
       std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::connection_monitor::in_t>>(
         io_context);
-    auto command_handler = std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(
-      bridge_wrapper, output_queue, transport_queue, session_queue, connection_monitor_queue);
+    auto command_handler =
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper,
+        radix_relay::core::command_handler<radix_relay::signal::bridge>::out_queues_t{ .display = output_queue,
+          .transport = transport_queue,
+          .session = session_queue,
+          .connection_monitor = connection_monitor_queue });
     radix_relay::cli_utils::cli_args args;
     args.peers_parsed = true;
 
@@ -198,8 +210,12 @@ TEST_CASE("execute_cli_command handles status command", "[cli_utils][app_init]")
     auto connection_monitor_queue =
       std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::connection_monitor::in_t>>(
         io_context);
-    auto command_handler = std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(
-      bridge_wrapper, output_queue, transport_queue, session_queue, connection_monitor_queue);
+    auto command_handler =
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper,
+        radix_relay::core::command_handler<radix_relay::signal::bridge>::out_queues_t{ .display = output_queue,
+          .transport = transport_queue,
+          .session = session_queue,
+          .connection_monitor = connection_monitor_queue });
     radix_relay::cli_utils::cli_args args;
     args.status_parsed = true;
 
@@ -224,8 +240,12 @@ TEST_CASE("execute_cli_command returns false for no commands", "[cli_utils][app_
     auto connection_monitor_queue =
       std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::connection_monitor::in_t>>(
         io_context);
-    auto command_handler = std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(
-      bridge_wrapper, output_queue, transport_queue, session_queue, connection_monitor_queue);
+    auto command_handler =
+      std::make_shared<radix_relay::core::command_handler<radix_relay::signal::bridge>>(bridge_wrapper,
+        radix_relay::core::command_handler<radix_relay::signal::bridge>::out_queues_t{ .display = output_queue,
+          .transport = transport_queue,
+          .session = session_queue,
+          .connection_monitor = connection_monitor_queue });
     const radix_relay::cli_utils::cli_args args;
 
     REQUIRE(radix_relay::cli_utils::execute_cli_command(args, command_handler) == false);

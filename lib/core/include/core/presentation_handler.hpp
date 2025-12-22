@@ -5,6 +5,7 @@
 #include <fmt/core.h>
 #include <memory>
 #include <spdlog/spdlog.h>
+#include <variant>
 
 namespace radix_relay::core {
 
@@ -16,14 +17,30 @@ namespace radix_relay::core {
  */
 struct presentation_handler
 {
+  // Type traits for standard_processor
+  using in_queue_t = async::async_queue<events::presentation_event_variant_t>;
+
+  struct out_queues_t
+  {
+    std::shared_ptr<async::async_queue<events::display_message>> display;
+  };
+
   /**
    * @brief Constructs a presentation handler.
    *
-   * @param display_out_queue Queue for outgoing display messages
+   * @param queues Output queues for display messages
    */
-  explicit presentation_handler(const std::shared_ptr<async::async_queue<events::display_message>> &display_out_queue)
-    : display_out_queue_(display_out_queue)
-  {}
+  explicit presentation_handler(const out_queues_t &queues) : display_out_queue_(queues.display) {}
+
+  /**
+   * @brief Variant handler for standard_processor.
+   *
+   * @param event Presentation event variant
+   */
+  auto handle(const events::presentation_event_variant_t &event) const -> void
+  {
+    std::visit([this](const auto &evt) { this->handle(evt); }, event);
+  }
 
   /**
    * @brief Handles a received encrypted message event.

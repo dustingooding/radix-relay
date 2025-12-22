@@ -5,14 +5,12 @@
 #include <cli_utils/app_init.hpp>
 #include <cli_utils/cli_parser.hpp>
 #include <core/command_handler.hpp>
-#include <core/command_processor.hpp>
 #include <core/connection_monitor.hpp>
-#include <core/connection_monitor_processor.hpp>
 #include <core/event_handler.hpp>
 #include <core/events.hpp>
 #include <core/presentation_handler.hpp>
-#include <core/presentation_processor.hpp>
 #include <core/processor_runner.hpp>
+#include <core/standard_processor.hpp>
 #include <cstdlib>
 #include <gui/processor.hpp>
 #include <nostr/request_tracker.hpp>
@@ -51,10 +49,11 @@ auto main(int argc, char **argv) -> int
     auto connection_monitor_queue =
       std::make_shared<async::async_queue<core::events::connection_monitor::in_t>>(io_context);
 
-    auto connection_monitor = std::make_shared<core::connection_monitor>(display_queue);
-
-    auto command_handler = std::make_shared<core::command_handler<bridge_t>>(
-      bridge, display_queue, transport_queue, session_queue, connection_monitor_queue);
+    auto command_handler = std::make_shared<core::command_handler<bridge_t>>(bridge,
+      core::command_handler<bridge_t>::out_queues_t{ .display = display_queue,
+        .transport = transport_queue,
+        .session = session_queue,
+        .connection_monitor = connection_monitor_queue });
 
     if (cli_utils::execute_cli_command(args, command_handler)) {
       cli_utils::configure_logging(args);
@@ -66,8 +65,9 @@ auto main(int argc, char **argv) -> int
     auto presentation_event_queue =
       std::make_shared<async::async_queue<core::events::presentation_event_variant_t>>(io_context);
 
-    auto connection_monitor_proc =
-      std::make_shared<core::connection_monitor_processor>(io_context, connection_monitor_queue, connection_monitor);
+    using connection_monitor_processor_t = core::standard_processor<core::connection_monitor>;
+    auto connection_monitor_proc = std::make_shared<connection_monitor_processor_t>(
+      io_context, connection_monitor_queue, core::connection_monitor::out_queues_t{ .display = display_queue });
 
     auto request_tracker = std::make_shared<nostr::request_tracker>(io_context);
     auto websocket = std::make_shared<transport::websocket_stream>(io_context);
@@ -85,16 +85,15 @@ auto main(int argc, char **argv) -> int
 
     using cmd_handler_t = core::command_handler<bridge_t>;
     using evt_handler_t = core::event_handler<cmd_handler_t>;
-    using cmd_processor_t = core::command_processor<evt_handler_t>;
+    using cmd_processor_t = core::standard_processor<evt_handler_t>;
     using presentation_evt_handler_t = core::presentation_handler;
-    using presentation_processor_t = core::presentation_processor<presentation_evt_handler_t>;
+    using presentation_processor_t = core::standard_processor<presentation_evt_handler_t>;
 
-    auto evt_handler = std::make_shared<evt_handler_t>(command_handler);
-    auto cmd_processor = std::make_shared<cmd_processor_t>(io_context, command_queue, evt_handler);
+    auto cmd_processor =
+      std::make_shared<cmd_processor_t>(io_context, command_queue, evt_handler_t::out_queues_t{}, command_handler);
 
-    auto presentation_evt_handler = std::make_shared<presentation_evt_handler_t>(display_queue);
-    auto presentation_evt_processor =
-      std::make_shared<presentation_processor_t>(io_context, presentation_event_queue, presentation_evt_handler);
+    auto presentation_evt_processor = std::make_shared<presentation_processor_t>(
+      io_context, presentation_event_queue, presentation_evt_handler_t::out_queues_t{ .display = display_queue });
 
     auto work_guard = boost::asio::make_work_guard(*io_context);
 

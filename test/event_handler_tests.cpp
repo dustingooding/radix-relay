@@ -9,7 +9,8 @@ SCENARIO("Event handler processes raw command events correctly", "[events][handl
   GIVEN("A test command handler")
   {
     auto test_cmd_handler = std::make_shared<radix_relay_test::test_double_command_handler>();
-    const radix_relay::core::event_handler event_handler{ test_cmd_handler };
+    radix_relay::core::event_handler<radix_relay_test::test_double_command_handler>::out_queues_t const queues{};
+    const radix_relay::core::event_handler event_handler{ test_cmd_handler, queues };
 
     WHEN("handling simple raw commands")
     {

@@ -15,7 +15,7 @@ struct presentation_handler_fixture
     : io_context(std::make_shared<boost::asio::io_context>()),
       display_queue(
         std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context)),
-      handler(display_queue)
+      handler(radix_relay::core::presentation_handler::out_queues_t{ .display = display_queue })
   {}
 
   [[nodiscard]] auto get_all_output() const -> std::string

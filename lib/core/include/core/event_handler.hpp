@@ -1,5 +1,6 @@
 #pragma once
 
+#include <async/async_queue.hpp>
 #include <concepts/command_handler.hpp>
 #include <core/events.hpp>
 #include <memory>
@@ -20,12 +21,23 @@ template<concepts::command_handler CmdHandler> struct event_handler
 {
   using command_handler_t = CmdHandler;
 
+  // Type traits for standard_processor
+  using in_queue_t = async::async_queue<events::raw_command>;
+
+  // No output queues - forwards to command_handler
+  struct out_queues_t
+  {
+  };
+
   /**
    * @brief Constructs an event handler with the given command handler.
    *
    * @param command_handler Shared pointer to the command handler
+   * @param queues Output queues (unused for event_handler)
    */
-  explicit event_handler(std::shared_ptr<CmdHandler> command_handler) : command_handler_(command_handler) {}
+  explicit event_handler(std::shared_ptr<CmdHandler> command_handler, const out_queues_t & /*queues*/)
+    : command_handler_(command_handler)
+  {}
 
   /**
    * @brief Parses and handles a raw command string.

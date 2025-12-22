@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <variant>
 
 namespace radix_relay::core {
 
@@ -27,9 +28,21 @@ struct connection_status
 class connection_monitor
 {
 public:
-  explicit connection_monitor(const std::shared_ptr<async::async_queue<events::display_message>> &display_out_queue)
-    : display_out_queue_(display_out_queue)
-  {}
+  // Type traits for standard_processor
+  using in_queue_t = async::async_queue<events::connection_monitor::in_t>;
+
+  struct out_queues_t
+  {
+    std::shared_ptr<async::async_queue<events::display_message>> display;
+  };
+
+  explicit connection_monitor(const out_queues_t &queues) : display_out_queue_(queues.display) {}
+
+  // Variant handler for standard_processor
+  auto handle(const events::connection_monitor::in_t &event) -> void
+  {
+    std::visit([this](const auto &evt) { this->handle(evt); }, event);
+  }
 
   auto handle(const events::transport::connected &event) -> void;
   auto handle(const events::transport::connect_failed &event) -> void;

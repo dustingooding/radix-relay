@@ -38,7 +38,12 @@ struct command_handler_fixture
       connection_monitor_queue(
         std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::connection_monitor::in_t>>(
           io_context)),
-      handler(bridge, display_out_queue, transport_out_queue, session_out_queue, connection_monitor_queue)
+      handler(bridge,
+        radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge>::out_queues_t{
+          .display = display_out_queue,
+          .transport = transport_out_queue,
+          .session = session_out_queue,
+          .connection_monitor = connection_monitor_queue })
   {}
 
   [[nodiscard]] auto get_all_output() const -> std::string
