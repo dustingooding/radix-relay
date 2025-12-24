@@ -21,22 +21,26 @@ namespace radix_relay::core {
  */
 template<concepts::signal_bridge Bridge> struct command_handler
 {
+  // Type traits for standard_processor
+  using in_queue_t = async::async_queue<events::raw_command>;
+
+  struct out_queues_t
+  {
+    std::shared_ptr<async::async_queue<events::display_message>> display;
+    std::shared_ptr<async::async_queue<events::transport::in_t>> transport;
+    std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> session;
+    std::shared_ptr<async::async_queue<events::connection_monitor::in_t>> connection_monitor;
+  };
+
   /**
    * @brief Constructs a command handler with required subsystem queues.
    *
    * @param bridge Signal Protocol bridge for crypto operations
-   * @param display_out_queue Queue for display messages
-   * @param transport_out_queue Queue for transport commands
-   * @param session_out_queue Queue for session orchestrator commands
-   * @param connection_monitor_out_queue Queue for connection monitor commands
+   * @param queues Output queues for subsystems
    */
-  explicit command_handler(const std::shared_ptr<Bridge> &bridge,
-    const std::shared_ptr<async::async_queue<events::display_message>> &display_out_queue,
-    const std::shared_ptr<async::async_queue<events::transport::in_t>> &transport_out_queue,
-    const std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> &session_out_queue,
-    const std::shared_ptr<async::async_queue<events::connection_monitor::in_t>> &connection_monitor_out_queue)
-    : bridge_(bridge), display_out_queue_(display_out_queue), transport_out_queue_(transport_out_queue),
-      session_out_queue_(session_out_queue), connection_monitor_out_queue_(connection_monitor_out_queue)
+  explicit command_handler(const std::shared_ptr<Bridge> &bridge, const out_queues_t &queues)
+    : bridge_(bridge), display_out_queue_(queues.display), transport_out_queue_(queues.transport),
+      session_out_queue_(queues.session), connection_monitor_out_queue_(queues.connection_monitor)
   {}
 
   /**

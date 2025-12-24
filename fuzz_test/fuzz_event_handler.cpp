@@ -24,7 +24,8 @@ extern "C" auto LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) -> int
   const std::string input(reinterpret_cast<const char *>(Data), Size);
 
   auto command_handler = std::make_shared<noop_command_handler>();
-  const radix_relay::core::event_handler<noop_command_handler> handler(command_handler);
+  const radix_relay::core::event_handler<noop_command_handler>::out_queues_t queues{};
+  const radix_relay::core::event_handler<noop_command_handler> handler(command_handler, queues);
 
   handler.handle(radix_relay::core::events::raw_command{ .input = input });
 
