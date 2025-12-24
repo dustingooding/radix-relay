@@ -82,6 +82,7 @@ add_catch_test(NAME signal_bridge_tests SOURCES signal_bridge_tests.cpp LIBS rad
 add_catch_test(NAME standard_processor_tests SOURCES standard_processor_tests.cpp)
 add_catch_test(NAME presentation_handler_tests SOURCES presentation_handler_tests.cpp)
 add_catch_test(NAME gui_processor_tests SOURCES gui_processor_tests.cpp LIBS radix_relay::signal;radix_relay::gui)
+add_catch_test(NAME gui_contact_list_tests SOURCES gui_contact_list_tests.cpp LIBS radix_relay::signal;radix_relay::gui)
 add_catch_test(NAME tui_processor_tests SOURCES tui_processor_tests.cpp LIBS radix_relay::signal;radix_relay::tui)
 
 if(MSVC)
