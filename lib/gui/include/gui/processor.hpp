@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <concepts/signal_bridge.hpp>
+#include <core/contact_info.hpp>
 #include <core/events.hpp>
 #include <fmt/format.h>
 #include <main_window.h>
@@ -26,11 +27,25 @@ template<concepts::signal_bridge Bridge> struct processor
     const slint::ComponentHandle<MainWindow> &window,
     const std::shared_ptr<slint::VectorModel<Message>> &message_model)
     : node_id_(std::move(node_id)), mode_(std::move(mode)), bridge_(bridge), command_queue_(command_queue),
-      display_queue_(display_queue), window_(window), message_model_(message_model)
+      display_queue_(display_queue), window_(window), message_model_(message_model),
+      contact_list_model_(std::make_shared<slint::VectorModel<Contact>>())
   {
     window_->set_node_fingerprint(slint::SharedString(node_id_));
     window_->set_current_mode(slint::SharedString(mode_));
     window_->set_messages(message_model_);
+
+    auto contacts = bridge_->list_contacts();
+    for (const auto &contact : contacts) {
+      if (contact.user_alias == "self") { continue; }
+
+      Contact ui_contact;
+      ui_contact.rdx_fingerprint = slint::SharedString(contact.rdx_fingerprint);
+      ui_contact.user_alias = slint::SharedString(contact.user_alias);
+      ui_contact.has_active_session = contact.has_active_session;
+      contact_list_model_->push_back(ui_contact);
+    }
+
+    window_->set_contacts(contact_list_model_);
 
     window_->on_send_command([this](const slint::SharedString &command) {
       std::string cmd(command.data(), command.size());
@@ -97,6 +112,11 @@ template<concepts::signal_bridge Bridge> struct processor
     return message_model_;
   }
 
+  [[nodiscard]] auto get_contact_list_model() const -> std::shared_ptr<slint::VectorModel<Contact>>
+  {
+    return contact_list_model_;
+  }
+
   [[nodiscard]] auto is_running() const -> bool { return running_.load(); }
 
 private:
@@ -120,6 +140,7 @@ private:
 
   slint::ComponentHandle<MainWindow> window_;
   std::shared_ptr<slint::VectorModel<Message>> message_model_;
+  std::shared_ptr<slint::VectorModel<Contact>> contact_list_model_;
   std::shared_ptr<slint::Timer> timer_;
 };
 
