@@ -8,7 +8,8 @@ SCENARIO("connection_monitor tracks internet transport connection state", "[conn
 {
   GIVEN("A connection_monitor instance")
   {
-    connection_monitor monitor;
+    const connection_monitor::out_queues_t queues{ .display = nullptr };
+    connection_monitor monitor(queues);
 
     WHEN("initially created")
     {
@@ -16,14 +17,15 @@ SCENARIO("connection_monitor tracks internet transport connection state", "[conn
 
       THEN("both transport states are empty")
       {
-        REQUIRE_FALSE(status.internet.has_value());
-        REQUIRE_FALSE(status.bluetooth.has_value());
+        CHECK_FALSE(status.internet.has_value());
+        CHECK_FALSE(status.bluetooth.has_value());
       }
     }
 
     WHEN("internet transport connects successfully")
     {
-      events::transport::connected event{ .url = "wss://relay.damus.io", .type = transport_type::internet };
+      const events::transport::connected event{ .url = "wss://relay.damus.io",
+        .type = events::transport_type::internet };
 
       monitor.handle(event);
       auto status = monitor.get_status();
@@ -31,20 +33,23 @@ SCENARIO("connection_monitor tracks internet transport connection state", "[conn
       THEN("internet state shows connected")
       {
         REQUIRE(status.internet.has_value());
-        REQUIRE(status.internet->connected);
-        REQUIRE(status.internet->url == "wss://relay.damus.io");
-        REQUIRE(status.internet->error.empty());
-        REQUIRE(status.internet->timestamp > 0);
+        if (status.internet.has_value()) {
+          const auto &state = *status.internet;
+          CHECK(state.connected);
+          CHECK(state.url == "wss://relay.damus.io");
+          CHECK(state.error.empty());
+          CHECK(state.timestamp > 0);
+        }
       }
 
-      THEN("bluetooth state remains empty") { REQUIRE_FALSE(status.bluetooth.has_value()); }
+      THEN("bluetooth state remains empty") { CHECK_FALSE(status.bluetooth.has_value()); }
     }
 
     WHEN("internet transport connection fails")
     {
-      events::transport::connect_failed event{
-        .url = "wss://bad-relay.example.com", .error_message = "Connection timeout", .type = transport_type::internet
-      };
+      const events::transport::connect_failed event{ .url = "wss://bad-relay.example.com",
+        .error_message = "Connection timeout",
+        .type = events::transport_type::internet };
 
       monitor.handle(event);
       auto status = monitor.get_status();
@@ -52,19 +57,23 @@ SCENARIO("connection_monitor tracks internet transport connection state", "[conn
       THEN("internet state shows disconnected with error")
       {
         REQUIRE(status.internet.has_value());
-        REQUIRE_FALSE(status.internet->connected);
-        REQUIRE(status.internet->url == "wss://bad-relay.example.com");
-        REQUIRE(status.internet->error == "Connection timeout");
-        REQUIRE(status.internet->timestamp > 0);
+        if (status.internet.has_value()) {
+          const auto &state = *status.internet;
+          CHECK_FALSE(state.connected);
+          CHECK(state.url == "wss://bad-relay.example.com");
+          CHECK(state.error == "Connection timeout");
+          CHECK(state.timestamp > 0);
+        }
       }
     }
 
     WHEN("internet transport disconnects")
     {
-      events::transport::connected connect_event{ .url = "wss://relay.damus.io", .type = transport_type::internet };
+      const events::transport::connected connect_event{ .url = "wss://relay.damus.io",
+        .type = events::transport_type::internet };
       monitor.handle(connect_event);
 
-      events::transport::disconnected disconnect_event{ .type = transport_type::internet };
+      const events::transport::disconnected disconnect_event{ .type = events::transport_type::internet };
       monitor.handle(disconnect_event);
 
       auto status = monitor.get_status();
@@ -72,8 +81,11 @@ SCENARIO("connection_monitor tracks internet transport connection state", "[conn
       THEN("internet state shows disconnected")
       {
         REQUIRE(status.internet.has_value());
-        REQUIRE_FALSE(status.internet->connected);
-        REQUIRE(status.internet->error.empty());
+        if (status.internet.has_value()) {
+          const auto &state = *status.internet;
+          CHECK_FALSE(state.connected);
+          CHECK(state.error.empty());
+        }
       }
     }
   }
@@ -83,11 +95,12 @@ SCENARIO("connection_monitor tracks bluetooth transport connection state", "[con
 {
   GIVEN("A connection_monitor instance")
   {
-    connection_monitor monitor;
+    const connection_monitor::out_queues_t queues{ .display = nullptr };
+    connection_monitor monitor(queues);
 
     WHEN("bluetooth transport connects successfully")
     {
-      events::transport::connected event{ .url = "ble://device-123", .type = transport_type::bluetooth };
+      const events::transport::connected event{ .url = "ble://device-123", .type = events::transport_type::bluetooth };
 
       monitor.handle(event);
       auto status = monitor.get_status();
@@ -95,13 +108,16 @@ SCENARIO("connection_monitor tracks bluetooth transport connection state", "[con
       THEN("bluetooth state shows connected")
       {
         REQUIRE(status.bluetooth.has_value());
-        REQUIRE(status.bluetooth->connected);
-        REQUIRE(status.bluetooth->url == "ble://device-123");
-        REQUIRE(status.bluetooth->error.empty());
-        REQUIRE(status.bluetooth->timestamp > 0);
+        if (status.bluetooth.has_value()) {
+          const auto &state = *status.bluetooth;
+          CHECK(state.connected);
+          CHECK(state.url == "ble://device-123");
+          CHECK(state.error.empty());
+          CHECK(state.timestamp > 0);
+        }
       }
 
-      THEN("internet state remains empty") { REQUIRE_FALSE(status.internet.has_value()); }
+      THEN("internet state remains empty") { CHECK_FALSE(status.internet.has_value()); }
     }
   }
 }
@@ -110,12 +126,15 @@ SCENARIO("connection_monitor handles both transports simultaneously", "[connecti
 {
   GIVEN("A connection_monitor instance")
   {
-    connection_monitor monitor;
+    const connection_monitor::out_queues_t queues{ .display = nullptr };
+    connection_monitor monitor(queues);
 
     WHEN("both internet and bluetooth connect")
     {
-      events::transport::connected internet_event{ .url = "wss://relay.damus.io", .type = transport_type::internet };
-      events::transport::connected bluetooth_event{ .url = "ble://device-123", .type = transport_type::bluetooth };
+      const events::transport::connected internet_event{ .url = "wss://relay.damus.io",
+        .type = events::transport_type::internet };
+      const events::transport::connected bluetooth_event{ .url = "ble://device-123",
+        .type = events::transport_type::bluetooth };
 
       monitor.handle(internet_event);
       monitor.handle(bluetooth_event);
@@ -125,12 +144,18 @@ SCENARIO("connection_monitor handles both transports simultaneously", "[connecti
       THEN("both states show connected")
       {
         REQUIRE(status.internet.has_value());
-        REQUIRE(status.internet->connected);
-        REQUIRE(status.internet->url == "wss://relay.damus.io");
+        if (status.internet.has_value()) {
+          const auto &inet_state = *status.internet;
+          CHECK(inet_state.connected);
+          CHECK(inet_state.url == "wss://relay.damus.io");
+        }
 
         REQUIRE(status.bluetooth.has_value());
-        REQUIRE(status.bluetooth->connected);
-        REQUIRE(status.bluetooth->url == "ble://device-123");
+        if (status.bluetooth.has_value()) {
+          const auto &bt_state = *status.bluetooth;
+          CHECK(bt_state.connected);
+          CHECK(bt_state.url == "ble://device-123");
+        }
       }
     }
   }
@@ -140,17 +165,18 @@ SCENARIO("connection_monitor clears error state on successful connection", "[con
 {
   GIVEN("A connection_monitor with a failed connection")
   {
-    connection_monitor monitor;
+    const connection_monitor::out_queues_t queues{ .display = nullptr };
+    connection_monitor monitor(queues);
 
-    events::transport::connect_failed fail_event{
-      .url = "wss://bad-relay.example.com", .error_message = "DNS resolution failed", .type = transport_type::internet
-    };
+    const events::transport::connect_failed fail_event{ .url = "wss://bad-relay.example.com",
+      .error_message = "DNS resolution failed",
+      .type = events::transport_type::internet };
     monitor.handle(fail_event);
 
     WHEN("transport connects successfully")
     {
-      events::transport::connected success_event{ .url = "wss://good-relay.example.com",
-        .type = transport_type::internet };
+      const events::transport::connected success_event{ .url = "wss://good-relay.example.com",
+        .type = events::transport_type::internet };
       monitor.handle(success_event);
 
       auto status = monitor.get_status();
@@ -158,9 +184,12 @@ SCENARIO("connection_monitor clears error state on successful connection", "[con
       THEN("error is cleared")
       {
         REQUIRE(status.internet.has_value());
-        REQUIRE(status.internet->connected);
-        REQUIRE(status.internet->error.empty());
-        REQUIRE(status.internet->url == "wss://good-relay.example.com");
+        if (status.internet.has_value()) {
+          const auto &state = *status.internet;
+          CHECK(state.connected);
+          CHECK(state.error.empty());
+          CHECK(state.url == "wss://good-relay.example.com");
+        }
       }
     }
   }
@@ -170,15 +199,17 @@ SCENARIO("connection_monitor handles send_failed events", "[connection_monitor][
 {
   GIVEN("A connection_monitor with connected internet transport")
   {
-    connection_monitor monitor;
+    const connection_monitor::out_queues_t queues{ .display = nullptr };
+    connection_monitor monitor(queues);
 
-    events::transport::connected connect_event{ .url = "wss://relay.damus.io", .type = transport_type::internet };
+    const events::transport::connected connect_event{ .url = "wss://relay.damus.io",
+      .type = events::transport_type::internet };
     monitor.handle(connect_event);
 
     WHEN("send fails")
     {
-      events::transport::send_failed fail_event{
-        .message_id = "msg-456", .error_message = "Send timeout", .type = transport_type::internet
+      const events::transport::send_failed fail_event{
+        .message_id = "msg-456", .error_message = "Send timeout", .type = events::transport_type::internet
       };
       monitor.handle(fail_event);
 
@@ -187,8 +218,11 @@ SCENARIO("connection_monitor handles send_failed events", "[connection_monitor][
       THEN("transport shows error but remains connected")
       {
         REQUIRE(status.internet.has_value());
-        REQUIRE(status.internet->connected);
-        REQUIRE(status.internet->error == "Send timeout");
+        if (status.internet.has_value()) {
+          const auto &state = *status.internet;
+          CHECK(state.connected);
+          CHECK(state.error == "Send timeout");
+        }
       }
     }
   }
@@ -201,24 +235,27 @@ SCENARIO("connection_monitor responds to query_status by emitting display messag
     auto io_context = std::make_shared<boost::asio::io_context>();
     auto display_queue =
       std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
-    radix_relay::core::connection_monitor monitor(display_queue);
+    const radix_relay::core::connection_monitor::out_queues_t queues{ .display = display_queue };
+    radix_relay::core::connection_monitor monitor(queues);
 
-    radix_relay::core::events::transport::connected connected_event{ .url = "wss://relay.example.com",
+    const radix_relay::core::events::transport::connected connected_event{ .url = "wss://relay.example.com",
       .type = radix_relay::core::events::transport_type::internet };
     monitor.handle(connected_event);
 
     WHEN("query_status event is handled")
     {
-      radix_relay::core::events::connection_monitor::query_status query{};
+      const radix_relay::core::events::connection_monitor::query_status query{};
       monitor.handle(query);
 
       THEN("display message is pushed to queue with network status")
       {
         auto msg = display_queue->try_pop();
         REQUIRE(msg.has_value());
-        REQUIRE(msg->message.find("Network Status") != std::string::npos);
-        REQUIRE(msg->message.find("Internet: Connected (wss://relay.example.com)") != std::string::npos);
-        REQUIRE(msg->message.find("BLE Mesh:") != std::string::npos);
+        if (msg.has_value()) {
+          CHECK(msg->message.find("Network Status") != std::string::npos);
+          CHECK(msg->message.find("Internet: Connected (wss://relay.example.com)") != std::string::npos);
+          CHECK(msg->message.find("BLE Mesh:") != std::string::npos);
+        }
       }
     }
   }
@@ -228,23 +265,24 @@ SCENARIO("connection_monitor responds to query_status by emitting display messag
     auto io_context = std::make_shared<boost::asio::io_context>();
     auto display_queue =
       std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
-    radix_relay::core::connection_monitor monitor(display_queue);
+    const radix_relay::core::connection_monitor::out_queues_t queues{ .display = display_queue };
+    radix_relay::core::connection_monitor monitor(queues);
 
-    radix_relay::core::events::transport::disconnected disconnected_event{
+    const radix_relay::core::events::transport::disconnected disconnected_event{
       .type = radix_relay::core::events::transport_type::internet
     };
     monitor.handle(disconnected_event);
 
     WHEN("query_status event is handled")
     {
-      radix_relay::core::events::connection_monitor::query_status query{};
+      const radix_relay::core::events::connection_monitor::query_status query{};
       monitor.handle(query);
 
       THEN("display message shows not connected status")
       {
         auto msg = display_queue->try_pop();
         REQUIRE(msg.has_value());
-        REQUIRE(msg->message.find("Internet: Not connected") != std::string::npos);
+        if (msg.has_value()) { CHECK(msg->message.find("Internet: Not connected") != std::string::npos); }
       }
     }
   }
@@ -254,23 +292,24 @@ SCENARIO("connection_monitor responds to query_status by emitting display messag
     auto io_context = std::make_shared<boost::asio::io_context>();
     auto display_queue =
       std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
-    radix_relay::core::connection_monitor monitor(display_queue);
+    const radix_relay::core::connection_monitor::out_queues_t queues{ .display = display_queue };
+    radix_relay::core::connection_monitor monitor(queues);
 
-    radix_relay::core::events::transport::connect_failed failed_event{ .url = "wss://relay.fail.com",
+    const radix_relay::core::events::transport::connect_failed failed_event{ .url = "wss://relay.fail.com",
       .error_message = "Connection timeout",
       .type = radix_relay::core::events::transport_type::internet };
     monitor.handle(failed_event);
 
     WHEN("query_status event is handled")
     {
-      radix_relay::core::events::connection_monitor::query_status query{};
+      const radix_relay::core::events::connection_monitor::query_status query{};
       monitor.handle(query);
 
       THEN("display message shows failed status with error")
       {
         auto msg = display_queue->try_pop();
         REQUIRE(msg.has_value());
-        REQUIRE(msg->message.find("Internet: Failed (Connection timeout)") != std::string::npos);
+        if (msg.has_value()) { CHECK(msg->message.find("Internet: Failed (Connection timeout)") != std::string::npos); }
       }
     }
   }
