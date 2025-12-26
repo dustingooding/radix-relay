@@ -3,6 +3,14 @@
   "name": "radix-relay",
   "version-string": "0.1.0",
   "dependencies": [
-    "protobuf"
+    "protobuf",
+    {
+      "name": "openssl",
+      "platform": "windows"
+    },
+    {
+      "name": "sqlcipher",
+      "platform": "windows"
+    }
   ]
 }

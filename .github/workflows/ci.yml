@@ -182,11 +182,16 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install protobuf
 
-      - name: Install Protocol Buffers (Windows)
+      - name: Install Dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
-          vcpkg install
-          echo "${{ github.workspace }}\vcpkg_installed\x64-windows\tools\protobuf" >> $env:GITHUB_PATH
+          echo "VCPKG_ROOT=$env:USERPROFILE\vcpkg" >> $env:GITHUB_ENV
+          echo "VCPKG_DEFAULT_TRIPLET=x64-windows-static-md" >> $env:GITHUB_ENV
+          echo "VCPKGRS_TRIPLET=x64-windows-static-md" >> $env:GITHUB_ENV
+          echo "VCPKGRS_DYNAMIC=0" >> $env:GITHUB_ENV
+          vcpkg install --triplet=x64-windows-static-md
+          echo "${{ github.workspace }}\vcpkg_installed\x64-windows-static-md\tools\protobuf" >> $env:GITHUB_PATH
+          echo "OPENSSL_DIR=${{ github.workspace }}\vcpkg_installed\x64-windows-static-md" >> $env:GITHUB_ENV
         env:
           VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg_cache,readwrite
 
@@ -227,7 +232,7 @@ jobs:
 
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
-        run: cmake --preset=${{ steps.preset.outputs.preset }} -DCMAKE_TOOLCHAIN_FILE="$env:USERPROFILE\vcpkg\scripts\buildsystems\vcpkg.cmake" -D${{ env.PROJECT_NAME }}_ENABLE_IPO=${{matrix.enable_ipo }} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }} -DGIT_SHA:STRING=${{ github.sha }}
+        run: cmake --preset=${{ steps.preset.outputs.preset }} -DCMAKE_TOOLCHAIN_FILE="$env:USERPROFILE\vcpkg\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static-md -D${{ env.PROJECT_NAME }}_ENABLE_IPO=${{matrix.enable_ipo }} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }} -DGIT_SHA:STRING=${{ github.sha }}
         env:
           VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg_cache,readwrite
 

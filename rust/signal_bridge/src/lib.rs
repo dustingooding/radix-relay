@@ -4,6 +4,7 @@
 //! and the official Signal Protocol Rust implementation for end-to-end encryption.
 
 mod contact_manager;
+mod db_encryption;
 mod encryption_trait;
 pub mod key_rotation;
 mod keys;
@@ -18,6 +19,9 @@ mod session;
 
 #[cfg(test)]
 mod encryption;
+
+#[cfg(test)]
+mod sqlcipher_tests;
 
 pub use contact_manager::{ContactInfo, ContactManager};
 pub use key_rotation::{
@@ -1757,10 +1761,15 @@ mod tests {
     async fn test_crypto_handler_exists() -> Result<(), Box<dyn std::error::Error>> {
         use crate::SignalBridge;
         use std::env;
+        use std::fs;
 
         let temp_dir = env::temp_dir();
         let db_path = temp_dir.join("test_crypto_handler.db");
         let db_path_str = db_path.to_str().unwrap();
+
+        let _ = fs::remove_file(&db_path);
+        let key_path = format!("{}.key", db_path_str);
+        let _ = fs::remove_file(&key_path);
 
         let _handler = SignalBridge::new(db_path_str).await?;
         Ok(())
