@@ -31,7 +31,14 @@ pub struct SqliteStorage {
 
 impl SqliteStorage {
     pub async fn new(db_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let connection = Arc::new(Mutex::new(Connection::open(db_path)?));
+        use crate::db_encryption;
+
+        let key = db_encryption::get_or_create_db_key(db_path)?;
+        let connection = Connection::open(db_path)?;
+
+        connection.pragma_update(None, "key", hex::encode(key))?;
+
+        let connection = Arc::new(Mutex::new(connection));
 
         Ok(Self {
             connection,

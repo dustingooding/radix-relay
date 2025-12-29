@@ -75,8 +75,12 @@ function(setup_rust_workspace)
             )
             message(STATUS "  CXX bridge: Using MSVC release runtime (/MD) with iterator debug level 0")
         endif()
-        # Link BCrypt library for cryptographic random number generation
-        target_link_libraries(signal_bridge_cxx INTERFACE bcrypt)
+
+        target_link_libraries(signal_bridge_cxx INTERFACE
+            bcrypt
+            OpenSSL::SSL
+            OpenSSL::Crypto
+        )
     endif()
 
     if(APPLE)
