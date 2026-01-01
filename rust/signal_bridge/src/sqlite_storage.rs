@@ -26,6 +26,7 @@ pub struct SqliteStorage {
     pre_key_store: Option<SqlitePreKeyStore>,
     signed_pre_key_store: Option<SqliteSignedPreKeyStore>,
     kyber_pre_key_store: Option<SqliteKyberPreKeyStore>,
+    message_history: Option<crate::message_history::MessageHistory>,
     is_closed: bool,
 }
 
@@ -47,6 +48,7 @@ impl SqliteStorage {
             pre_key_store: None,
             signed_pre_key_store: None,
             kyber_pre_key_store: None,
+            message_history: None,
             is_closed: false,
         })
     }
@@ -68,6 +70,9 @@ impl SqliteStorage {
             )?;
 
             conn.execute("INSERT OR IGNORE INTO schema_info (version) VALUES (1)", [])?;
+
+            let current_version: i32 =
+                conn.query_row("SELECT version FROM schema_info", [], |row| row.get(0))?;
 
             SqliteIdentityStore::create_tables(&conn)?;
             SqliteSessionStore::create_tables(&conn)?;
@@ -118,6 +123,10 @@ impl SqliteStorage {
                 )",
                 [],
             )?;
+
+            if current_version < 2 {
+                Self::migrate_to_v2(&conn)?;
+            }
         }
 
         self.session_store = Some(SqliteSessionStore::new(self.connection.clone()));
@@ -125,6 +134,77 @@ impl SqliteStorage {
         self.pre_key_store = Some(SqlitePreKeyStore::new(self.connection.clone()));
         self.signed_pre_key_store = Some(SqliteSignedPreKeyStore::new(self.connection.clone()));
         self.kyber_pre_key_store = Some(SqliteKyberPreKeyStore::new(self.connection.clone()));
+        self.message_history = Some(crate::message_history::MessageHistory::new(
+            self.connection.clone(),
+        ));
+
+        Ok(())
+    }
+
+    fn migrate_to_v2(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rdx_fingerprint TEXT NOT NULL UNIQUE,
+                nostr_pubkey TEXT,
+                last_message_timestamp INTEGER NOT NULL,
+                unread_count INTEGER DEFAULT 0,
+                archived BOOLEAN DEFAULT 0,
+                FOREIGN KEY (rdx_fingerprint) REFERENCES contacts(rdx_fingerprint) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_timestamp
+             ON conversations(last_message_timestamp DESC)",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_unread
+             ON conversations(unread_count) WHERE unread_count > 0",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                direction INTEGER NOT NULL,
+                timestamp INTEGER NOT NULL,
+                message_type INTEGER NOT NULL,
+                content BLOB NOT NULL,
+                delivery_status INTEGER DEFAULT 0,
+                was_prekey_message BOOLEAN DEFAULT 0,
+                session_established BOOLEAN DEFAULT 0,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_messages_conversation
+             ON messages(conversation_id, timestamp DESC)",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_messages_timestamp
+             ON messages(timestamp DESC)",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_messages_undelivered
+             ON messages(delivery_status) WHERE delivery_status IN (0, 3)",
+            [],
+        )?;
+
+        conn.execute(
+            "UPDATE schema_info SET version = 2, updated_at = strftime('%s', 'now')",
+            [],
+        )?;
 
         Ok(())
     }
@@ -138,6 +218,12 @@ impl SqliteStorage {
 
     pub fn connection(&self) -> Arc<Mutex<Connection>> {
         self.connection.clone()
+    }
+
+    pub fn message_history(&self) -> &crate::message_history::MessageHistory {
+        self.message_history
+            .as_ref()
+            .expect("MessageHistory not initialized")
     }
 
     pub fn get_last_message_timestamp(&self) -> Result<u64, Box<dyn std::error::Error>> {
@@ -1282,7 +1368,7 @@ mod tests {
         storage.initialize_schema()?;
 
         let version = storage.get_schema_version()?;
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
 
         Ok(())
     }

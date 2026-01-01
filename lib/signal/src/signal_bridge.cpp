@@ -137,4 +137,68 @@ auto bridge::record_published_bundle(std::uint32_t pre_key_id,
   radix_relay::record_published_bundle(*bridge_, pre_key_id, signed_pre_key_id, kyber_pre_key_id);
 }
 
+auto bridge::get_conversations(bool include_archived) const -> std::vector<conversation>
+{
+  auto rust_conversations = radix_relay::get_conversations(*bridge_, include_archived);
+  std::vector<conversation> result;
+  result.reserve(rust_conversations.size());
+
+  std::ranges::transform(rust_conversations, std::back_inserter(result), [](const auto &conv) -> auto {
+    return conversation{
+      .id = conv.id,
+      .rdx_fingerprint = std::string(conv.rdx_fingerprint),
+      .last_message_timestamp = conv.last_message_timestamp,
+      .unread_count = conv.unread_count,
+      .archived = conv.archived,
+    };
+  });
+
+  return result;
+}
+
+auto bridge::get_conversation_messages(const std::string &rdx_fingerprint,
+  std::uint32_t limit,
+  std::uint32_t offset) const -> std::vector<stored_message>
+{
+  auto rust_messages = radix_relay::get_conversation_messages(*bridge_, rdx_fingerprint.c_str(), limit, offset);
+  std::vector<stored_message> result;
+  result.reserve(rust_messages.size());
+
+  std::ranges::transform(rust_messages, std::back_inserter(result), [](const auto &msg) -> auto {
+    return stored_message{
+      .id = msg.id,
+      .conversation_id = msg.conversation_id,
+      .direction = static_cast<MessageDirection>(msg.direction),
+      .timestamp = msg.timestamp,
+      .message_type = static_cast<MessageType>(msg.message_type),
+      .content = std::string(msg.content),
+      .delivery_status = static_cast<DeliveryStatus>(msg.delivery_status),
+      .was_prekey_message = msg.was_prekey_message,
+      .session_established = msg.session_established,
+    };
+  });
+
+  return result;
+}
+
+auto bridge::mark_conversation_read(const std::string &rdx_fingerprint) const -> void
+{
+  radix_relay::mark_conversation_read(*bridge_, rdx_fingerprint.c_str());
+}
+
+auto bridge::delete_message(std::int64_t message_id) const -> void
+{
+  radix_relay::delete_message(*bridge_, message_id);
+}
+
+auto bridge::delete_conversation(const std::string &rdx_fingerprint) const -> void
+{
+  radix_relay::delete_conversation(*bridge_, rdx_fingerprint.c_str());
+}
+
+auto bridge::get_unread_count(const std::string &rdx_fingerprint) const -> std::uint32_t
+{
+  return radix_relay::get_unread_count(*bridge_, rdx_fingerprint.c_str());
+}
+
 }// namespace radix_relay::signal

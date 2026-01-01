@@ -9,6 +9,7 @@ mod encryption_trait;
 pub mod key_rotation;
 mod keys;
 pub mod memory_storage;
+pub mod message_history;
 mod nostr_identity;
 mod session_trait;
 pub mod sqlite_storage;
@@ -23,12 +24,18 @@ mod encryption;
 #[cfg(test)]
 mod sqlcipher_tests;
 
+#[cfg(test)]
+mod message_history_tests;
+
 pub use contact_manager::{ContactInfo, ContactManager};
 pub use key_rotation::{
     cleanup_expired_kyber_pre_keys, cleanup_expired_signed_pre_keys, consume_pre_key,
     kyber_pre_key_needs_rotation, replenish_pre_keys, rotate_kyber_pre_key, rotate_signed_pre_key,
     signed_pre_key_needs_rotation, GRACE_PERIOD_SECS, MIN_PRE_KEY_COUNT, REPLENISH_COUNT,
     ROTATION_INTERVAL_SECS,
+};
+pub use message_history::{
+    Conversation, DeliveryStatus, MessageDirection, MessageHistory, MessageType, StoredMessage,
 };
 
 /// Result of key maintenance operations indicating which keys were rotated/replenished
@@ -233,6 +240,20 @@ impl SignalBridge {
         }
 
         let ciphertext = self.storage.encrypt_message(&address, plaintext).await?;
+
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| SignalBridgeError::Protocol(e.to_string()))?
+            .as_millis() as u64;
+
+        if let Err(e) = self.storage.message_history().store_outgoing_message(
+            &session_address,
+            timestamp,
+            plaintext,
+        ) {
+            eprintln!("Warning: Failed to store outgoing message: {}", e);
+        }
+
         Ok(ciphertext.serialize().to_vec())
     }
 
@@ -304,6 +325,23 @@ impl SignalBridge {
         );
 
         let plaintext = self.storage.decrypt_message(&address, &ciphertext).await?;
+
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| SignalBridgeError::Protocol(e.to_string()))?
+            .as_millis() as u64;
+
+        let session_established = pre_key_consumed;
+
+        if let Err(e) = self.storage.message_history().store_incoming_message(
+            address.name(),
+            timestamp,
+            &plaintext,
+            pre_key_consumed,
+            session_established,
+        ) {
+            eprintln!("Warning: Failed to store incoming message: {}", e);
+        }
 
         Ok(DecryptionResult {
             plaintext,
@@ -981,6 +1019,33 @@ impl From<std::io::Error> for SignalBridgeError {
 
 #[cxx::bridge(namespace = "radix_relay")]
 mod ffi {
+    /// Message direction (incoming or outgoing)
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[repr(u8)]
+    pub enum MessageDirection {
+        Incoming = 0,
+        Outgoing = 1,
+    }
+
+    /// Message type (text, bundle announcement, or system)
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[repr(u8)]
+    pub enum MessageType {
+        Text = 0,
+        BundleAnnouncement = 1,
+        System = 2,
+    }
+
+    /// Delivery status for outgoing messages
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[repr(u8)]
+    pub enum DeliveryStatus {
+        Pending = 0,
+        Sent = 1,
+        Delivered = 2,
+        Failed = 3,
+    }
+
     #[derive(Clone, Debug)]
     pub struct ContactInfo {
         pub rdx_fingerprint: String,
@@ -1016,6 +1081,28 @@ mod ffi {
         pub pre_key_id: u32,
         pub signed_pre_key_id: u32,
         pub kyber_pre_key_id: u32,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct StoredMessage {
+        pub id: i64,
+        pub conversation_id: i64,
+        pub direction: MessageDirection,
+        pub timestamp: u64,
+        pub message_type: MessageType,
+        pub content: String,
+        pub delivery_status: DeliveryStatus,
+        pub was_prekey_message: bool,
+        pub session_established: bool,
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Conversation {
+        pub id: i64,
+        pub rdx_fingerprint: String,
+        pub last_message_timestamp: u64,
+        pub unread_count: u32,
+        pub archived: bool,
     }
 
     extern "Rust" {
@@ -1115,6 +1202,26 @@ mod ffi {
             signed_pre_key_id: u32,
             kyber_pre_key_id: u32,
         ) -> Result<()>;
+
+        fn get_conversations(
+            bridge: &mut SignalBridge,
+            include_archived: bool,
+        ) -> Result<Vec<Conversation>>;
+
+        fn get_conversation_messages(
+            bridge: &mut SignalBridge,
+            rdx_fingerprint: &str,
+            limit: u32,
+            offset: u32,
+        ) -> Result<Vec<StoredMessage>>;
+
+        fn mark_conversation_read(bridge: &mut SignalBridge, rdx_fingerprint: &str) -> Result<()>;
+
+        fn delete_message(bridge: &mut SignalBridge, message_id: i64) -> Result<()>;
+
+        fn delete_conversation(bridge: &mut SignalBridge, rdx_fingerprint: &str) -> Result<()>;
+
+        fn get_unread_count(bridge: &mut SignalBridge, rdx_fingerprint: &str) -> Result<u32>;
     }
 }
 
@@ -1286,6 +1393,143 @@ pub fn record_published_bundle(
         .storage
         .record_published_bundle(pre_key_id, signed_pre_key_id, kyber_pre_key_id)?;
     Ok(())
+}
+
+/// Retrieves all conversations ordered by recent activity
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `include_archived` - Whether to include archived conversations
+pub fn get_conversations(
+    bridge: &mut SignalBridge,
+    include_archived: bool,
+) -> Result<Vec<ffi::Conversation>, Box<dyn std::error::Error>> {
+    let conversations = bridge
+        .storage
+        .message_history()
+        .get_conversations(include_archived)?;
+
+    Ok(conversations
+        .into_iter()
+        .map(|c| ffi::Conversation {
+            id: c.id,
+            rdx_fingerprint: c.rdx_fingerprint,
+            last_message_timestamp: c.last_message_timestamp,
+            unread_count: c.unread_count,
+            archived: c.archived,
+        })
+        .collect())
+}
+
+/// Retrieves messages for a conversation with pagination
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `rdx_fingerprint` - Contact's RDX fingerprint
+/// * `limit` - Maximum number of messages to return
+/// * `offset` - Number of messages to skip
+pub fn get_conversation_messages(
+    bridge: &mut SignalBridge,
+    rdx_fingerprint: &str,
+    limit: u32,
+    offset: u32,
+) -> Result<Vec<ffi::StoredMessage>, Box<dyn std::error::Error>> {
+    let messages = bridge.storage.message_history().get_conversation_messages(
+        rdx_fingerprint,
+        limit,
+        offset,
+    )?;
+
+    Ok(messages
+        .into_iter()
+        .map(|m| ffi::StoredMessage {
+            id: m.id,
+            conversation_id: m.conversation_id,
+            direction: match m.direction {
+                MessageDirection::Incoming => ffi::MessageDirection::Incoming,
+                MessageDirection::Outgoing => ffi::MessageDirection::Outgoing,
+            },
+            timestamp: m.timestamp,
+            message_type: match m.message_type {
+                MessageType::Text => ffi::MessageType::Text,
+                MessageType::BundleAnnouncement => ffi::MessageType::BundleAnnouncement,
+                MessageType::System => ffi::MessageType::System,
+            },
+            content: m.content,
+            delivery_status: match m.delivery_status {
+                DeliveryStatus::Pending => ffi::DeliveryStatus::Pending,
+                DeliveryStatus::Sent => ffi::DeliveryStatus::Sent,
+                DeliveryStatus::Delivered => ffi::DeliveryStatus::Delivered,
+                DeliveryStatus::Failed => ffi::DeliveryStatus::Failed,
+            },
+            was_prekey_message: m.was_prekey_message,
+            session_established: m.session_established,
+        })
+        .collect())
+}
+
+/// Marks a conversation as read (clears unread count)
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `rdx_fingerprint` - Contact's RDX fingerprint
+pub fn mark_conversation_read(
+    bridge: &mut SignalBridge,
+    rdx_fingerprint: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    bridge
+        .storage
+        .message_history()
+        .mark_conversation_read(rdx_fingerprint)?;
+    Ok(())
+}
+
+/// Deletes a message by ID
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `message_id` - Database ID of message to delete
+pub fn delete_message(
+    bridge: &mut SignalBridge,
+    message_id: i64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    bridge
+        .storage
+        .message_history()
+        .delete_message(message_id)?;
+    Ok(())
+}
+
+/// Deletes an entire conversation and all its messages
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `rdx_fingerprint` - Contact's RDX fingerprint
+pub fn delete_conversation(
+    bridge: &mut SignalBridge,
+    rdx_fingerprint: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    bridge
+        .storage
+        .message_history()
+        .delete_conversation(rdx_fingerprint)?;
+    Ok(())
+}
+
+/// Gets the unread message count for a conversation
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `rdx_fingerprint` - Contact's RDX fingerprint
+pub fn get_unread_count(
+    bridge: &mut SignalBridge,
+    rdx_fingerprint: &str,
+) -> Result<u32, Box<dyn std::error::Error>> {
+    let count = bridge
+        .storage
+        .message_history()
+        .get_unread_count(rdx_fingerprint)?;
+    Ok(count)
 }
 
 /// Returns this node's RDX fingerprint
@@ -3384,6 +3628,265 @@ mod tests {
 
         let _ = std::fs::remove_file(&alice_db_path);
         let _ = std::fs::remove_file(&bob_db_path);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_encrypt_message_stores_in_history() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db_path = temp_dir.join(format!("test_encrypt_history_alice_{}.db", timestamp));
+        let mut alice_bridge = SignalBridge::new(alice_db_path.to_str().unwrap()).await?;
+
+        let bob_db_path = temp_dir.join(format!("test_encrypt_history_bob_{}.db", timestamp));
+        let mut bob_bridge = SignalBridge::new(bob_db_path.to_str().unwrap()).await?;
+
+        let (alice_bundle_bytes, _, _, _) = alice_bridge.generate_pre_key_bundle().await?;
+        let alice_rdx = bob_bridge
+            .add_contact_and_establish_session(&alice_bundle_bytes, Some("Alice"))
+            .await?;
+
+        let plaintext = b"Test outgoing message";
+        let _ciphertext = bob_bridge.encrypt_message(&alice_rdx, plaintext).await?;
+
+        let messages = bob_bridge
+            .storage
+            .message_history()
+            .get_conversation_messages(&alice_rdx, 10, 0)?;
+
+        assert_eq!(messages.len(), 1, "Should have stored 1 outgoing message");
+        assert_eq!(
+            messages[0].direction,
+            crate::message_history::MessageDirection::Outgoing
+        );
+        assert_eq!(
+            messages[0].content,
+            String::from_utf8(plaintext.to_vec()).unwrap()
+        );
+
+        let _ = std::fs::remove_file(&alice_db_path);
+        let _ = std::fs::remove_file(&bob_db_path);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_decrypt_message_stores_in_history() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db_path = temp_dir.join(format!("test_decrypt_history_alice_{}.db", timestamp));
+        let mut alice_bridge = SignalBridge::new(alice_db_path.to_str().unwrap()).await?;
+
+        let bob_db_path = temp_dir.join(format!("test_decrypt_history_bob_{}.db", timestamp));
+        let mut bob_bridge = SignalBridge::new(bob_db_path.to_str().unwrap()).await?;
+
+        let (alice_bundle_bytes, _, _, _) = alice_bridge.generate_pre_key_bundle().await?;
+
+        let alice_rdx = bob_bridge
+            .add_contact_and_establish_session(&alice_bundle_bytes, Some("Alice"))
+            .await?;
+
+        let bob_keys = bob_bridge.derive_nostr_keypair().await?;
+        let bob_nostr_pubkey = bob_keys.public_key().to_hex();
+
+        let plaintext = b"Test incoming message";
+        let ciphertext = bob_bridge.encrypt_message(&alice_rdx, plaintext).await?;
+
+        let _result = alice_bridge.decrypt_message("", &ciphertext).await?;
+
+        let bob_contact = alice_bridge.lookup_contact(&bob_nostr_pubkey).await?;
+
+        let messages = alice_bridge
+            .storage
+            .message_history()
+            .get_conversation_messages(&bob_contact.rdx_fingerprint, 10, 0)?;
+
+        assert_eq!(messages.len(), 1, "Should have stored 1 incoming message");
+        assert_eq!(
+            messages[0].direction,
+            crate::message_history::MessageDirection::Incoming
+        );
+        assert_eq!(
+            messages[0].content,
+            String::from_utf8(plaintext.to_vec()).unwrap()
+        );
+        assert!(
+            messages[0].was_prekey_message,
+            "First message should be prekey"
+        );
+        assert!(
+            messages[0].session_established,
+            "Session should be established"
+        );
+
+        let _ = std::fs::remove_file(&alice_db_path);
+        let _ = std::fs::remove_file(&bob_db_path);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_bidirectional_message_history() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db_path =
+            temp_dir.join(format!("test_bidirectional_history_alice_{}.db", timestamp));
+        let mut alice_bridge = SignalBridge::new(alice_db_path.to_str().unwrap()).await?;
+
+        let bob_db_path = temp_dir.join(format!("test_bidirectional_history_bob_{}.db", timestamp));
+        let mut bob_bridge = SignalBridge::new(bob_db_path.to_str().unwrap()).await?;
+
+        let (alice_bundle_bytes, _, _, _) = alice_bridge.generate_pre_key_bundle().await?;
+        let alice_keys = alice_bridge.derive_nostr_keypair().await?;
+        let alice_nostr_pubkey = alice_keys.public_key().to_hex();
+
+        let (bob_bundle_bytes, _, _, _) = bob_bridge.generate_pre_key_bundle().await?;
+        let bob_keys = bob_bridge.derive_nostr_keypair().await?;
+        let bob_nostr_pubkey = bob_keys.public_key().to_hex();
+
+        let bob_rdx = alice_bridge
+            .add_contact_and_establish_session(&bob_bundle_bytes, Some("Bob"))
+            .await?;
+        let alice_rdx = bob_bridge
+            .add_contact_and_establish_session(&alice_bundle_bytes, Some("Alice"))
+            .await?;
+
+        let msg1 = b"Hello Bob!";
+        let cipher1 = alice_bridge.encrypt_message(&bob_rdx, msg1).await?;
+        let _result1 = bob_bridge
+            .decrypt_message(&alice_nostr_pubkey, &cipher1)
+            .await?;
+
+        let msg2 = b"Hi Alice!";
+        let cipher2 = bob_bridge.encrypt_message(&alice_rdx, msg2).await?;
+        let _result2 = alice_bridge
+            .decrypt_message(&bob_nostr_pubkey, &cipher2)
+            .await?;
+
+        let msg3 = b"How are you?";
+        let cipher3 = alice_bridge.encrypt_message(&bob_rdx, msg3).await?;
+        let _result3 = bob_bridge
+            .decrypt_message(&alice_nostr_pubkey, &cipher3)
+            .await?;
+
+        let alice_messages = alice_bridge
+            .storage
+            .message_history()
+            .get_conversation_messages(&bob_rdx, 10, 0)?;
+
+        assert_eq!(
+            alice_messages.len(),
+            3,
+            "Alice should have 3 messages (2 sent, 1 received)"
+        );
+
+        let outgoing = alice_messages
+            .iter()
+            .filter(|m| m.direction == crate::message_history::MessageDirection::Outgoing)
+            .count();
+        let incoming = alice_messages
+            .iter()
+            .filter(|m| m.direction == crate::message_history::MessageDirection::Incoming)
+            .count();
+
+        assert_eq!(outgoing, 2, "Alice sent 2 messages");
+        assert_eq!(incoming, 1, "Alice received 1 message");
+
+        let bob_messages = bob_bridge
+            .storage
+            .message_history()
+            .get_conversation_messages(&alice_rdx, 10, 0)?;
+
+        assert_eq!(
+            bob_messages.len(),
+            3,
+            "Bob should have 3 messages (1 sent, 2 received)"
+        );
+
+        let _ = std::fs::remove_file(&alice_db_path);
+        let _ = std::fs::remove_file(&bob_db_path);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_conversation_list_ordering() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let alice_db_path =
+            temp_dir.join(format!("test_conversation_ordering_alice_{}.db", timestamp));
+        let mut alice_bridge = SignalBridge::new(alice_db_path.to_str().unwrap()).await?;
+
+        let bob_db_path = temp_dir.join(format!("test_conversation_ordering_bob_{}.db", timestamp));
+        let mut bob_bridge = SignalBridge::new(bob_db_path.to_str().unwrap()).await?;
+
+        let charlie_db_path = temp_dir.join(format!(
+            "test_conversation_ordering_charlie_{}.db",
+            timestamp
+        ));
+        let mut charlie_bridge = SignalBridge::new(charlie_db_path.to_str().unwrap()).await?;
+
+        let (bob_bundle_bytes, _, _, _) = bob_bridge.generate_pre_key_bundle().await?;
+        let bob_rdx = alice_bridge
+            .add_contact_and_establish_session(&bob_bundle_bytes, Some("Bob"))
+            .await?;
+
+        let (charlie_bundle_bytes, _, _, _) = charlie_bridge.generate_pre_key_bundle().await?;
+        let charlie_rdx = alice_bridge
+            .add_contact_and_establish_session(&charlie_bundle_bytes, Some("Charlie"))
+            .await?;
+
+        let bob_msg = b"From Bob";
+        let bob_cipher = alice_bridge.encrypt_message(&bob_rdx, bob_msg).await?;
+
+        let bob_keys = bob_bridge.derive_nostr_keypair().await?;
+        let bob_nostr_pubkey = bob_keys.public_key().to_hex();
+
+        let _bob_result = bob_bridge
+            .decrypt_message(&bob_nostr_pubkey, &bob_cipher)
+            .await?;
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        let charlie_msg = b"From Charlie";
+        let charlie_cipher = alice_bridge
+            .encrypt_message(&charlie_rdx, charlie_msg)
+            .await?;
+
+        let charlie_keys = charlie_bridge.derive_nostr_keypair().await?;
+        let charlie_nostr_pubkey = charlie_keys.public_key().to_hex();
+
+        let _charlie_result = charlie_bridge
+            .decrypt_message(&charlie_nostr_pubkey, &charlie_cipher)
+            .await?;
+
+        let conversations = alice_bridge
+            .storage
+            .message_history()
+            .get_conversations(false)?;
+
+        assert_eq!(conversations.len(), 2, "Alice should have 2 conversations");
+        assert!(
+            conversations[0].last_message_timestamp > conversations[1].last_message_timestamp,
+            "Conversations should be ordered by most recent message"
+        );
+
+        let _ = std::fs::remove_file(&alice_db_path);
+        let _ = std::fs::remove_file(&bob_db_path);
+        let _ = std::fs::remove_file(&charlie_db_path);
         Ok(())
     }
 }
