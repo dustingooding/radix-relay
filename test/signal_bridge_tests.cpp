@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <platform/env_utils.hpp>
 #include <signal/signal_bridge.hpp>
+#include <thread>
 
 TEST_CASE("signal::bridge basic functionality", "[signal][wrapper]")
 {
@@ -425,6 +426,254 @@ TEST_CASE("signal::bridge X3DH initial message from unknown sender", "[signal][w
 
       // Pre-key should NOT be consumed on subsequent messages
       REQUIRE_FALSE(second_result.should_republish_bundle);
+    }
+    std::filesystem::remove(alice_db);
+    std::filesystem::remove(bob_db);
+  }
+}
+
+TEST_CASE("signal::bridge message history storage", "[signal][wrapper][message-history]")
+{
+  auto timestamp =
+    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+  auto alice_db = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                   / ("test_history_alice_" + std::to_string(timestamp) + ".db"))
+                    .string();
+  auto bob_db = (std::filesystem::path(radix_relay::platform::get_temp_directory())
+                 / ("test_history_bob_" + std::to_string(timestamp) + ".db"))
+                  .string();
+
+  SECTION("Messages are automatically stored during encrypt/decrypt")
+  {
+    {
+      auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
+      auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
+
+      auto bob_bundle_info = bob->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
+      auto bob_bundle_base64 = bob_bundle_json["content"].template get<std::string>();
+      auto bob_rdx = alice->add_contact_and_establish_session_from_base64(bob_bundle_base64, "Bob");
+
+      auto alice_bundle_info = alice->generate_prekey_bundle_announcement("test-0.1.0");
+      auto alice_bundle_json = nlohmann::json::parse(alice_bundle_info.announcement_json);
+      auto alice_bundle_base64 = alice_bundle_json["content"].template get<std::string>();
+      auto alice_rdx = bob->add_contact_and_establish_session_from_base64(alice_bundle_base64, "Alice");
+
+      const std::string plaintext = "Hello Bob!";
+      const std::vector<uint8_t> message_bytes(plaintext.begin(), plaintext.end());
+
+      auto encrypted = alice->encrypt_message(bob_rdx, message_bytes);
+      auto result = bob->decrypt_message(alice_rdx, encrypted);
+
+      auto alice_messages = alice->get_conversation_messages(bob_rdx, 10, 0);
+      REQUIRE(alice_messages.size() == 1);
+      REQUIRE(alice_messages[0].direction == radix_relay::signal::MessageDirection::Outgoing);
+      REQUIRE(alice_messages[0].content == plaintext);
+
+      auto bob_messages = bob->get_conversation_messages(alice_rdx, 10, 0);
+      REQUIRE(bob_messages.size() == 1);
+      REQUIRE(bob_messages[0].direction == radix_relay::signal::MessageDirection::Incoming);
+      REQUIRE(bob_messages[0].content == plaintext);
+    }
+    std::filesystem::remove(alice_db);
+    std::filesystem::remove(bob_db);
+  }
+
+  SECTION("get_conversations returns conversations ordered by most recent")
+  {
+    {
+      auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
+      auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
+
+      auto bob_bundle_info = bob->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
+      auto bob_bundle_base64 = bob_bundle_json["content"].template get<std::string>();
+      auto bob_rdx = alice->add_contact_and_establish_session_from_base64(bob_bundle_base64, "Bob");
+
+      const std::string msg1 = "First message";
+      const std::vector<uint8_t> msg1_bytes(msg1.begin(), msg1.end());
+      auto encrypted1 = alice->encrypt_message(bob_rdx, msg1_bytes);
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+      const std::string msg2 = "Second message";
+      const std::vector<uint8_t> msg2_bytes(msg2.begin(), msg2.end());
+      auto encrypted2 = alice->encrypt_message(bob_rdx, msg2_bytes);
+
+      auto conversations = alice->get_conversations(false);
+      REQUIRE(conversations.size() == 1);
+      REQUIRE(conversations[0].rdx_fingerprint == bob_rdx);
+
+      auto messages = alice->get_conversation_messages(bob_rdx, 10, 0);
+      REQUIRE(messages.size() == 2);
+      REQUIRE(messages[0].content == msg2);
+      REQUIRE(messages[1].content == msg1);
+    }
+    std::filesystem::remove(alice_db);
+    std::filesystem::remove(bob_db);
+  }
+
+  SECTION("Unread count tracking and mark as read")
+  {
+    {
+      auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
+      auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
+
+      auto bob_bundle_info = bob->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
+      auto bob_bundle_base64 = bob_bundle_json["content"].template get<std::string>();
+      auto bob_rdx = alice->add_contact_and_establish_session_from_base64(bob_bundle_base64, "Bob");
+
+      auto alice_bundle_info = alice->generate_prekey_bundle_announcement("test-0.1.0");
+      auto alice_bundle_json = nlohmann::json::parse(alice_bundle_info.announcement_json);
+      auto alice_bundle_base64 = alice_bundle_json["content"].template get<std::string>();
+      auto alice_rdx = bob->add_contact_and_establish_session_from_base64(alice_bundle_base64, "Alice");
+
+      const std::string msg1 = "Message 1";
+      const std::vector<uint8_t> msg1_bytes(msg1.begin(), msg1.end());
+      auto encrypted1 = alice->encrypt_message(bob_rdx, msg1_bytes);
+      [[maybe_unused]] auto result1 = bob->decrypt_message(alice_rdx, encrypted1);
+
+      const std::string msg2 = "Message 2";
+      const std::vector<uint8_t> msg2_bytes(msg2.begin(), msg2.end());
+      auto encrypted2 = alice->encrypt_message(bob_rdx, msg2_bytes);
+      [[maybe_unused]] auto result2 = bob->decrypt_message(alice_rdx, encrypted2);
+
+      auto unread_count = bob->get_unread_count(alice_rdx);
+      REQUIRE(unread_count == 2);
+
+      bob->mark_conversation_read(alice_rdx);
+
+      auto unread_after = bob->get_unread_count(alice_rdx);
+      REQUIRE(unread_after == 0);
+    }
+    std::filesystem::remove(alice_db);
+    std::filesystem::remove(bob_db);
+  }
+
+  SECTION("Delete individual message")
+  {
+    {
+      auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
+      auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
+
+      auto bob_bundle_info = bob->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
+      auto bob_bundle_base64 = bob_bundle_json["content"].template get<std::string>();
+      auto bob_rdx = alice->add_contact_and_establish_session_from_base64(bob_bundle_base64, "Bob");
+
+      const std::string msg1 = "Keep this";
+      const std::vector<uint8_t> msg1_bytes(msg1.begin(), msg1.end());
+      [[maybe_unused]] auto encrypted1 = alice->encrypt_message(bob_rdx, msg1_bytes);
+
+      const std::string msg2 = "Delete this";
+      const std::vector<uint8_t> msg2_bytes(msg2.begin(), msg2.end());
+      [[maybe_unused]] auto encrypted2 = alice->encrypt_message(bob_rdx, msg2_bytes);
+
+      auto messages = alice->get_conversation_messages(bob_rdx, 10, 0);
+      REQUIRE(messages.size() == 2);
+
+      auto message_to_delete_id = messages[0].id;
+      alice->delete_message(message_to_delete_id);
+
+      auto messages_after = alice->get_conversation_messages(bob_rdx, 10, 0);
+      REQUIRE(messages_after.size() == 1);
+      REQUIRE(messages_after[0].content == msg1);
+    }
+    std::filesystem::remove(alice_db);
+    std::filesystem::remove(bob_db);
+  }
+
+  SECTION("Delete entire conversation")
+  {
+    {
+      auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
+      auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
+
+      auto bob_bundle_info = bob->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
+      auto bob_bundle_base64 = bob_bundle_json["content"].template get<std::string>();
+      auto bob_rdx = alice->add_contact_and_establish_session_from_base64(bob_bundle_base64, "Bob");
+
+      const std::string msg1 = "Message 1";
+      const std::vector<uint8_t> msg1_bytes(msg1.begin(), msg1.end());
+      [[maybe_unused]] auto encrypted1 = alice->encrypt_message(bob_rdx, msg1_bytes);
+
+      const std::string msg2 = "Message 2";
+      const std::vector<uint8_t> msg2_bytes(msg2.begin(), msg2.end());
+      [[maybe_unused]] auto encrypted2 = alice->encrypt_message(bob_rdx, msg2_bytes);
+
+      auto messages = alice->get_conversation_messages(bob_rdx, 10, 0);
+      REQUIRE(messages.size() == 2);
+
+      alice->delete_conversation(bob_rdx);
+
+      auto messages_after = alice->get_conversation_messages(bob_rdx, 10, 0);
+      REQUIRE(messages_after.empty());
+
+      auto conversations = alice->get_conversations(false);
+      REQUIRE(conversations.empty());
+    }
+    std::filesystem::remove(alice_db);
+    std::filesystem::remove(bob_db);
+  }
+
+  SECTION("Message pagination")
+  {
+    {
+      auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
+      auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
+
+      auto bob_bundle_info = bob->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
+      auto bob_bundle_base64 = bob_bundle_json["content"].template get<std::string>();
+      auto bob_rdx = alice->add_contact_and_establish_session_from_base64(bob_bundle_base64, "Bob");
+
+      for (int i = 0; i < 10; i++) {
+        std::string msg = "Message " + std::to_string(i);
+        std::vector<uint8_t> msg_bytes(msg.begin(), msg.end());
+        [[maybe_unused]] auto encrypted = alice->encrypt_message(bob_rdx, msg_bytes);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+      }
+
+      auto page1 = alice->get_conversation_messages(bob_rdx, 5, 0);
+      REQUIRE(page1.size() == 5);
+
+      auto page2 = alice->get_conversation_messages(bob_rdx, 5, 5);
+      REQUIRE(page2.size() == 5);
+
+      REQUIRE(page1[0].timestamp > page2[0].timestamp);
+    }
+    std::filesystem::remove(alice_db);
+    std::filesystem::remove(bob_db);
+  }
+
+  SECTION("Millisecond timestamp precision")
+  {
+    {
+      auto alice = std::make_shared<radix_relay::signal::bridge>(alice_db);
+      auto bob = std::make_shared<radix_relay::signal::bridge>(bob_db);
+
+      auto bob_bundle_info = bob->generate_prekey_bundle_announcement("test-0.1.0");
+      auto bob_bundle_json = nlohmann::json::parse(bob_bundle_info.announcement_json);
+      auto bob_bundle_base64 = bob_bundle_json["content"].template get<std::string>();
+      auto bob_rdx = alice->add_contact_and_establish_session_from_base64(bob_bundle_base64, "Bob");
+
+      const std::string msg1 = "First";
+      const std::vector<uint8_t> msg1_bytes(msg1.begin(), msg1.end());
+      [[maybe_unused]] auto encrypted1 = alice->encrypt_message(bob_rdx, msg1_bytes);
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(2));
+
+      const std::string msg2 = "Second";
+      const std::vector<uint8_t> msg2_bytes(msg2.begin(), msg2.end());
+      [[maybe_unused]] auto encrypted2 = alice->encrypt_message(bob_rdx, msg2_bytes);
+
+      auto messages = alice->get_conversation_messages(bob_rdx, 10, 0);
+      REQUIRE(messages.size() == 2);
+      REQUIRE(messages[0].timestamp > messages[1].timestamp);
+      REQUIRE(messages[0].content == msg2);
+      REQUIRE(messages[1].content == msg1);
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);

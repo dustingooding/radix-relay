@@ -184,6 +184,55 @@ public:
     std::uint32_t signed_pre_key_id,
     std::uint32_t kyber_pre_key_id) const -> void;
 
+  /**
+   * @brief Retrieves all conversations ordered by most recent message.
+   *
+   * @param include_archived Whether to include archived conversations
+   * @return Vector of conversations with metadata
+   */
+  [[nodiscard]] auto get_conversations(bool include_archived) const -> std::vector<conversation>;
+
+  /**
+   * @brief Retrieves messages from a conversation with pagination.
+   *
+   * @param rdx_fingerprint Contact's RDX fingerprint
+   * @param limit Maximum number of messages to retrieve
+   * @param offset Number of messages to skip (for pagination)
+   * @return Vector of stored messages ordered newest first
+   */
+  [[nodiscard]] auto get_conversation_messages(const std::string &rdx_fingerprint,
+    std::uint32_t limit,
+    std::uint32_t offset) const -> std::vector<stored_message>;
+
+  /**
+   * @brief Marks all messages in a conversation as read.
+   *
+   * @param rdx_fingerprint Contact's RDX fingerprint
+   */
+  auto mark_conversation_read(const std::string &rdx_fingerprint) const -> void;
+
+  /**
+   * @brief Deletes a specific message from history.
+   *
+   * @param message_id Database ID of the message to delete
+   */
+  auto delete_message(std::int64_t message_id) const -> void;
+
+  /**
+   * @brief Deletes an entire conversation and all its messages.
+   *
+   * @param rdx_fingerprint Contact's RDX fingerprint
+   */
+  auto delete_conversation(const std::string &rdx_fingerprint) const -> void;
+
+  /**
+   * @brief Gets the number of unread messages in a conversation.
+   *
+   * @param rdx_fingerprint Contact's RDX fingerprint
+   * @return Number of unread messages
+   */
+  [[nodiscard]] auto get_unread_count(const std::string &rdx_fingerprint) const -> std::uint32_t;
+
 private:
   mutable rust::Box<SignalBridge> bridge_;
 };
