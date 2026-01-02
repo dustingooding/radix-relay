@@ -32,8 +32,14 @@ TEST_CASE("processor polls display_queue and updates message model", "[gui][proc
   radix_relay::gui::processor<radix_relay_test::test_double_signal_bridge> processor(
     "RDX:test123", "hybrid", bridge, command_queue, display_queue, window, message_model);
 
-  display_queue->push(radix_relay::core::events::display_message{ .message = "Test message 1" });
-  display_queue->push(radix_relay::core::events::display_message{ .message = "Test message 2" });
+  display_queue->push(radix_relay::core::events::display_message{ .message = "Test message 1",
+    .contact_rdx = std::nullopt,
+    .timestamp = 0,
+    .source_type = radix_relay::core::events::display_message::source::system });
+  display_queue->push(radix_relay::core::events::display_message{ .message = "Test message 2",
+    .contact_rdx = std::nullopt,
+    .timestamp = 0,
+    .source_type = radix_relay::core::events::display_message::source::system });
 
   processor.poll_display_messages();
 
@@ -96,7 +102,10 @@ TEST_CASE("processor rate-limits message processing to prevent UI starvation", "
 
   constexpr std::size_t total_messages = 25;
   for (std::size_t i = 0; i < total_messages; ++i) {
-    display_queue->push(radix_relay::core::events::display_message{ .message = "Message " + std::to_string(i) });
+    display_queue->push(radix_relay::core::events::display_message{ .message = "Message " + std::to_string(i),
+      .contact_rdx = std::nullopt,
+      .timestamp = 0,
+      .source_type = radix_relay::core::events::display_message::source::system });
   }
 
   processor.poll_display_messages();

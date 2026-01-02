@@ -4,6 +4,7 @@
 #include <core/events.hpp>
 #include <fmt/core.h>
 #include <memory>
+#include <platform/time_utils.hpp>
 #include <spdlog/spdlog.h>
 #include <variant>
 
@@ -50,7 +51,12 @@ struct presentation_handler
   auto handle(const events::message_received &evt) const -> void
   {
     const auto &sender_display = evt.sender_alias.empty() ? evt.sender_rdx : evt.sender_alias;
-    emit("Message from {}: {}\n", sender_display, evt.content);
+    emit(events::display_message::source::incoming_message,
+      evt.sender_rdx,
+      evt.timestamp,
+      "Message from {}: {}\n",
+      sender_display,
+      evt.content);
   }
 
   /**
@@ -60,7 +66,11 @@ struct presentation_handler
    */
   auto handle(const events::session_established &evt) const -> void
   {
-    emit("Encrypted session established with {}\n", evt.peer_rdx);
+    emit(events::display_message::source::session_event,
+      evt.peer_rdx,
+      platform::current_timestamp_ms(),
+      "Encrypted session established with {}\n",
+      evt.peer_rdx);
   }
 
   /**
@@ -90,10 +100,15 @@ struct presentation_handler
    */
   auto handle(const events::message_sent &evt) const -> void
   {
+    const auto timestamp = platform::current_timestamp_ms();
     if (evt.accepted) {
-      emit("Message sent to {}\n", evt.peer);
+      emit(events::display_message::source::outgoing_message, evt.peer, timestamp, "Message sent to {}\n", evt.peer);
     } else {
-      emit("Failed to send message to {}\n", evt.peer);
+      emit(events::display_message::source::outgoing_message,
+        evt.peer,
+        timestamp,
+        "Failed to send message to {}\n",
+        evt.peer);
     }
   }
 
@@ -104,10 +119,18 @@ struct presentation_handler
    */
   auto handle(const events::bundle_published &evt) const -> void
   {
+    const auto timestamp = platform::current_timestamp_ms();
     if (evt.accepted) {
-      emit("Identity bundle published (event: {})\n", evt.event_id);
+      emit(events::display_message::source::bundle_announcement,
+        std::nullopt,
+        timestamp,
+        "Identity bundle published (event: {})\n",
+        evt.event_id);
     } else {
-      emit("Failed to publish identity bundle\n");
+      emit(events::display_message::source::bundle_announcement,
+        std::nullopt,
+        timestamp,
+        "Failed to publish identity bundle\n");
     }
   }
 
@@ -128,12 +151,18 @@ struct presentation_handler
    */
   auto handle(const events::identities_listed &evt) const -> void
   {
+    const auto timestamp = platform::current_timestamp_ms();
     if (evt.identities.empty()) {
-      emit("No identities discovered yet\n");
+      emit(events::display_message::source::system, std::nullopt, timestamp, "No identities discovered yet\n");
     } else {
-      emit("Discovered identities:\n");
+      emit(events::display_message::source::system, std::nullopt, timestamp, "Discovered identities:\n");
       for (const auto &identity : evt.identities) {
-        emit("  {} (nostr: {})\n", identity.rdx_fingerprint, identity.nostr_pubkey);
+        emit(events::display_message::source::system,
+          std::nullopt,
+          timestamp,
+          "  {} (nostr: {})\n",
+          identity.rdx_fingerprint,
+          identity.nostr_pubkey);
       }
     }
   }
@@ -141,9 +170,18 @@ struct presentation_handler
 private:
   std::shared_ptr<async::async_queue<events::display_message>> display_out_queue_;
 
-  template<typename... Args> auto emit(fmt::format_string<Args...> format_string, Args &&...args) const -> void
+  template<typename... Args>
+  auto emit(events::display_message::source source_type,
+    std::optional<std::string> contact_rdx,
+    std::uint64_t timestamp,
+    fmt::format_string<Args...> format_string,
+    Args &&...args) const -> void
   {
-    display_out_queue_->push(events::display_message{ fmt::format(format_string, std::forward<Args>(args)...) });
+    display_out_queue_->push(
+      events::display_message{ .message = fmt::format(format_string, std::forward<Args>(args)...),
+        .contact_rdx = std::move(contact_rdx),
+        .timestamp = timestamp,
+        .source_type = source_type });
   }
 };
 

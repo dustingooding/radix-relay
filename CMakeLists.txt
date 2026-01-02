@@ -81,6 +81,7 @@ add_library(radix_relay::radix_relay_warnings ALIAS radix_relay_warnings)
 
 # Add library subdirectories
 add_subdirectory(lib/nostr)
+add_subdirectory(lib/signal_types)
 add_subdirectory(lib/signal)
 add_subdirectory(lib/transport)
 add_subdirectory(lib/platform)

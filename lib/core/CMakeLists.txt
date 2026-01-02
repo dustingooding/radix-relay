@@ -11,11 +11,12 @@ add_library(radix_relay::core ALIAS radix_relay_core)
 include(${PROJECT_SOURCE_DIR}/cmake/SystemLink.cmake)
 
 # Core provides concepts, async utilities, and event handling
-# Depends on platform for low-level OS utilities
+# Depends on platform for low-level OS utilities and signal_types for bridge concepts
 target_link_libraries(
   radix_relay_core
   PUBLIC
-          radix_relay::platform)
+          radix_relay::platform
+          radix_relay::signal_types)
 
 target_link_system_libraries(
   radix_relay_core

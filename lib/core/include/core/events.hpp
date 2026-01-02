@@ -3,6 +3,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -360,7 +361,19 @@ namespace session_orchestrator {
 /// Request to display a message to the user
 struct display_message
 {
+  enum class source {
+    system,///< System messages (always show)
+    outgoing_message,///< User sent a message
+    incoming_message,///< Received message from contact
+    command_feedback,///< Command execution feedback
+    bundle_announcement,///< Bundle published/removed
+    session_event,///< Session established/lost
+  };
+
   std::string message;///< Message content to display
+  std::optional<std::string> contact_rdx{};///< Associated contact (for filtering)
+  std::uint64_t timestamp{ 0 };///< When event occurred (Unix epoch ms)
+  source source_type{ source::system };///< Type of message for filtering
 };
 
 }// namespace radix_relay::core::events

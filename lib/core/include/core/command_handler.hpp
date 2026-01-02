@@ -6,6 +6,7 @@
 #include <core/events.hpp>
 #include <fmt/core.h>
 #include <memory>
+#include <platform/time_utils.hpp>
 
 #include "internal_use_only/config.hpp"
 
@@ -61,7 +62,11 @@ template<concepts::signal_bridge Bridge> struct command_handler
 private:
   template<typename... Args> auto emit(fmt::format_string<Args...> format_string, Args &&...args) const -> void
   {
-    display_out_queue_->push(events::display_message{ fmt::format(format_string, std::forward<Args>(args)...) });
+    display_out_queue_->push(
+      events::display_message{ .message = fmt::format(format_string, std::forward<Args>(args)...),
+        .contact_rdx = std::nullopt,
+        .timestamp = platform::current_timestamp_ms(),
+        .source_type = events::display_message::source::command_feedback });
   }
 
   auto handle_impl(const events::help & /*command*/) const -> void
