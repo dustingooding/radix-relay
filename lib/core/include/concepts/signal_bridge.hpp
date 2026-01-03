@@ -1,8 +1,8 @@
 #pragma once
 
 #include <core/contact_info.hpp>
-#include <core/signal_types.hpp>
 #include <cstdint>
+#include <signal_types/signal_types.hpp>
 #include <string>
 #include <vector>
 

@@ -1,6 +1,7 @@
 #include <chrono>
 #include <core/connection_monitor.hpp>
 #include <fmt/format.h>
+#include <platform/time_utils.hpp>
 
 namespace radix_relay::core {
 
@@ -69,7 +70,10 @@ auto connection_monitor::handle(const events::connection_monitor::query_status &
 
   auto message = fmt::format(
     "Network Status:\n  Internet: {}\n  BLE Mesh: {}\n  Active Sessions: 0\n", internet_status, bluetooth_status);
-  display_out_queue_->push(events::display_message{ message });
+  display_out_queue_->push(events::display_message{ .message = message,
+    .contact_rdx = std::nullopt,
+    .timestamp = platform::current_timestamp_ms(),
+    .source_type = events::display_message::source::system });
 }
 
 auto connection_monitor::get_status() const -> connection_status

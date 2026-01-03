@@ -3,6 +3,7 @@
 #include <async/async_queue.hpp>
 #include <core/events.hpp>
 #include <memory>
+#include <platform/time_utils.hpp>
 #include <spdlog/sinks/base_sink.h>
 #include <string>
 
@@ -41,7 +42,12 @@ protected:
 
     if (not message.empty() and message.back() == '\n') { message.pop_back(); }
 
-    if (display_queue_) { display_queue_->push(core::events::display_message{ .message = message }); }
+    if (display_queue_) {
+      display_queue_->push(core::events::display_message{ .message = message,
+        .contact_rdx = std::nullopt,
+        .timestamp = platform::current_timestamp_ms(),
+        .source_type = core::events::display_message::source::system });
+    }
   }
 
   /**

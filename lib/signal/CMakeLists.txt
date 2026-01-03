@@ -9,7 +9,7 @@ include(${PROJECT_SOURCE_DIR}/cmake/SystemLink.cmake)
 target_link_libraries(
   radix_relay_signal
   PUBLIC
-          signal_bridge_cxx
+          radix_relay::signal_types
           radix_relay::core)
 
 target_include_directories(radix_relay_signal ${WARNING_GUARD} PUBLIC
