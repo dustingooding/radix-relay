@@ -27,7 +27,7 @@ template<concepts::signal_bridge Bridge> struct command_handler
 
   struct out_queues_t
   {
-    std::shared_ptr<async::async_queue<events::display_message>> display;
+    std::shared_ptr<async::async_queue<events::display_filter_input_t>> display;
     std::shared_ptr<async::async_queue<events::transport::in_t>> transport;
     std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> session;
     std::shared_ptr<async::async_queue<events::connection_monitor::in_t>> connection_monitor;
@@ -234,7 +234,7 @@ private:
   }
 
   std::shared_ptr<Bridge> bridge_;
-  std::shared_ptr<async::async_queue<events::display_message>> display_out_queue_;
+  std::shared_ptr<async::async_queue<events::display_filter_input_t>> display_out_queue_;
   std::shared_ptr<async::async_queue<events::transport::in_t>> transport_out_queue_;
   std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> session_out_queue_;
   std::shared_ptr<async::async_queue<events::connection_monitor::in_t>> connection_monitor_out_queue_;

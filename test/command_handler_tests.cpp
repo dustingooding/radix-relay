@@ -16,7 +16,7 @@
 struct command_handler_fixture
 {
   std::shared_ptr<boost::asio::io_context> io_context;
-  std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::display_message>> display_out_queue;
+  std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::display_filter_input_t>> display_out_queue;
   std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::transport::in_t>> transport_out_queue;
   std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::session_orchestrator::in_t>>
     session_out_queue;
@@ -28,7 +28,8 @@ struct command_handler_fixture
   command_handler_fixture()
     : io_context(std::make_shared<boost::asio::io_context>()),
       display_out_queue(
-        std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context)),
+        std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_filter_input_t>>(
+          io_context)),
       transport_out_queue(
         std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::transport::in_t>>(io_context)),
       session_out_queue(
@@ -49,7 +50,15 @@ struct command_handler_fixture
   [[nodiscard]] auto get_all_output() const -> std::string
   {
     std::string result;
-    while (auto msg = display_out_queue->try_pop()) { result += msg->message; }
+    while (auto msg = display_out_queue->try_pop()) {
+      std::visit(
+        [&result](const auto &evt) {
+          if constexpr (std::same_as<std::decay_t<decltype(evt)>, radix_relay::core::events::display_message>) {
+            result += evt.message;
+          }
+        },
+        *msg);
+    }
     return result;
   }
 };

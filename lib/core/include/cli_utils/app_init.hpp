@@ -30,7 +30,7 @@ struct app_state
  * @param display_queue Optional queue for routing log messages to TUI
  */
 inline auto configure_logging(const cli_args &args,
-  std::shared_ptr<async::async_queue<core::events::display_message>> display_queue = nullptr) -> void
+  std::shared_ptr<async::async_queue<core::events::display_filter_input_t>> display_queue = nullptr) -> void
 {
   if (display_queue) {
     auto tui_sink = std::make_shared<tui_sink_mutex_t>(display_queue);

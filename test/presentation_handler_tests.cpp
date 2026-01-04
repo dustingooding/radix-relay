@@ -8,20 +8,29 @@
 struct presentation_handler_fixture
 {
   std::shared_ptr<boost::asio::io_context> io_context;
-  std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::display_message>> display_queue;
+  std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::display_filter_input_t>> display_queue;
   radix_relay::core::presentation_handler handler;
 
   presentation_handler_fixture()
     : io_context(std::make_shared<boost::asio::io_context>()),
       display_queue(
-        std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context)),
+        std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_filter_input_t>>(
+          io_context)),
       handler(radix_relay::core::presentation_handler::out_queues_t{ .display = display_queue })
   {}
 
   [[nodiscard]] auto get_all_output() const -> std::string
   {
     std::string result;
-    while (auto msg = display_queue->try_pop()) { result += msg->message; }
+    while (auto msg = display_queue->try_pop()) {
+      std::visit(
+        [&result](const auto &evt) {
+          if constexpr (std::same_as<std::decay_t<decltype(evt)>, radix_relay::core::events::display_message>) {
+            result += evt.message;
+          }
+        },
+        *msg);
+    }
     return result;
   }
 };

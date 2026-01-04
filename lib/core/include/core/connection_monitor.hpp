@@ -33,7 +33,7 @@ public:
 
   struct out_queues_t
   {
-    std::shared_ptr<async::async_queue<events::display_message>> display;
+    std::shared_ptr<async::async_queue<events::display_filter_input_t>> display;
   };
 
   explicit connection_monitor(const out_queues_t &queues) : display_out_queue_(queues.display) {}
@@ -53,7 +53,7 @@ public:
   [[nodiscard]] auto get_status() const -> connection_status;
 
 private:
-  std::shared_ptr<async::async_queue<events::display_message>> display_out_queue_;
+  std::shared_ptr<async::async_queue<events::display_filter_input_t>> display_out_queue_;
   std::unordered_map<events::transport_type, transport_state> states_;
 };
 
