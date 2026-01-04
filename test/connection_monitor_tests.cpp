@@ -234,7 +234,7 @@ SCENARIO("connection_monitor responds to query_status by emitting display messag
   {
     auto io_context = std::make_shared<boost::asio::io_context>();
     auto display_queue =
-      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
+      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_filter_input_t>>(io_context);
     const radix_relay::core::connection_monitor::out_queues_t queues{ .display = display_queue };
     radix_relay::core::connection_monitor monitor(queues);
 
@@ -252,9 +252,15 @@ SCENARIO("connection_monitor responds to query_status by emitting display messag
         auto msg = display_queue->try_pop();
         REQUIRE(msg.has_value());
         if (msg.has_value()) {
-          CHECK(msg->message.find("Network Status") != std::string::npos);
-          CHECK(msg->message.find("Internet: Connected (wss://relay.example.com)") != std::string::npos);
-          CHECK(msg->message.find("BLE Mesh:") != std::string::npos);
+          std::visit(
+            [](const auto &evt) {
+              if constexpr (std::same_as<std::decay_t<decltype(evt)>, radix_relay::core::events::display_message>) {
+                CHECK(evt.message.find("Network Status") != std::string::npos);
+                CHECK(evt.message.find("Internet: Connected (wss://relay.example.com)") != std::string::npos);
+                CHECK(evt.message.find("BLE Mesh:") != std::string::npos);
+              }
+            },
+            *msg);
         }
       }
     }
@@ -264,7 +270,7 @@ SCENARIO("connection_monitor responds to query_status by emitting display messag
   {
     auto io_context = std::make_shared<boost::asio::io_context>();
     auto display_queue =
-      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
+      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_filter_input_t>>(io_context);
     const radix_relay::core::connection_monitor::out_queues_t queues{ .display = display_queue };
     radix_relay::core::connection_monitor monitor(queues);
 
@@ -282,7 +288,15 @@ SCENARIO("connection_monitor responds to query_status by emitting display messag
       {
         auto msg = display_queue->try_pop();
         REQUIRE(msg.has_value());
-        if (msg.has_value()) { CHECK(msg->message.find("Internet: Not connected") != std::string::npos); }
+        if (msg.has_value()) {
+          std::visit(
+            [](const auto &evt) {
+              if constexpr (std::same_as<std::decay_t<decltype(evt)>, radix_relay::core::events::display_message>) {
+                CHECK(evt.message.find("Internet: Not connected") != std::string::npos);
+              }
+            },
+            *msg);
+        }
       }
     }
   }
@@ -291,7 +305,7 @@ SCENARIO("connection_monitor responds to query_status by emitting display messag
   {
     auto io_context = std::make_shared<boost::asio::io_context>();
     auto display_queue =
-      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
+      std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_filter_input_t>>(io_context);
     const radix_relay::core::connection_monitor::out_queues_t queues{ .display = display_queue };
     radix_relay::core::connection_monitor monitor(queues);
 
@@ -309,7 +323,15 @@ SCENARIO("connection_monitor responds to query_status by emitting display messag
       {
         auto msg = display_queue->try_pop();
         REQUIRE(msg.has_value());
-        if (msg.has_value()) { CHECK(msg->message.find("Internet: Failed (Connection timeout)") != std::string::npos); }
+        if (msg.has_value()) {
+          std::visit(
+            [](const auto &evt) {
+              if constexpr (std::same_as<std::decay_t<decltype(evt)>, radix_relay::core::events::display_message>) {
+                CHECK(evt.message.find("Internet: Failed (Connection timeout)") != std::string::npos);
+              }
+            },
+            *msg);
+        }
       }
     }
   }

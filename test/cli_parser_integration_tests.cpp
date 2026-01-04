@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <ranges>
 #include <string>
 #include <vector>
 
@@ -7,8 +9,8 @@
 auto create_argv(std::vector<std::string> &args) -> std::vector<char *>
 {
   std::vector<char *> argv;
-  argv.reserve(args.size());
-  for (auto &arg : args) { argv.push_back(arg.data()); }
+  argv.resize(args.size());
+  std::ranges::transform(args, argv.begin(), [](auto &arg) -> auto { return arg.data(); });
   return argv;
 }
 

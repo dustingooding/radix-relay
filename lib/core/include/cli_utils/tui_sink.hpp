@@ -24,7 +24,7 @@ public:
    *
    * @param queue Queue for outgoing display messages
    */
-  explicit tui_sink(std::shared_ptr<async::async_queue<core::events::display_message>> queue)
+  explicit tui_sink(std::shared_ptr<async::async_queue<core::events::display_filter_input_t>> queue)
     : display_queue_(std::move(queue))
   {}
 
@@ -56,7 +56,7 @@ protected:
   auto flush_() -> void override {}
 
 private:
-  std::shared_ptr<async::async_queue<core::events::display_message>> display_queue_;
+  std::shared_ptr<async::async_queue<core::events::display_filter_input_t>> display_queue_;
 };
 
 /// Type alias for mutex-protected TUI sink

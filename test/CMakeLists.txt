@@ -67,6 +67,7 @@ add_catch_test(NAME cli_utils_tests SOURCES cli_utils_tests.cpp LIBS radix_relay
 add_catch_test(NAME command_handler_tests SOURCES command_handler_tests.cpp LIBS radix_relay::platform;radix_relay::signal;nlohmann_json::nlohmann_json)
 add_catch_test(NAME connection_monitor_tests SOURCES connection_monitor_tests.cpp)
 add_catch_test(NAME coroutine_lifecycle_tests SOURCES coroutine_lifecycle_tests.cpp)
+add_catch_test(NAME display_filter_tests SOURCES display_filter_tests.cpp)
 add_catch_test(NAME event_handler_tests SOURCES event_handler_tests.cpp)
 add_catch_test(NAME event_system_tests SOURCES event_system_tests.cpp)
 add_catch_test(NAME node_identity_tests SOURCES node_identity_tests.cpp LIBS radix_relay::platform;radix_relay::signal)

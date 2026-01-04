@@ -23,7 +23,7 @@ struct presentation_handler
 
   struct out_queues_t
   {
-    std::shared_ptr<async::async_queue<events::display_message>> display;
+    std::shared_ptr<async::async_queue<events::display_filter_input_t>> display;
   };
 
   /**
@@ -168,7 +168,7 @@ struct presentation_handler
   }
 
 private:
-  std::shared_ptr<async::async_queue<events::display_message>> display_out_queue_;
+  std::shared_ptr<async::async_queue<events::display_filter_input_t>> display_out_queue_;
 
   template<typename... Args>
   auto emit(events::display_message::source source_type,

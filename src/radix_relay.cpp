@@ -6,6 +6,7 @@
 #include <cli_utils/cli_parser.hpp>
 #include <core/command_handler.hpp>
 #include <core/connection_monitor.hpp>
+#include <core/display_filter.hpp>
 #include <core/event_handler.hpp>
 #include <core/events.hpp>
 #include <core/presentation_handler.hpp>
@@ -42,6 +43,7 @@ auto main(int argc, char **argv) -> int
     auto bridge = std::make_shared<bridge_t>(args.identity_path);
     auto node_fingerprint = bridge->get_node_fingerprint();
 
+    auto display_filter_queue = std::make_shared<async::async_queue<core::events::display_filter_input_t>>(io_context);
     auto display_queue = std::make_shared<async::async_queue<core::events::display_message>>(io_context);
     auto transport_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
     auto session_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
@@ -50,24 +52,36 @@ auto main(int argc, char **argv) -> int
       std::make_shared<async::async_queue<core::events::connection_monitor::in_t>>(io_context);
 
     auto command_handler = std::make_shared<core::command_handler<bridge_t>>(bridge,
-      core::command_handler<bridge_t>::out_queues_t{ .display = display_queue,
+      core::command_handler<bridge_t>::out_queues_t{ .display = display_filter_queue,
         .transport = transport_queue,
         .session = session_queue,
         .connection_monitor = connection_monitor_queue });
 
     if (cli_utils::execute_cli_command(args, command_handler)) {
       cli_utils::configure_logging(args);
-      while (auto msg = display_queue->try_pop()) { fmt::print("{}", msg->message); }
+      while (auto msg = display_filter_queue->try_pop()) {
+        std::visit(
+          [](const auto &evt) {
+            if constexpr (std::same_as<std::decay_t<decltype(evt)>, core::events::display_message>) {
+              fmt::print("{}", evt.message);
+            }
+          },
+          *msg);
+      }
       return 0;
     }
 
-    cli_utils::configure_logging(args, display_queue);
+    cli_utils::configure_logging(args, display_filter_queue);
     auto presentation_event_queue =
       std::make_shared<async::async_queue<core::events::presentation_event_variant_t>>(io_context);
 
     using connection_monitor_processor_t = core::standard_processor<core::connection_monitor>;
     auto connection_monitor_proc = std::make_shared<connection_monitor_processor_t>(
-      io_context, connection_monitor_queue, core::connection_monitor::out_queues_t{ .display = display_queue });
+      io_context, connection_monitor_queue, core::connection_monitor::out_queues_t{ .display = display_filter_queue });
+
+    using display_filter_processor_t = core::standard_processor<core::display_filter>;
+    auto display_filter_proc = std::make_shared<display_filter_processor_t>(
+      io_context, display_filter_queue, core::display_filter::out_queues_t{ .filtered = display_queue });
 
     auto request_tracker = std::make_shared<nostr::request_tracker>(io_context);
     auto websocket = std::make_shared<transport::websocket_stream>(io_context);
@@ -92,8 +106,9 @@ auto main(int argc, char **argv) -> int
     auto cmd_processor =
       std::make_shared<cmd_processor_t>(io_context, command_queue, evt_handler_t::out_queues_t{}, command_handler);
 
-    auto presentation_evt_processor = std::make_shared<presentation_processor_t>(
-      io_context, presentation_event_queue, presentation_evt_handler_t::out_queues_t{ .display = display_queue });
+    auto presentation_evt_processor = std::make_shared<presentation_processor_t>(io_context,
+      presentation_event_queue,
+      presentation_evt_handler_t::out_queues_t{ .display = display_filter_queue });
 
     auto work_guard = boost::asio::make_work_guard(*io_context);
 
@@ -104,6 +119,8 @@ auto main(int argc, char **argv) -> int
       core::spawn_processor(io_context, presentation_evt_processor, cancel_slot, "presentation_processor");
     auto conn_mon_proc_state =
       core::spawn_processor(io_context, connection_monitor_proc, cancel_slot, "connection_monitor_processor");
+    auto display_filter_proc_state =
+      core::spawn_processor(io_context, display_filter_proc, cancel_slot, "display_filter_processor");
 
     std::thread io_thread([&io_context]() -> void {
       spdlog::debug("io_context thread started");
@@ -134,6 +151,7 @@ auto main(int argc, char **argv) -> int
 
     spdlog::debug("Closing all queues...");
     command_queue->close();
+    display_filter_queue->close();
     display_queue->close();
     session_queue->close();
     transport_queue->close();
@@ -146,12 +164,15 @@ auto main(int argc, char **argv) -> int
     while ((orch_state->started != orch_state->done) or (transport_state->started != transport_state->done)
            or (cmd_proc_state->started != cmd_proc_state->done)
            or (presentation_proc_state->started != presentation_proc_state->done)
-           or (conn_mon_proc_state->started != conn_mon_proc_state->done)) {
+           or (conn_mon_proc_state->started != conn_mon_proc_state->done)
+           or (display_filter_proc_state->started != display_filter_proc_state->done)) {
       const auto coroutine_complete_wait{ 10 };
       std::this_thread::sleep_for(std::chrono::milliseconds(coroutine_complete_wait));
       if (std::chrono::steady_clock::now() - start > timeout) {
         spdlog::warn("Timeout waiting for coroutines to complete, forcing shutdown");
-        spdlog::debug("Coroutine states: orch({}/{}), transport({}/{}), cmd({}/{}), pres({}/{}), conn_mon({}/{})",
+        spdlog::debug(
+          "Coroutine states: orch({}/{}), transport({}/{}), cmd({}/{}), pres({}/{}), conn_mon({}/{}), "
+          "disp_filter({}/{})",
           orch_state->started.load(),
           orch_state->done.load(),
           transport_state->started.load(),
@@ -161,7 +182,9 @@ auto main(int argc, char **argv) -> int
           presentation_proc_state->started.load(),
           presentation_proc_state->done.load(),
           conn_mon_proc_state->started.load(),
-          conn_mon_proc_state->done.load());
+          conn_mon_proc_state->done.load(),
+          display_filter_proc_state->started.load(),
+          display_filter_proc_state->done.load());
         break;
       }
     }
