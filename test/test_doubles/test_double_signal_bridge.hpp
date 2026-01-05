@@ -4,6 +4,7 @@
 #include <concepts/signal_bridge.hpp>
 #include <core/contact_info.hpp>
 #include <signal_types/signal_types.hpp>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -13,7 +14,7 @@ struct test_double_signal_bridge
 {
   mutable std::vector<std::string> called_methods;
   std::string fingerprint_to_return = "RDX:test_fingerprint";
-  std::vector<radix_relay::core::contact_info> contacts_to_return;
+  mutable std::vector<radix_relay::core::contact_info> contacts_to_return;
   mutable std::uint64_t last_message_timestamp = 0;
 
   auto get_node_fingerprint() const -> std::string
@@ -101,9 +102,16 @@ struct test_double_signal_bridge
     called_methods.push_back("assign_contact_alias");
   }
 
-  auto lookup_contact(const std::string & /*alias*/) const -> radix_relay::core::contact_info
+  auto lookup_contact(const std::string &alias) const -> radix_relay::core::contact_info
   {
     called_methods.push_back("lookup_contact");
+    if (not contacts_to_return.empty()) {
+      const auto it = std::find_if(contacts_to_return.cbegin(),
+        contacts_to_return.cend(),
+        [&alias](const auto &contact) { return contact.rdx_fingerprint == alias or contact.user_alias == alias; });
+      if (it != contacts_to_return.cend()) { return *it; }
+      throw std::runtime_error("Contact not found: " + alias);
+    }
     return radix_relay::core::contact_info{
       .rdx_fingerprint = "RDX:test_contact",
       .nostr_pubkey = "npub_test",

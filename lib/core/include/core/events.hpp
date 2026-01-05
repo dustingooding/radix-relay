@@ -98,6 +98,17 @@ struct verify
   std::string peer;///< RDX fingerprint to verify
 };
 
+/// Enter chat mode with a specific contact
+struct chat
+{
+  std::string contact;///< RDX fingerprint, Nostr pubkey, or alias
+};
+
+/// Exit chat mode
+struct leave
+{
+};
+
 /// Subscribe to custom Nostr events
 struct subscribe
 {
@@ -300,7 +311,8 @@ concept Command =
   or std::same_as<T, send> or std::same_as<T, broadcast> or std::same_as<T, connect> or std::same_as<T, disconnect>
   or std::same_as<T, publish_identity> or std::same_as<T, unpublish_identity> or std::same_as<T, trust>
   or std::same_as<T, verify> or std::same_as<T, subscribe> or std::same_as<T, subscribe_identities>
-  or std::same_as<T, subscribe_messages> or std::same_as<T, establish_session>;
+  or std::same_as<T, subscribe_messages> or std::same_as<T, establish_session> or std::same_as<T, chat>
+  or std::same_as<T, leave>;
 
 /// Concept for presentation layer event types
 template<typename T>

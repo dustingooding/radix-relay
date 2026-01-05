@@ -22,7 +22,9 @@ concept command_handler = requires(T handler,
   const core::events::broadcast &broadcast_cmd,
   const core::events::connect &connect_cmd,
   const core::events::trust &trust_cmd,
-  const core::events::verify &verify_cmd) {
+  const core::events::verify &verify_cmd,
+  const core::events::chat &chat_cmd,
+  const core::events::leave &leave_cmd) {
   handler.handle(help_cmd);
   handler.handle(peers_cmd);
   handler.handle(status_cmd);
@@ -35,6 +37,8 @@ concept command_handler = requires(T handler,
   handler.handle(connect_cmd);
   handler.handle(trust_cmd);
   handler.handle(verify_cmd);
+  handler.handle(chat_cmd);
+  handler.handle(leave_cmd);
 };
 
 }// namespace radix_relay::concepts

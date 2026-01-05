@@ -139,6 +139,17 @@ template<concepts::command_handler CmdHandler> struct event_handler
       command_handler_->handle(events::verify{ .peer = input.substr(std::string_view(verify_cmd).length()) });
       return;
     }
+
+    constexpr auto chat_cmd = "/chat ";
+    if (input.starts_with(chat_cmd)) {
+      command_handler_->handle(events::chat{ .contact = input.substr(std::string_view(chat_cmd).length()) });
+      return;
+    }
+
+    if (input == "/leave") {
+      command_handler_->handle(events::leave{});
+      return;
+    }
   }
 
 private:
