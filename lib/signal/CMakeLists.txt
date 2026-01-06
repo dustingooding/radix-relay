@@ -10,7 +10,14 @@ target_link_libraries(
   radix_relay_signal
   PUBLIC
           radix_relay::signal_types
-          radix_relay::core)
+          radix_relay::core
+          OpenSSL::SSL
+          OpenSSL::Crypto)
+
+# macOS: Link Security framework (required by SQLCipher for SecRandomCopyBytes)
+if(APPLE)
+  target_link_libraries(radix_relay_signal PUBLIC "-framework Security")
+endif()
 
 target_include_directories(radix_relay_signal ${WARNING_GUARD} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

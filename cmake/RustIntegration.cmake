@@ -76,21 +76,33 @@ function(setup_rust_workspace)
             message(STATUS "  CXX bridge: Using MSVC release runtime (/MD) with iterator debug level 0")
         endif()
 
+        # Link OpenSSL and bcrypt for SQLCipher on Windows
         target_link_libraries(signal_bridge_cxx INTERFACE
             bcrypt
             OpenSSL::SSL
             OpenSSL::Crypto
         )
-    endif()
-
-    if(APPLE)
+    elseif(APPLE)
         corrosion_set_env_vars(signal_bridge
             "CARGO_TARGET_DIR=${RUST_TARGET_DIR}"
             "MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
-        # Link required system frameworks for Rust dependencies (chrono/iana_time_zone)
-        target_link_libraries(signal_bridge_cxx INTERFACE "-framework CoreFoundation")
+        # Link required system frameworks for Rust dependencies
+        # CoreFoundation: Required by chrono/iana_time_zone
+        # Security: Required by SQLCipher for SecRandomCopyBytes
+        target_link_libraries(signal_bridge_cxx INTERFACE
+            "-framework CoreFoundation"
+            "-framework Security"
+            OpenSSL::SSL
+            OpenSSL::Crypto
+        )
     else()
+        # Linux
         corrosion_set_env_vars(signal_bridge "CARGO_TARGET_DIR=${RUST_TARGET_DIR}")
+        # Link OpenSSL for SQLCipher on Linux
+        target_link_libraries(signal_bridge_cxx INTERFACE
+            OpenSSL::SSL
+            OpenSSL::Crypto
+        )
     endif()
 
     add_test(

@@ -55,13 +55,13 @@ base64 = "0.22"
 # Platform-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]
 secret-service = { version = "4.0", features = ["rt-tokio-crypto-rust"] }
-# Linux: Build SQLCipher and OpenSSL from source
-rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"] }
+# Linux: Build SQLCipher from source, link to system OpenSSL
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "2.11"
-# macOS: Build SQLCipher and OpenSSL from source
-rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"] }
+# macOS: Build SQLCipher from source, link to system OpenSSL
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Security_Cryptography"] }
