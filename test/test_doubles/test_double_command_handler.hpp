@@ -95,6 +95,16 @@ private:
     called_commands.push_back("unpublish_identity");
   }
 
+  auto handle_impl(const radix_relay::core::events::chat &command) const -> void
+  {
+    called_commands.push_back("chat:" + command.contact);
+  }
+
+  auto handle_impl(const radix_relay::core::events::leave & /*command*/) const -> void
+  {
+    called_commands.push_back("leave");
+  }
+
 public:
   auto was_called(const std::string &command) const -> bool
   {

@@ -70,8 +70,9 @@ struct display_filter
    */
   auto handle(const events::display_message &msg) const -> void
   {
-    // System messages always pass through
-    if (msg.source_type == events::display_message::source::system) {
+    // System messages and command feedback always pass through
+    if (msg.source_type == events::display_message::source::system
+        or msg.source_type == events::display_message::source::command_feedback) {
       filtered_queue_->push(msg);
       return;
     }

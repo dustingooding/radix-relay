@@ -13,6 +13,11 @@
 #include <platform/env_utils.hpp>
 #include <signal/signal_bridge.hpp>
 
+template<class... Ts> struct overload : Ts...
+{
+  using Ts::operator()...;
+};
+
 struct command_handler_fixture
 {
   std::shared_ptr<boost::asio::io_context> io_context;
@@ -380,6 +385,90 @@ SCENARIO("Command handler validates command parameters", "[commands][handler][va
         const command_handler_fixture fixture;
         fixture.handler.handle(mode_command);
         REQUIRE(fixture.get_all_output().find("Invalid mode") != std::string::npos);
+      }
+    }
+  }
+}
+
+SCENARIO("Command handler processes chat context commands correctly", "[commands][handler][chat]")
+{
+  GIVEN("A command handler with test fixture")
+  {
+    WHEN("handling chat command with valid contact")
+    {
+      auto chat_command = radix_relay::core::events::chat{ .contact = "alice" };
+
+      THEN("handler should enter chat mode and emit enter_chat_mode event")
+      {
+        const command_handler_fixture fixture;
+        fixture.bridge->contacts_to_return.push_back(radix_relay::core::contact_info{
+          .rdx_fingerprint = "RDX:alice123",
+          .nostr_pubkey = "npub_alice",
+          .user_alias = "alice",
+          .has_active_session = true,
+        });
+        fixture.handler.handle(chat_command);
+
+        bool found_enter_chat_mode = false;
+        bool found_display_message = false;
+        while (auto event = fixture.display_out_queue->try_pop()) {
+          std::visit(overload{ [&found_enter_chat_mode](const radix_relay::core::events::enter_chat_mode & /*evt*/) {
+                                found_enter_chat_mode = true;
+                              },
+                       [&found_display_message](const radix_relay::core::events::display_message &evt) {
+                         found_display_message = evt.message.find("Entering chat with") != std::string::npos;
+                       },
+                       [](const auto & /*evt*/) {} },
+            *event);
+        }
+        REQUIRE(found_enter_chat_mode);
+        REQUIRE(found_display_message);
+      }
+    }
+
+    WHEN("handling chat command with unknown contact")
+    {
+      auto chat_command = radix_relay::core::events::chat{ .contact = "unknown" };
+
+      THEN("handler should emit error message")
+      {
+        const command_handler_fixture fixture;
+        fixture.bridge->contacts_to_return.push_back(radix_relay::core::contact_info{
+          .rdx_fingerprint = "RDX:alice123",
+          .nostr_pubkey = "npub_alice",
+          .user_alias = "alice",
+          .has_active_session = true,
+        });
+        fixture.handler.handle(chat_command);
+
+        const auto output = fixture.get_all_output();
+        REQUIRE(output.find("Contact not found") != std::string::npos);
+      }
+    }
+
+    WHEN("handling leave command")
+    {
+      auto leave_command = radix_relay::core::events::leave{};
+
+      THEN("handler should exit chat mode and emit exit_chat_mode event")
+      {
+        const command_handler_fixture fixture;
+        fixture.handler.handle(leave_command);
+
+        bool found_exit_chat_mode = false;
+        bool found_display_message = false;
+        while (auto event = fixture.display_out_queue->try_pop()) {
+          std::visit(overload{ [&found_exit_chat_mode](const radix_relay::core::events::exit_chat_mode & /*evt*/) {
+                                found_exit_chat_mode = true;
+                              },
+                       [&found_display_message](const radix_relay::core::events::display_message &evt) {
+                         found_display_message = evt.message.find("Exiting chat mode") != std::string::npos;
+                       },
+                       [](const auto & /*evt*/) {} },
+            *event);
+        }
+        REQUIRE(found_exit_chat_mode);
+        REQUIRE(found_display_message);
       }
     }
   }

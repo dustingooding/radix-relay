@@ -104,5 +104,24 @@ SCENARIO("Event handler processes raw command events correctly", "[events][handl
         REQUIRE(test_cmd_handler->was_called("send::"));
       }
     }
+
+    WHEN("handling chat context commands")
+    {
+      auto chat_event = radix_relay::core::events::raw_command{ .input = "/chat alice" };
+      auto leave_event = radix_relay::core::events::raw_command{ .input = "/leave" };
+
+      THEN("handler should parse and route chat commands correctly")
+      {
+        test_cmd_handler->clear_calls();
+
+        event_handler.handle(chat_event);
+        REQUIRE(test_cmd_handler->was_called("chat:alice"));
+
+        event_handler.handle(leave_event);
+        REQUIRE(test_cmd_handler->was_called("leave"));
+
+        REQUIRE(test_cmd_handler->get_call_count() == 2);
+      }
+    }
   }
 }

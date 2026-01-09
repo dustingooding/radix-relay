@@ -113,6 +113,16 @@ TEST_CASE("display_filter system messages always pass through", "[display_filter
     REQUIRE(result.has_value());
     if (result.has_value()) { CHECK(result->message == "System info"); }
   }
+
+  SECTION("command feedback passes even in chat mode")
+  {
+    auto msg = make_message("Command executed", core::events::display_message::source::command_feedback);
+    filter.handle(core::events::display_filter_input_t{ msg });
+
+    auto result = filtered_queue->try_pop();
+    REQUIRE(result.has_value());
+    if (result.has_value()) { CHECK(result->message == "Command executed"); }
+  }
 }
 
 TEST_CASE("display_filter filters messages in chat mode", "[display_filter]")

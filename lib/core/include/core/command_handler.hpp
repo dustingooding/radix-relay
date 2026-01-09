@@ -75,9 +75,11 @@ private:
     emit(
       "Interactive Commands:\n"
       "  /broadcast <message>          Send to all local peers\n"
+      "  /chat <contact>               Enter chat mode with contact\n"
       "  /connect <relay>              Add Nostr relay\n"
       "  /disconnect                   Disconnect from Nostr relay\n"
       "  /identities                   List discovered identities\n"
+      "  /leave                        Exit chat mode\n"
       "  /mode <internet|mesh|hybrid>  Switch transport mode\n"
       "  /peers                        List discovered peers\n"
       "  /publish                      Publish identity to network\n"
@@ -231,6 +233,31 @@ private:
     } else {
       emit("Usage: verify <peer>\n");
     }
+  }
+
+  auto handle_impl(const events::chat &command) const -> void
+  {
+    std::ignore = initialized_;
+    if (command.contact.empty()) {
+      emit("Usage: /chat <contact>\n");
+      return;
+    }
+
+    try {
+      const auto contact = bridge_->lookup_contact(command.contact);
+      display_out_queue_->push(events::enter_chat_mode{ .rdx_fingerprint = contact.rdx_fingerprint });
+      const auto display_name = contact.user_alias.empty() ? contact.rdx_fingerprint : contact.user_alias;
+      emit("Entering chat with {} ({})\n", display_name, contact.rdx_fingerprint);
+    } catch (const std::exception & /*e*/) {
+      emit("Contact not found: {}\n", command.contact);
+    }
+  }
+
+  auto handle_impl(const events::leave & /*command*/) const -> void
+  {
+    std::ignore = initialized_;
+    display_out_queue_->push(events::exit_chat_mode{});
+    emit("Exiting chat mode\n");
   }
 
   std::shared_ptr<Bridge> bridge_;
