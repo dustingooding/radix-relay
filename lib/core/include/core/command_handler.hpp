@@ -57,7 +57,7 @@ template<concepts::signal_bridge Bridge> struct command_handler
    *
    * @return Shared pointer to the bridge
    */
-  [[nodiscard]] auto get_bridge() -> std::shared_ptr<Bridge> { return bridge_; }
+  [[nodiscard]] auto get_bridge() const -> std::shared_ptr<Bridge> { return bridge_; }
 
 private:
   template<typename... Args> auto emit(fmt::format_string<Args...> format_string, Args &&...args) const -> void

@@ -1,3 +1,4 @@
+#include <core/contact_info.hpp>
 #include <core/event_handler.hpp>
 #include <core/events.hpp>
 #include <cstddef>
@@ -7,10 +8,24 @@
 
 namespace {
 
+struct noop_bridge
+{
+  [[nodiscard]] static auto lookup_contact(const std::string & /*contact*/) -> radix_relay::core::contact_info
+  {
+    return radix_relay::core::contact_info{
+      .rdx_fingerprint = "RDX:test", .nostr_pubkey = "npub_test", .user_alias = "test", .has_active_session = false
+    };
+  }
+};
+
 struct noop_command_handler
 {
+  std::shared_ptr<noop_bridge> bridge = std::make_shared<noop_bridge>();
+
   // cppcheck-suppress functionStatic
   template<radix_relay::core::events::Command T> auto handle(const T & /*command*/) const -> void {}
+
+  [[nodiscard]] auto get_bridge() const -> std::shared_ptr<noop_bridge> { return bridge; }
 };
 
 }// namespace

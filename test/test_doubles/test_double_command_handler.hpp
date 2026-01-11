@@ -2,17 +2,37 @@
 
 #include <algorithm>
 #include <concepts/command_handler.hpp>
+#include <core/contact_info.hpp>
 #include <core/events.hpp>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace radix_relay_test {
 
+struct test_double_bridge
+{
+  mutable std::vector<radix_relay::core::contact_info> contacts;
+
+  auto lookup_contact(const std::string &contact_identifier) const -> radix_relay::core::contact_info
+  {
+    const auto it = std::find_if(contacts.cbegin(), contacts.cend(), [&contact_identifier](const auto &c) {
+      return c.rdx_fingerprint == contact_identifier || c.user_alias == contact_identifier;
+    });
+    if (it != contacts.cend()) { return *it; }
+    throw std::runtime_error("Contact not found");
+  }
+};
+
 struct test_double_command_handler
 {
   mutable std::vector<std::string> called_commands;
+  std::shared_ptr<test_double_bridge> bridge = std::make_shared<test_double_bridge>();
 
   template<radix_relay::core::events::Command T> auto handle(const T &command) const -> void { handle_impl(command); }
+
+  [[nodiscard]] auto get_bridge() const -> std::shared_ptr<test_double_bridge> { return bridge; }
 
 private:
   auto handle_impl(const radix_relay::core::events::help & /*command*/) const -> void

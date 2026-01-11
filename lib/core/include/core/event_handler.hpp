@@ -46,7 +46,11 @@ template<concepts::command_handler CmdHandler> struct event_handler
    */
   auto handle(const events::raw_command &event) const -> void
   {
-    const auto &input = event.input;
+    auto input = event.input;
+
+    if (active_chat_rdx_.has_value() and not input.starts_with("/")) {
+      input = "/send " + active_chat_rdx_.value() + " " + input;
+    }
 
     if (input == "/help") {
       command_handler_->handle(events::help{});
@@ -142,18 +146,28 @@ template<concepts::command_handler CmdHandler> struct event_handler
 
     constexpr auto chat_cmd = "/chat ";
     if (input.starts_with(chat_cmd)) {
-      command_handler_->handle(events::chat{ .contact = input.substr(std::string_view(chat_cmd).length()) });
+      const auto contact_arg = input.substr(std::string_view(chat_cmd).length());
+      if (not contact_arg.empty()) {
+        try {
+          const auto contact = command_handler_->get_bridge()->lookup_contact(std::string(contact_arg));
+          active_chat_rdx_ = contact.rdx_fingerprint;
+        } catch (const std::exception & /*e*/) {
+          // Contact lookup failed, don't enter chat mode
+        }
+      }
+      command_handler_->handle(events::chat{ .contact = std::string(contact_arg) });
       return;
     }
 
     if (input == "/leave") {
+      active_chat_rdx_.reset();
       command_handler_->handle(events::leave{});
       return;
     }
   }
 
-private:
   std::shared_ptr<CmdHandler> command_handler_;
+  mutable std::optional<std::string> active_chat_rdx_;
 };
 
 }// namespace radix_relay::core
