@@ -125,3 +125,58 @@ SCENARIO("Event handler processes raw command events correctly", "[events][handl
     }
   }
 }
+
+SCENARIO("Event handler preprocesses messages in chat mode", "[events][handler][chat_mode]")
+{
+  GIVEN("An event handler with a contact available")
+  {
+    auto test_cmd_handler = std::make_shared<radix_relay_test::test_double_command_handler>();
+    test_cmd_handler->bridge->contacts.push_back(radix_relay::core::contact_info{ .rdx_fingerprint = "RDX:alice123",
+      .nostr_pubkey = "npub_alice",
+      .user_alias = "alice",
+      .has_active_session = true });
+    radix_relay::core::event_handler<radix_relay_test::test_double_command_handler>::out_queues_t const queues{};
+    const radix_relay::core::event_handler event_handler{ test_cmd_handler, queues };
+
+    WHEN("entering chat mode via /chat command")
+    {
+      event_handler.handle(radix_relay::core::events::raw_command{ .input = "/chat alice" });
+
+      AND_WHEN("user types plain text without slash")
+      {
+        auto plain_text = radix_relay::core::events::raw_command{ .input = "hello" };
+        event_handler.handle(plain_text);
+
+        THEN("handler should preprocess it as a send command to active contact")
+        {
+          REQUIRE(test_cmd_handler->was_called("send:RDX:alice123:hello"));
+        }
+      }
+
+      AND_WHEN("user types a slash command")
+      {
+        auto slash_command = radix_relay::core::events::raw_command{ .input = "/help" };
+        event_handler.handle(slash_command);
+
+        THEN("handler should not preprocess it")
+        {
+          REQUIRE(test_cmd_handler->was_called("help"));
+          REQUIRE_FALSE(test_cmd_handler->was_called("send"));
+        }
+      }
+
+      AND_WHEN("exiting chat mode via /leave command")
+      {
+        event_handler.handle(radix_relay::core::events::raw_command{ .input = "/leave" });
+
+        AND_WHEN("user types plain text")
+        {
+          auto plain_text = radix_relay::core::events::raw_command{ .input = "hello" };
+          event_handler.handle(plain_text);
+
+          THEN("handler should not preprocess it") { REQUIRE_FALSE(test_cmd_handler->was_called("send")); }
+        }
+      }
+    }
+  }
+}
