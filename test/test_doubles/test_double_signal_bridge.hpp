@@ -171,12 +171,62 @@ struct test_double_signal_bridge
     maintenance_result = result;
   }
 
+  auto get_conversation_messages(const std::string &rdx_fingerprint,
+    std::uint32_t limit,
+    std::uint32_t /*offset*/) const -> std::vector<radix_relay::signal::stored_message>
+  {
+    called_methods.push_back("get_conversation_messages");
+    std::vector<radix_relay::signal::stored_message> result;
+    for (const auto &msg : messages_to_return) {
+      if (msg.conversation_id == conversation_id_for_rdx(rdx_fingerprint)) {
+        result.push_back(msg);
+        if (result.size() >= static_cast<size_t>(limit)) { break; }
+      }
+    }
+    return result;
+  }
+
+  auto mark_conversation_read(const std::string &rdx_fingerprint) const -> void
+  {
+    called_methods.push_back("mark_conversation_read");
+    marked_read_rdx = rdx_fingerprint;
+  }
+
+  auto get_unread_count(const std::string & /*rdx_fingerprint*/) const -> std::uint32_t
+  {
+    called_methods.push_back("get_unread_count");
+    return unread_count_to_return;
+  }
+
+  auto get_conversations(bool /*include_archived*/) const -> std::vector<radix_relay::signal::conversation>
+  {
+    called_methods.push_back("get_conversations");
+    return conversations_to_return;
+  }
+
+  auto delete_message(std::int64_t /*message_id*/) const -> void { called_methods.push_back("delete_message"); }
+
+  auto delete_conversation(const std::string & /*rdx_fingerprint*/) const -> void
+  {
+    called_methods.push_back("delete_conversation");
+  }
+
+  mutable std::vector<radix_relay::signal::stored_message> messages_to_return;
+  mutable std::vector<radix_relay::signal::conversation> conversations_to_return;
+  mutable std::uint32_t unread_count_to_return = 0;
+  mutable std::string marked_read_rdx;
+
 private:
   radix_relay::signal::key_maintenance_result maintenance_result{
     .signed_pre_key_rotated = false,
     .kyber_pre_key_rotated = false,
     .pre_keys_replenished = false,
   };
+
+  static auto conversation_id_for_rdx(const std::string &rdx) -> std::int64_t
+  {
+    return static_cast<std::int64_t>(std::hash<std::string>{}(rdx) % 1000);
+  }
 };
 
 static_assert(radix_relay::concepts::signal_bridge<test_double_signal_bridge>);
