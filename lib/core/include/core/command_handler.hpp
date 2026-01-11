@@ -245,9 +245,51 @@ private:
 
     try {
       const auto contact = bridge_->lookup_contact(command.contact);
-      display_out_queue_->push(events::enter_chat_mode{ .rdx_fingerprint = contact.rdx_fingerprint });
       const auto display_name = contact.user_alias.empty() ? contact.rdx_fingerprint : contact.user_alias;
-      emit("Entering chat with {} ({})\n", display_name, contact.rdx_fingerprint);
+
+      display_out_queue_->push(events::enter_chat_mode{ .rdx_fingerprint = contact.rdx_fingerprint });
+
+      constexpr std::uint32_t history_limit = 5;
+      const auto messages = bridge_->get_conversation_messages(contact.rdx_fingerprint, history_limit, 0);
+
+      if (not messages.empty()) {
+        display_out_queue_->push(events::display_message{
+          .message = fmt::format("--- Conversation History ({} messages) ---", messages.size()),
+          .contact_rdx = contact.rdx_fingerprint,
+          .timestamp = platform::current_timestamp_ms(),
+          .source_type = events::display_message::source::system });
+
+        for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
+          const auto &msg = *it;
+
+          const auto direction_indicator = (msg.direction == signal::MessageDirection::Incoming) ? "← " : "→ ";
+          const auto sender_name = (msg.direction == signal::MessageDirection::Incoming) ? display_name : "You";
+
+          const auto formatted_message = fmt::format("{}{}: {}", direction_indicator, sender_name, msg.content);
+
+          const auto source_type = (msg.direction == signal::MessageDirection::Incoming)
+                                     ? events::display_message::source::incoming_message
+                                     : events::display_message::source::outgoing_message;
+
+          display_out_queue_->push(events::display_message{ .message = formatted_message,
+            .contact_rdx = contact.rdx_fingerprint,
+            .timestamp = msg.timestamp,
+            .source_type = source_type });
+        }
+
+        display_out_queue_->push(events::display_message{ .message = "--- End of History ---",
+          .contact_rdx = contact.rdx_fingerprint,
+          .timestamp = platform::current_timestamp_ms(),
+          .source_type = events::display_message::source::system });
+      }
+
+      // FIXME: Race condition - if messages arrive between get_conversation_messages and
+      // mark_conversation_read, they'll be marked read without being displayed. Should pass
+      // the newest message timestamp to mark_conversation_read to only mark messages up to
+      // that point as read.
+      bridge_->mark_conversation_read(contact.rdx_fingerprint);
+
+      emit("Entering chat with {}\n", display_name);
     } catch (const std::exception & /*e*/) {
       emit("Contact not found: {}\n", command.contact);
     }

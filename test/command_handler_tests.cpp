@@ -473,3 +473,125 @@ SCENARIO("Command handler processes chat context commands correctly", "[commands
     }
   }
 }
+
+SCENARIO("Command handler displays conversation history when entering chat", "[commands][handler][chat][history]")
+{
+  GIVEN("A contact with message history")
+  {
+    WHEN("entering chat with a contact that has messages")
+    {
+      auto chat_command = radix_relay::core::events::chat{ .contact = "alice" };
+
+      THEN("handler should load and display conversation history")
+      {
+        const command_handler_fixture fixture;
+        const std::string alice_rdx = "RDX:alice123";
+        const auto conv_id = static_cast<std::int64_t>(std::hash<std::string>{}(alice_rdx) % 1000);
+
+        constexpr std::uint64_t first_msg_time = 1000;
+        constexpr std::uint64_t second_msg_time = 2000;
+        constexpr std::uint64_t third_msg_time = 3000;
+
+        fixture.bridge->contacts_to_return.push_back(radix_relay::core::contact_info{
+          .rdx_fingerprint = alice_rdx,
+          .nostr_pubkey = "npub_alice",
+          .user_alias = "alice",
+          .has_active_session = true,
+        });
+
+        fixture.bridge->messages_to_return = {
+          radix_relay::signal::stored_message{ .id = 1,
+            .conversation_id = conv_id,
+            .direction = radix_relay::signal::MessageDirection::Outgoing,
+            .timestamp = first_msg_time,
+            .message_type = radix_relay::signal::MessageType::Text,
+            .content = "Hello Alice",
+            .delivery_status = radix_relay::signal::DeliveryStatus::Delivered,
+            .was_prekey_message = false,
+            .session_established = false },
+          radix_relay::signal::stored_message{ .id = 2,
+            .conversation_id = conv_id,
+            .direction = radix_relay::signal::MessageDirection::Incoming,
+            .timestamp = second_msg_time,
+            .message_type = radix_relay::signal::MessageType::Text,
+            .content = "Hi there",
+            .delivery_status = radix_relay::signal::DeliveryStatus::Delivered,
+            .was_prekey_message = false,
+            .session_established = false },
+          radix_relay::signal::stored_message{ .id = 3,
+            .conversation_id = conv_id,
+            .direction = radix_relay::signal::MessageDirection::Outgoing,
+            .timestamp = third_msg_time,
+            .message_type = radix_relay::signal::MessageType::Text,
+            .content = "How are you?",
+            .delivery_status = radix_relay::signal::DeliveryStatus::Delivered,
+            .was_prekey_message = false,
+            .session_established = false },
+        };
+
+        fixture.handler.handle(chat_command);
+
+        REQUIRE(fixture.bridge->was_called("get_conversation_messages"));
+        REQUIRE(fixture.bridge->was_called("mark_conversation_read"));
+        REQUIRE(fixture.bridge->marked_read_rdx == alice_rdx);
+
+        std::vector<radix_relay::core::events::display_message> history_messages;
+        while (auto event = fixture.display_out_queue->try_pop()) {
+          std::visit(
+            [&history_messages](const auto &evt) {
+              if constexpr (std::same_as<std::decay_t<decltype(evt)>, radix_relay::core::events::display_message>) {
+                if (evt.contact_rdx.has_value() and evt.contact_rdx.value() == "RDX:alice123") {
+                  history_messages.push_back(evt);
+                }
+              }
+            },
+            *event);
+        }
+
+        REQUIRE(history_messages.size() >= 3);
+
+        bool found_outgoing = false;
+        bool found_incoming = false;
+        for (const auto &msg : history_messages) {
+          if (msg.message.find("→ You:") != std::string::npos) { found_outgoing = true; }
+          if (msg.message.find("← alice:") != std::string::npos) { found_incoming = true; }
+        }
+        REQUIRE(found_outgoing);
+        REQUIRE(found_incoming);
+      }
+    }
+
+    WHEN("entering chat with a contact that has no messages")
+    {
+      auto chat_command = radix_relay::core::events::chat{ .contact = "bob" };
+
+      THEN("handler should still enter chat mode but display no history")
+      {
+        const command_handler_fixture fixture;
+        fixture.bridge->contacts_to_return.push_back(radix_relay::core::contact_info{
+          .rdx_fingerprint = "RDX:bob456",
+          .nostr_pubkey = "npub_bob",
+          .user_alias = "bob",
+          .has_active_session = true,
+        });
+
+        fixture.bridge->messages_to_return = {};
+
+        fixture.handler.handle(chat_command);
+
+        REQUIRE(fixture.bridge->was_called("get_conversation_messages"));
+        REQUIRE(fixture.bridge->was_called("mark_conversation_read"));
+
+        bool found_enter_chat_mode = false;
+        while (auto event = fixture.display_out_queue->try_pop()) {
+          std::visit(overload{ [&found_enter_chat_mode](const radix_relay::core::events::enter_chat_mode & /*evt*/) {
+                                found_enter_chat_mode = true;
+                              },
+                       [](const auto & /*evt*/) {} },
+            *event);
+        }
+        REQUIRE(found_enter_chat_mode);
+      }
+    }
+  }
+}
