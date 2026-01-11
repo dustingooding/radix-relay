@@ -281,13 +281,12 @@ private:
           .contact_rdx = contact.rdx_fingerprint,
           .timestamp = platform::current_timestamp_ms(),
           .source_type = events::display_message::source::system });
-      }
 
-      // FIXME: Race condition - if messages arrive between get_conversation_messages and
-      // mark_conversation_read, they'll be marked read without being displayed. Should pass
-      // the newest message timestamp to mark_conversation_read to only mark messages up to
-      // that point as read.
-      bridge_->mark_conversation_read(contact.rdx_fingerprint);
+        const auto newest_timestamp = messages.front().timestamp;
+        bridge_->mark_conversation_read_up_to(contact.rdx_fingerprint, newest_timestamp);
+      } else {
+        bridge_->mark_conversation_read(contact.rdx_fingerprint);
+      }
 
       emit("Entering chat with {}\n", display_name);
     } catch (const std::exception & /*e*/) {

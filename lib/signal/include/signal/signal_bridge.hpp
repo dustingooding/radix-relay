@@ -212,6 +212,17 @@ public:
   auto mark_conversation_read(const std::string &rdx_fingerprint) const -> void;
 
   /**
+   * @brief Marks messages as read up to a specific timestamp.
+   *
+   * This prevents race conditions where new messages arrive after loading history.
+   * Only marks messages with timestamp <= up_to_timestamp as read.
+   *
+   * @param rdx_fingerprint Contact's RDX fingerprint
+   * @param up_to_timestamp Messages up to and including this timestamp are marked read
+   */
+  auto mark_conversation_read_up_to(const std::string &rdx_fingerprint, std::uint64_t up_to_timestamp) const -> void;
+
+  /**
    * @brief Deletes a specific message from history.
    *
    * @param message_id Database ID of the message to delete

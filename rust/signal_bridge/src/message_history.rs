@@ -408,6 +408,41 @@ impl MessageHistory {
         Ok(())
     }
 
+    /// Mark messages as read up to a specific timestamp
+    ///
+    /// This prevents race conditions where new messages arrive after loading history
+    /// but before marking as read. Only incoming messages with timestamp <= up_to_timestamp
+    /// are considered read.
+    pub fn mark_conversation_read_up_to(
+        &self,
+        rdx_fingerprint: &str,
+        up_to_timestamp: u64,
+    ) -> Result<(), MessageHistoryError> {
+        let conn = self.connection.lock().unwrap();
+
+        let conversation_id: i64 = conn.query_row(
+            "SELECT id FROM conversations WHERE rdx_fingerprint = ?1",
+            [rdx_fingerprint],
+            |row| row.get(0),
+        )?;
+
+        let unread_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM messages
+             WHERE conversation_id = ?1
+               AND direction = 0
+               AND timestamp > ?2",
+            rusqlite::params![conversation_id, up_to_timestamp as i64],
+            |row| row.get(0),
+        )?;
+
+        conn.execute(
+            "UPDATE conversations SET unread_count = ?1 WHERE id = ?2",
+            rusqlite::params![unread_count, conversation_id],
+        )?;
+
+        Ok(())
+    }
+
     /// Delete message
     pub fn delete_message(&self, message_id: i64) -> Result<(), MessageHistoryError> {
         let conn = self.connection.lock().unwrap();

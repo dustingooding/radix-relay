@@ -186,6 +186,12 @@ auto bridge::mark_conversation_read(const std::string &rdx_fingerprint) const ->
   radix_relay::mark_conversation_read(*bridge_, rdx_fingerprint.c_str());
 }
 
+auto bridge::mark_conversation_read_up_to(const std::string &rdx_fingerprint, std::uint64_t up_to_timestamp) const
+  -> void
+{
+  radix_relay::mark_conversation_read_up_to(*bridge_, rdx_fingerprint.c_str(), up_to_timestamp);
+}
+
 auto bridge::delete_message(std::int64_t message_id) const -> void
 {
   radix_relay::delete_message(*bridge_, message_id);
