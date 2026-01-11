@@ -1217,6 +1217,12 @@ mod ffi {
 
         fn mark_conversation_read(bridge: &mut SignalBridge, rdx_fingerprint: &str) -> Result<()>;
 
+        fn mark_conversation_read_up_to(
+            bridge: &mut SignalBridge,
+            rdx_fingerprint: &str,
+            up_to_timestamp: u64,
+        ) -> Result<()>;
+
         fn delete_message(bridge: &mut SignalBridge, message_id: i64) -> Result<()>;
 
         fn delete_conversation(bridge: &mut SignalBridge, rdx_fingerprint: &str) -> Result<()>;
@@ -1481,6 +1487,27 @@ pub fn mark_conversation_read(
         .storage
         .message_history()
         .mark_conversation_read(rdx_fingerprint)?;
+    Ok(())
+}
+
+/// Marks a conversation as read up to a specific timestamp
+///
+/// This prevents race conditions where new messages arrive after loading history.
+/// Only marks messages with timestamp <= up_to_timestamp as read.
+///
+/// # Arguments
+/// * `bridge` - Signal bridge instance
+/// * `rdx_fingerprint` - Contact's RDX fingerprint
+/// * `up_to_timestamp` - Messages up to and including this timestamp are marked read
+pub fn mark_conversation_read_up_to(
+    bridge: &mut SignalBridge,
+    rdx_fingerprint: &str,
+    up_to_timestamp: u64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    bridge
+        .storage
+        .message_history()
+        .mark_conversation_read_up_to(rdx_fingerprint, up_to_timestamp)?;
     Ok(())
 }
 

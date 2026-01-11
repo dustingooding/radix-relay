@@ -511,4 +511,111 @@ mod tests {
 
         cleanup_test_db(test_db_path);
     }
+
+    #[test]
+    fn test_mark_conversation_read_with_timestamp() {
+        use crate::message_history::MessageHistory;
+
+        let test_db_path = "test_mark_read_timestamp.db";
+        cleanup_test_db(test_db_path);
+
+        let conn = create_test_storage(test_db_path);
+        insert_test_contact(
+            &conn.lock().unwrap(),
+            "rdx:timestamp_test",
+            "nostr:timestamp_test",
+        );
+
+        let history = MessageHistory::new(conn.clone());
+
+        history
+            .store_incoming_message("rdx:timestamp_test", 1000, b"Message 1", false, true)
+            .expect("Failed to store message 1");
+
+        history
+            .store_incoming_message("rdx:timestamp_test", 2000, b"Message 2", false, true)
+            .expect("Failed to store message 2");
+
+        history
+            .store_incoming_message("rdx:timestamp_test", 3000, b"Message 3", false, true)
+            .expect("Failed to store message 3");
+
+        let initial_count = history
+            .get_unread_count("rdx:timestamp_test")
+            .expect("Failed to get initial unread count");
+        assert_eq!(initial_count, 3, "Should have 3 unread messages initially");
+
+        history
+            .mark_conversation_read_up_to("rdx:timestamp_test", 2000)
+            .expect("Failed to mark as read up to timestamp 2000");
+
+        let count_after = history
+            .get_unread_count("rdx:timestamp_test")
+            .expect("Failed to get unread count after marking");
+
+        assert_eq!(
+            count_after, 1,
+            "Should have 1 unread message remaining (message at timestamp 3000)"
+        );
+
+        let messages = history
+            .get_conversation_messages("rdx:timestamp_test", 10, 0)
+            .expect("Failed to get messages");
+
+        assert_eq!(messages.len(), 3, "All messages should still exist");
+
+        cleanup_test_db(test_db_path);
+    }
+
+    #[test]
+    fn test_mark_conversation_read_with_timestamp_race_condition() {
+        use crate::message_history::MessageHistory;
+
+        let test_db_path = "test_mark_read_race.db";
+        cleanup_test_db(test_db_path);
+
+        let conn = create_test_storage(test_db_path);
+        insert_test_contact(&conn.lock().unwrap(), "rdx:race_test", "nostr:race_test");
+
+        let history = MessageHistory::new(conn.clone());
+
+        history
+            .store_incoming_message("rdx:race_test", 1000, b"Old message 1", false, true)
+            .expect("Failed to store old message 1");
+
+        history
+            .store_incoming_message("rdx:race_test", 2000, b"Old message 2", false, true)
+            .expect("Failed to store old message 2");
+
+        let messages = history
+            .get_conversation_messages("rdx:race_test", 10, 0)
+            .expect("Failed to get messages");
+
+        let newest_timestamp = messages.first().map(|m| m.timestamp).unwrap_or(0);
+
+        history
+            .store_incoming_message(
+                "rdx:race_test",
+                3000,
+                b"New message during race",
+                false,
+                true,
+            )
+            .expect("Failed to store new message");
+
+        history
+            .mark_conversation_read_up_to("rdx:race_test", newest_timestamp)
+            .expect("Failed to mark as read");
+
+        let count_after = history
+            .get_unread_count("rdx:race_test")
+            .expect("Failed to get unread count");
+
+        assert_eq!(
+            count_after, 1,
+            "New message that arrived during race should remain unread"
+        );
+
+        cleanup_test_db(test_db_path);
+    }
 }

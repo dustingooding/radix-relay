@@ -177,12 +177,13 @@ struct test_double_signal_bridge
   {
     called_methods.push_back("get_conversation_messages");
     std::vector<radix_relay::signal::stored_message> result;
-    for (const auto &msg : messages_to_return) {
-      if (msg.conversation_id == conversation_id_for_rdx(rdx_fingerprint)) {
-        result.push_back(msg);
-        if (result.size() >= static_cast<size_t>(limit)) { break; }
-      }
-    }
+    const auto target_conv_id = conversation_id_for_rdx(rdx_fingerprint);
+    std::copy_if(messages_to_return.begin(),
+      messages_to_return.end(),
+      std::back_inserter(result),
+      [target_conv_id](const auto &msg) { return msg.conversation_id == target_conv_id; });
+    std::sort(result.begin(), result.end(), [](const auto &a, const auto &b) { return a.timestamp > b.timestamp; });
+    if (result.size() > static_cast<size_t>(limit)) { result.resize(limit); }
     return result;
   }
 
@@ -190,6 +191,13 @@ struct test_double_signal_bridge
   {
     called_methods.push_back("mark_conversation_read");
     marked_read_rdx = rdx_fingerprint;
+  }
+
+  auto mark_conversation_read_up_to(const std::string &rdx_fingerprint, std::uint64_t up_to_timestamp) const -> void
+  {
+    called_methods.push_back("mark_conversation_read_up_to");
+    marked_read_rdx = rdx_fingerprint;
+    marked_read_up_to_timestamp = up_to_timestamp;
   }
 
   auto get_unread_count(const std::string & /*rdx_fingerprint*/) const -> std::uint32_t
@@ -215,6 +223,7 @@ struct test_double_signal_bridge
   mutable std::vector<radix_relay::signal::conversation> conversations_to_return;
   mutable std::uint32_t unread_count_to_return = 0;
   mutable std::string marked_read_rdx;
+  mutable std::uint64_t marked_read_up_to_timestamp = 0;
 
 private:
   radix_relay::signal::key_maintenance_result maintenance_result{

@@ -532,8 +532,9 @@ SCENARIO("Command handler displays conversation history when entering chat", "[c
         fixture.handler.handle(chat_command);
 
         REQUIRE(fixture.bridge->was_called("get_conversation_messages"));
-        REQUIRE(fixture.bridge->was_called("mark_conversation_read"));
+        REQUIRE(fixture.bridge->was_called("mark_conversation_read_up_to"));
         REQUIRE(fixture.bridge->marked_read_rdx == alice_rdx);
+        REQUIRE(fixture.bridge->marked_read_up_to_timestamp == third_msg_time);
 
         std::vector<radix_relay::core::events::display_message> history_messages;
         while (auto event = fixture.display_out_queue->try_pop()) {
