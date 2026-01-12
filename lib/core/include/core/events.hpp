@@ -392,6 +392,7 @@ struct display_message
 struct enter_chat_mode
 {
   std::string rdx_fingerprint;///< Contact to chat with
+  std::string display_name;///< Display name or alias for UI
 };
 
 /// Exit chat mode, return to showing all messages
@@ -401,5 +402,8 @@ struct exit_chat_mode
 
 /// Display filter input: either a display message or control event
 using display_filter_input_t = std::variant<display_message, enter_chat_mode, exit_chat_mode>;
+
+/// UI events: unified event stream for UI layers (replaces separate display + control queues)
+using ui_event_t = std::variant<display_message, enter_chat_mode, exit_chat_mode>;
 
 }// namespace radix_relay::core::events

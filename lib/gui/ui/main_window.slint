@@ -29,10 +29,12 @@ export struct Contact {
 export component MainWindow inherits Window {
     in-out property <string> node-fingerprint: "";
     in-out property <string> current-mode: "hybrid";
+    in-out property <string> active-chat-contact: "";
     in property <[Message]> messages: [];
     in property <[Contact]> contacts: [];
     property <int> message-count: messages.length;
     property <bool> auto-scroll-enabled: true;
+    property <bool> in-chat-mode: active-chat-contact != "";
 
     callback send-command(string);
 
@@ -204,7 +206,7 @@ export component MainWindow inherits Window {
                 spacing: 8px;
 
                 Text {
-                    text: "[⇌]";
+                    text: in-chat-mode ? "[⇌ @" + active-chat-contact + "]" : "[⇌]";
                     font-size: 14px;
                     font-weight: 600;
                     color: AppColors.primary-green;
@@ -212,7 +214,7 @@ export component MainWindow inherits Window {
                 }
 
                 input := LineEdit {
-                    placeholder-text: "Type command...";
+                    placeholder-text: in-chat-mode ? "Message to " + active-chat-contact + "..." : "Type command...";
                     horizontal-stretch: 1;
                     font-size: 13px;
 

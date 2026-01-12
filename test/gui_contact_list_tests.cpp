@@ -26,8 +26,8 @@ TEST_CASE("processor calls bridge list_contacts on initialization", "[gui][conta
   auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
   auto command_queue =
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
-  auto display_queue =
-    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
+  auto ui_event_queue =
+    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::ui_event_t>>(io_context);
   auto window = radix_relay::gui::make_window();
   auto message_model = radix_relay::gui::make_message_model();
 
@@ -47,7 +47,7 @@ TEST_CASE("processor calls bridge list_contacts on initialization", "[gui][conta
   };
 
   const radix_relay::gui::processor<radix_relay_test::test_double_signal_bridge> processor(
-    "RDX:test123", "hybrid", bridge, command_queue, display_queue, window, message_model);
+    "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   CHECK(bridge->was_called("list_contacts"));
 }
@@ -58,8 +58,8 @@ TEST_CASE("processor populates contact list model with contacts from bridge", "[
   auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
   auto command_queue =
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
-  auto display_queue =
-    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
+  auto ui_event_queue =
+    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::ui_event_t>>(io_context);
   auto window = radix_relay::gui::make_window();
   auto message_model = radix_relay::gui::make_message_model();
 
@@ -85,7 +85,7 @@ TEST_CASE("processor populates contact list model with contacts from bridge", "[
   };
 
   const radix_relay::gui::processor<radix_relay_test::test_double_signal_bridge> processor(
-    "RDX:test123", "hybrid", bridge, command_queue, display_queue, window, message_model);
+    "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   auto contact_list_model = processor.get_contact_list_model();
   REQUIRE(contact_list_model != nullptr);
@@ -98,8 +98,8 @@ TEST_CASE("processor excludes 'self' contact from contact list", "[gui][contact_
   auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
   auto command_queue =
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
-  auto display_queue =
-    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
+  auto ui_event_queue =
+    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::ui_event_t>>(io_context);
   auto window = radix_relay::gui::make_window();
   auto message_model = radix_relay::gui::make_message_model();
 
@@ -125,7 +125,7 @@ TEST_CASE("processor excludes 'self' contact from contact list", "[gui][contact_
   };
 
   const radix_relay::gui::processor<radix_relay_test::test_double_signal_bridge> processor(
-    "RDX:test123", "hybrid", bridge, command_queue, display_queue, window, message_model);
+    "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   auto contact_list_model = processor.get_contact_list_model();
   REQUIRE(contact_list_model != nullptr);
@@ -138,15 +138,15 @@ TEST_CASE("processor handles empty contact list from bridge", "[gui][contact_lis
   auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
   auto command_queue =
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
-  auto display_queue =
-    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
+  auto ui_event_queue =
+    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::ui_event_t>>(io_context);
   auto window = radix_relay::gui::make_window();
   auto message_model = radix_relay::gui::make_message_model();
 
   bridge->contacts_to_return = {};
 
   const radix_relay::gui::processor<radix_relay_test::test_double_signal_bridge> processor(
-    "RDX:test123", "hybrid", bridge, command_queue, display_queue, window, message_model);
+    "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   auto contact_list_model = processor.get_contact_list_model();
   REQUIRE(contact_list_model != nullptr);
@@ -159,8 +159,8 @@ TEST_CASE("processor handles contact list with only 'self'", "[gui][contact_list
   auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
   auto command_queue =
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
-  auto display_queue =
-    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
+  auto ui_event_queue =
+    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::ui_event_t>>(io_context);
   auto window = radix_relay::gui::make_window();
   auto message_model = radix_relay::gui::make_message_model();
 
@@ -174,7 +174,7 @@ TEST_CASE("processor handles contact list with only 'self'", "[gui][contact_list
   };
 
   const radix_relay::gui::processor<radix_relay_test::test_double_signal_bridge> processor(
-    "RDX:test123", "hybrid", bridge, command_queue, display_queue, window, message_model);
+    "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   auto contact_list_model = processor.get_contact_list_model();
   REQUIRE(contact_list_model != nullptr);
@@ -187,8 +187,8 @@ TEST_CASE("contact list model contains structured contact data", "[gui][contact_
   auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
   auto command_queue =
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
-  auto display_queue =
-    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
+  auto ui_event_queue =
+    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::ui_event_t>>(io_context);
   auto window = radix_relay::gui::make_window();
   auto message_model = radix_relay::gui::make_message_model();
 
@@ -202,7 +202,7 @@ TEST_CASE("contact list model contains structured contact data", "[gui][contact_
   };
 
   const radix_relay::gui::processor<radix_relay_test::test_double_signal_bridge> processor(
-    "RDX:test123", "hybrid", bridge, command_queue, display_queue, window, message_model);
+    "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   auto contact_list_model = processor.get_contact_list_model();
   REQUIRE(contact_list_model != nullptr);
@@ -223,8 +223,8 @@ TEST_CASE("contact list preserves contact order from bridge", "[gui][contact_lis
   auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
   auto command_queue =
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
-  auto display_queue =
-    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
+  auto ui_event_queue =
+    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::ui_event_t>>(io_context);
   auto window = radix_relay::gui::make_window();
   auto message_model = radix_relay::gui::make_message_model();
 
@@ -250,7 +250,7 @@ TEST_CASE("contact list preserves contact order from bridge", "[gui][contact_lis
   };
 
   const radix_relay::gui::processor<radix_relay_test::test_double_signal_bridge> processor(
-    "RDX:test123", "hybrid", bridge, command_queue, display_queue, window, message_model);
+    "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   auto contact_list_model = processor.get_contact_list_model();
   REQUIRE(contact_list_model != nullptr);
@@ -275,8 +275,8 @@ TEST_CASE("window has contact list property bound to model", "[gui][contact_list
   auto bridge = std::make_shared<radix_relay_test::test_double_signal_bridge>();
   auto command_queue =
     std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::raw_command>>(io_context);
-  auto display_queue =
-    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::display_message>>(io_context);
+  auto ui_event_queue =
+    std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::ui_event_t>>(io_context);
   auto window = radix_relay::gui::make_window();
   auto message_model = radix_relay::gui::make_message_model();
 
@@ -290,7 +290,7 @@ TEST_CASE("window has contact list property bound to model", "[gui][contact_list
   };
 
   const radix_relay::gui::processor<radix_relay_test::test_double_signal_bridge> processor(
-    "RDX:test123", "hybrid", bridge, command_queue, display_queue, window, message_model);
+    "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   auto contacts_property = window->get_contacts();
   CHECK(contacts_property->row_count() == 1);

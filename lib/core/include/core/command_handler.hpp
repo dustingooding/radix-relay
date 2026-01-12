@@ -247,7 +247,8 @@ private:
       const auto contact = bridge_->lookup_contact(command.contact);
       const auto display_name = contact.user_alias.empty() ? contact.rdx_fingerprint : contact.user_alias;
 
-      display_out_queue_->push(events::enter_chat_mode{ .rdx_fingerprint = contact.rdx_fingerprint });
+      display_out_queue_->push(
+        events::enter_chat_mode{ .rdx_fingerprint = contact.rdx_fingerprint, .display_name = display_name });
 
       constexpr std::uint32_t history_limit = 5;
       const auto messages = bridge_->get_conversation_messages(contact.rdx_fingerprint, history_limit, 0);

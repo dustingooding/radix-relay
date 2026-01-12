@@ -44,7 +44,7 @@ auto main(int argc, char **argv) -> int
     auto node_fingerprint = bridge->get_node_fingerprint();
 
     auto display_filter_queue = std::make_shared<async::async_queue<core::events::display_filter_input_t>>(io_context);
-    auto display_queue = std::make_shared<async::async_queue<core::events::display_message>>(io_context);
+    auto ui_event_queue = std::make_shared<async::async_queue<core::events::ui_event_t>>(io_context);
     auto transport_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
     auto session_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
     auto event_handler_queue = std::make_shared<async::async_queue<core::events::raw_command>>(io_context);
@@ -81,7 +81,7 @@ auto main(int argc, char **argv) -> int
 
     using display_filter_processor_t = core::standard_processor<core::display_filter>;
     auto display_filter_proc = std::make_shared<display_filter_processor_t>(
-      io_context, display_filter_queue, core::display_filter::out_queues_t{ .filtered = display_queue });
+      io_context, display_filter_queue, core::display_filter::out_queues_t{ .ui = ui_event_queue });
 
     auto request_tracker = std::make_shared<nostr::request_tracker>(io_context);
     auto websocket = std::make_shared<transport::websocket_stream>(io_context);
@@ -133,12 +133,12 @@ auto main(int argc, char **argv) -> int
       auto message_model = gui::make_message_model();
 
       gui::processor<bridge_t> gui_processor(
-        node_fingerprint, args.mode, bridge, event_handler_queue, display_queue, window, message_model);
+        node_fingerprint, args.mode, bridge, event_handler_queue, ui_event_queue, window, message_model);
       gui_processor.run();
 
       spdlog::debug("GUI exited, posting cancellation signal to io_context thread...");
     } else {
-      tui::processor<bridge_t> tui_processor(node_fingerprint, args.mode, bridge, event_handler_queue, display_queue);
+      tui::processor<bridge_t> tui_processor(node_fingerprint, args.mode, bridge, event_handler_queue, ui_event_queue);
       tui_processor.run();
 
       spdlog::debug("TUI exited, posting cancellation signal to io_context thread...");
@@ -152,7 +152,7 @@ auto main(int argc, char **argv) -> int
     spdlog::debug("Closing all queues...");
     event_handler_queue->close();
     display_filter_queue->close();
-    display_queue->close();
+    ui_event_queue->close();
     session_queue->close();
     transport_queue->close();
     presentation_event_queue->close();

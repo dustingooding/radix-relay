@@ -5,7 +5,9 @@
 #include <atomic>
 #include <concepts/signal_bridge.hpp>
 #include <core/events.hpp>
+#include <core/overload.hpp>
 #include <memory>
+#include <optional>
 #include <replxx.hxx>
 #include <string>
 #include <thread>
@@ -35,9 +37,9 @@ template<concepts::signal_bridge Bridge> struct processor
     std::string mode,
     const std::shared_ptr<Bridge> &bridge,
     const std::shared_ptr<async::async_queue<core::events::raw_command>> &command_queue,
-    const std::shared_ptr<async::async_queue<core::events::display_message>> &display_queue)
+    const std::shared_ptr<async::async_queue<core::events::ui_event_t>> &ui_event_queue)
     : node_id_(std::move(node_id)), mode_(std::move(mode)), bridge_(bridge), command_queue_(command_queue),
-      display_queue_(display_queue)
+      ui_event_queue_(ui_event_queue), prompt_(std::string(GREEN) + "[⇌] " + RESET)
   {}
 
   ~processor() { stop(); }
@@ -65,14 +67,10 @@ template<concepts::signal_bridge Bridge> struct processor
 
     running_.store(true);
 
-    message_poller_ = std::thread([this] {
-      while (running_.load()) {
-        while (auto msg = display_queue_->try_pop()) { print_message(msg->message); }
-        std::this_thread::sleep_for(std::chrono::milliseconds(message_poll_interval_ms));
-      }
-    });
-
     while (running_.load()) {
+      // Process any pending UI events before showing the prompt
+      while (auto event = ui_event_queue_->try_pop()) { process_ui_event(*event); }
+
       const char *input = rx_.input(prompt_);
 
       if (input == nullptr) {
@@ -95,6 +93,19 @@ template<concepts::signal_bridge Bridge> struct processor
 
       rx_.history_add(command);
       process_command(command);
+
+      // Poll for UI events with timeout to allow pipeline to process
+      constexpr auto max_wait_ms = 100;
+      constexpr auto poll_interval_ms = 5;
+      for (int waited = 0; waited < max_wait_ms; waited += poll_interval_ms) {
+        if (auto event = ui_event_queue_->try_pop()) {
+          // Found an event, process it and all other pending events
+          process_ui_event(*event);
+          while (auto next_event = ui_event_queue_->try_pop()) { process_ui_event(*next_event); }
+          break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
+      }
     }
 
     stop();
@@ -117,6 +128,40 @@ template<concepts::signal_bridge Bridge> struct processor
    * @return Network mode string (internet/mesh/hybrid)
    */
   [[nodiscard]] auto get_mode() const -> const std::string & { return mode_; }
+
+  /**
+   * @brief Updates the active chat context with a contact name.
+   *
+   * @param contact_name Display name or alias of the contact
+   */
+  auto update_chat_context(std::string contact_name) -> void
+  {
+    active_chat_context_ = std::move(contact_name);
+    update_prompt();
+  }
+
+  /**
+   * @brief Clears the active chat context, returning to default mode.
+   */
+  auto clear_chat_context() -> void
+  {
+    active_chat_context_.reset();
+    update_prompt();
+  }
+
+  /**
+   * @brief Returns the current chat context.
+   *
+   * @return Contact name if in chat mode, nullopt otherwise
+   */
+  [[nodiscard]] auto get_chat_context() const -> std::optional<std::string> { return active_chat_context_; }
+
+  /**
+   * @brief Returns the current prompt string.
+   *
+   * @return Prompt string with chat indicator if in chat mode
+   */
+  [[nodiscard]] auto get_prompt() const -> const std::string & { return prompt_; }
 
 private:
   /**
@@ -195,6 +240,31 @@ private:
    */
   auto save_history() -> void { rx_.history_save(HISTORY_FILE); }
 
+  /**
+   * @brief Updates the Replxx prompt based on current chat context.
+   */
+  auto update_prompt() -> void
+  {
+    if (active_chat_context_.has_value()) {
+      prompt_ = std::string(GREEN) + "[⇌ @" + active_chat_context_.value() + "] " + RESET;
+    } else {
+      prompt_ = std::string(GREEN) + "[⇌] " + RESET;
+    }
+  }
+
+  /**
+   * @brief Processes UI events using variant visitor pattern.
+   *
+   * @param event UI event to process (display_message, enter_chat_mode, or exit_chat_mode)
+   */
+  auto process_ui_event(const core::events::ui_event_t &event) -> void
+  {
+    std::visit(core::overload{ [this](const core::events::display_message &evt) { print_message(evt.message); },
+                 [this](const core::events::enter_chat_mode &evt) { update_chat_context(evt.display_name); },
+                 [this](const core::events::exit_chat_mode &) { clear_chat_context(); } },
+      event);
+  }
+
   static constexpr const char *GREEN = "\033[32m";
   static constexpr const char *RESET = "\033[0m";
   static constexpr const char *HISTORY_FILE = ".radix_relay_history";
@@ -206,12 +276,13 @@ private:
   std::string mode_;
   std::shared_ptr<Bridge> bridge_;
   std::shared_ptr<async::async_queue<core::events::raw_command>> command_queue_;
-  std::shared_ptr<async::async_queue<core::events::display_message>> display_queue_;
+  std::shared_ptr<async::async_queue<core::events::ui_event_t>> ui_event_queue_;
 
   std::atomic<bool> running_{ false };
   std::thread message_poller_;
   replxx::Replxx rx_;
   std::string prompt_;
+  std::optional<std::string> active_chat_context_;
 };
 
 }// namespace radix_relay::tui

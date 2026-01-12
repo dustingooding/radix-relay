@@ -33,18 +33,22 @@ TEST_CASE("display_filter passes all messages when not in chat mode", "[display_
 {
   auto io_context = std::make_shared<boost::asio::io_context>();
 
-  auto filtered_queue = std::make_shared<async::async_queue<core::events::display_message>>(io_context);
+  auto ui_event_queue = std::make_shared<async::async_queue<core::events::ui_event_t>>(io_context);
 
-  const core::display_filter filter(core::display_filter::out_queues_t{ .filtered = filtered_queue });
+  const core::display_filter filter(core::display_filter::out_queues_t{ .ui = ui_event_queue });
 
   SECTION("system messages pass through")
   {
     auto msg = make_message("System message", core::events::display_message::source::system);
     filter.handle(core::events::display_filter_input_t{ msg });
 
-    auto result = filtered_queue->try_pop();
+    auto result = ui_event_queue->try_pop();
     REQUIRE(result.has_value());
-    if (result.has_value()) { CHECK(result->message == "System message"); }
+    if (result.has_value()) {
+      auto *display_msg = std::get_if<core::events::display_message>(&*result);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) { CHECK(display_msg->message == "System message"); }
+    }
   }
 
   SECTION("incoming messages pass through")
@@ -52,11 +56,15 @@ TEST_CASE("display_filter passes all messages when not in chat mode", "[display_
     auto msg = make_message("Hello", core::events::display_message::source::incoming_message, "RDX:alice", TIMESTAMP_1);
     filter.handle(core::events::display_filter_input_t{ msg });
 
-    auto result = filtered_queue->try_pop();
+    auto result = ui_event_queue->try_pop();
     REQUIRE(result.has_value());
     if (result.has_value()) {
-      CHECK(result->message == "Hello");
-      CHECK(result->contact_rdx == "RDX:alice");
+      auto *display_msg = std::get_if<core::events::display_message>(&*result);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) {
+        CHECK(display_msg->message == "Hello");
+        CHECK(display_msg->contact_rdx == "RDX:alice");
+      }
     }
   }
 
@@ -66,11 +74,15 @@ TEST_CASE("display_filter passes all messages when not in chat mode", "[display_
       make_message("Hi there", core::events::display_message::source::outgoing_message, "RDX:bob", TIMESTAMP_2);
     filter.handle(core::events::display_filter_input_t{ msg });
 
-    auto result = filtered_queue->try_pop();
+    auto result = ui_event_queue->try_pop();
     REQUIRE(result.has_value());
     if (result.has_value()) {
-      CHECK(result->message == "Hi there");
-      CHECK(result->contact_rdx == "RDX:bob");
+      auto *display_msg = std::get_if<core::events::display_message>(&*result);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) {
+        CHECK(display_msg->message == "Hi there");
+        CHECK(display_msg->contact_rdx == "RDX:bob");
+      }
     }
   }
 
@@ -79,9 +91,13 @@ TEST_CASE("display_filter passes all messages when not in chat mode", "[display_
     auto msg = make_message("Command executed", core::events::display_message::source::command_feedback);
     filter.handle(core::events::display_filter_input_t{ msg });
 
-    auto result = filtered_queue->try_pop();
+    auto result = ui_event_queue->try_pop();
     REQUIRE(result.has_value());
-    if (result.has_value()) { CHECK(result->message == "Command executed"); }
+    if (result.has_value()) {
+      auto *display_msg = std::get_if<core::events::display_message>(&*result);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) { CHECK(display_msg->message == "Command executed"); }
+    }
   }
 }
 
@@ -89,19 +105,24 @@ TEST_CASE("display_filter system messages always pass through", "[display_filter
 {
   auto io_context = std::make_shared<boost::asio::io_context>();
 
-  auto filtered_queue = std::make_shared<async::async_queue<core::events::display_message>>(io_context);
-  const core::display_filter filter(core::display_filter::out_queues_t{ .filtered = filtered_queue });
+  auto ui_event_queue = std::make_shared<async::async_queue<core::events::ui_event_t>>(io_context);
+  const core::display_filter filter(core::display_filter::out_queues_t{ .ui = ui_event_queue });
 
-  filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:alice" });
+  filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:alice", .display_name = "alice" });
+  ui_event_queue->try_pop();// Consume the enter_chat_mode event
 
   SECTION("system message passes even in chat mode")
   {
     auto msg = make_message("System alert", core::events::display_message::source::system);
     filter.handle(core::events::display_filter_input_t{ msg });
 
-    auto result = filtered_queue->try_pop();
+    auto result = ui_event_queue->try_pop();
     REQUIRE(result.has_value());
-    if (result.has_value()) { CHECK(result->message == "System alert"); }
+    if (result.has_value()) {
+      auto *display_msg = std::get_if<core::events::display_message>(&*result);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) { CHECK(display_msg->message == "System alert"); }
+    }
   }
 
   SECTION("system message with different contact still passes")
@@ -109,9 +130,13 @@ TEST_CASE("display_filter system messages always pass through", "[display_filter
     auto msg = make_message("System info", core::events::display_message::source::system, "RDX:bob");
     filter.handle(core::events::display_filter_input_t{ msg });
 
-    auto result = filtered_queue->try_pop();
+    auto result = ui_event_queue->try_pop();
     REQUIRE(result.has_value());
-    if (result.has_value()) { CHECK(result->message == "System info"); }
+    if (result.has_value()) {
+      auto *display_msg = std::get_if<core::events::display_message>(&*result);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) { CHECK(display_msg->message == "System info"); }
+    }
   }
 
   SECTION("command feedback passes even in chat mode")
@@ -119,9 +144,13 @@ TEST_CASE("display_filter system messages always pass through", "[display_filter
     auto msg = make_message("Command executed", core::events::display_message::source::command_feedback);
     filter.handle(core::events::display_filter_input_t{ msg });
 
-    auto result = filtered_queue->try_pop();
+    auto result = ui_event_queue->try_pop();
     REQUIRE(result.has_value());
-    if (result.has_value()) { CHECK(result->message == "Command executed"); }
+    if (result.has_value()) {
+      auto *display_msg = std::get_if<core::events::display_message>(&*result);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) { CHECK(display_msg->message == "Command executed"); }
+    }
   }
 }
 
@@ -129,10 +158,11 @@ TEST_CASE("display_filter filters messages in chat mode", "[display_filter]")
 {
   auto io_context = std::make_shared<boost::asio::io_context>();
 
-  auto filtered_queue = std::make_shared<async::async_queue<core::events::display_message>>(io_context);
-  const core::display_filter filter(core::display_filter::out_queues_t{ .filtered = filtered_queue });
+  auto ui_event_queue = std::make_shared<async::async_queue<core::events::ui_event_t>>(io_context);
+  const core::display_filter filter(core::display_filter::out_queues_t{ .ui = ui_event_queue });
 
-  filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:alice" });
+  filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:alice", .display_name = "alice" });
+  ui_event_queue->try_pop();// Consume the enter_chat_mode event
 
   SECTION("messages from active contact pass through")
   {
@@ -140,9 +170,13 @@ TEST_CASE("display_filter filters messages in chat mode", "[display_filter]")
       "Hello from Alice", core::events::display_message::source::incoming_message, "RDX:alice", TIMESTAMP_1);
     filter.handle(core::events::display_filter_input_t{ msg });
 
-    auto result = filtered_queue->try_pop();
+    auto result = ui_event_queue->try_pop();
     REQUIRE(result.has_value());
-    if (result.has_value()) { CHECK(result->message == "Hello from Alice"); }
+    if (result.has_value()) {
+      auto *display_msg = std::get_if<core::events::display_message>(&*result);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) { CHECK(display_msg->message == "Hello from Alice"); }
+    }
   }
 
   SECTION("messages to active contact pass through")
@@ -151,9 +185,13 @@ TEST_CASE("display_filter filters messages in chat mode", "[display_filter]")
       make_message("Reply to Alice", core::events::display_message::source::outgoing_message, "RDX:alice", TIMESTAMP_2);
     filter.handle(core::events::display_filter_input_t{ msg });
 
-    auto result = filtered_queue->try_pop();
+    auto result = ui_event_queue->try_pop();
     REQUIRE(result.has_value());
-    if (result.has_value()) { CHECK(result->message == "Reply to Alice"); }
+    if (result.has_value()) {
+      auto *display_msg = std::get_if<core::events::display_message>(&*result);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) { CHECK(display_msg->message == "Reply to Alice"); }
+    }
   }
 
   SECTION("messages from other contacts are filtered out")
@@ -162,7 +200,7 @@ TEST_CASE("display_filter filters messages in chat mode", "[display_filter]")
       make_message("Hello from Bob", core::events::display_message::source::incoming_message, "RDX:bob", TIMESTAMP_1);
     filter.handle(core::events::display_filter_input_t{ msg });
 
-    auto result = filtered_queue->try_pop();
+    auto result = ui_event_queue->try_pop();
     CHECK_FALSE(result.has_value());
   }
 
@@ -172,7 +210,7 @@ TEST_CASE("display_filter filters messages in chat mode", "[display_filter]")
       make_message("Some message", core::events::display_message::source::incoming_message, std::nullopt, TIMESTAMP_1);
     filter.handle(core::events::display_filter_input_t{ msg });
 
-    auto result = filtered_queue->try_pop();
+    auto result = ui_event_queue->try_pop();
     CHECK_FALSE(result.has_value());
   }
 }
@@ -181,35 +219,42 @@ TEST_CASE("display_filter chat context management", "[display_filter]")
 {
   auto io_context = std::make_shared<boost::asio::io_context>();
 
-  auto filtered_queue = std::make_shared<async::async_queue<core::events::display_message>>(io_context);
-  const core::display_filter filter(core::display_filter::out_queues_t{ .filtered = filtered_queue });
+  auto ui_event_queue = std::make_shared<async::async_queue<core::events::ui_event_t>>(io_context);
+  const core::display_filter filter(core::display_filter::out_queues_t{ .ui = ui_event_queue });
 
   SECTION("enter_chat_mode filters to one contact")
   {
-    filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:alice" });
+    filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:alice", .display_name = "alice" });
+    ui_event_queue->try_pop();// Consume the enter_chat_mode event
 
     // Alice's message passes
     auto alice_msg =
       make_message("From Alice", core::events::display_message::source::incoming_message, "RDX:alice", TIMESTAMP_1);
     filter.handle(core::events::display_filter_input_t{ alice_msg });
 
-    auto result1 = filtered_queue->try_pop();
+    auto result1 = ui_event_queue->try_pop();
     REQUIRE(result1.has_value());
-    if (result1.has_value()) { CHECK(result1->message == "From Alice"); }
+    if (result1.has_value()) {
+      auto *display_msg = std::get_if<core::events::display_message>(&*result1);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) { CHECK(display_msg->message == "From Alice"); }
+    }
 
     // Bob's message filtered
     auto bob_msg =
       make_message("From Bob", core::events::display_message::source::incoming_message, "RDX:bob", TIMESTAMP_2);
     filter.handle(core::events::display_filter_input_t{ bob_msg });
 
-    auto result2 = filtered_queue->try_pop();
+    auto result2 = ui_event_queue->try_pop();
     CHECK_FALSE(result2.has_value());
   }
 
   SECTION("exit_chat_mode shows all messages")
   {
-    filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:alice" });
+    filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:alice", .display_name = "alice" });
+    ui_event_queue->try_pop();// Consume the enter_chat_mode event
     filter.handle(core::events::exit_chat_mode{});
+    ui_event_queue->try_pop();// Consume the exit_chat_mode event
 
     // Both messages pass after exit
     auto alice_msg =
@@ -220,19 +265,29 @@ TEST_CASE("display_filter chat context management", "[display_filter]")
       make_message("From Bob", core::events::display_message::source::incoming_message, "RDX:bob", TIMESTAMP_2);
     filter.handle(core::events::display_filter_input_t{ bob_msg });
 
-    auto result1 = filtered_queue->try_pop();
+    auto result1 = ui_event_queue->try_pop();
     REQUIRE(result1.has_value());
-    if (result1.has_value()) { CHECK(result1->message == "From Alice"); }
+    if (result1.has_value()) {
+      auto *display_msg = std::get_if<core::events::display_message>(&*result1);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) { CHECK(display_msg->message == "From Alice"); }
+    }
 
-    auto result2 = filtered_queue->try_pop();
+    auto result2 = ui_event_queue->try_pop();
     REQUIRE(result2.has_value());
-    if (result2.has_value()) { CHECK(result2->message == "From Bob"); }
+    if (result2.has_value()) {
+      auto *display_msg = std::get_if<core::events::display_message>(&*result2);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) { CHECK(display_msg->message == "From Bob"); }
+    }
   }
 
   SECTION("switching chat context changes active contact")
   {
-    filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:alice" });
-    filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:bob" });
+    filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:alice", .display_name = "alice" });
+    ui_event_queue->try_pop();// Consume the enter_chat_mode event
+    filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:bob", .display_name = "bob" });
+    ui_event_queue->try_pop();// Consume the second enter_chat_mode event
 
     // Now Bob's messages pass, Alice's filtered
     auto alice_msg =
@@ -243,11 +298,15 @@ TEST_CASE("display_filter chat context management", "[display_filter]")
       make_message("From Bob", core::events::display_message::source::incoming_message, "RDX:bob", TIMESTAMP_2);
     filter.handle(core::events::display_filter_input_t{ bob_msg });
 
-    auto result1 = filtered_queue->try_pop();
+    auto result1 = ui_event_queue->try_pop();
     REQUIRE(result1.has_value());
-    if (result1.has_value()) { CHECK(result1->message == "From Bob"); }
+    if (result1.has_value()) {
+      auto *display_msg = std::get_if<core::events::display_message>(&*result1);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) { CHECK(display_msg->message == "From Bob"); }
+    }
 
-    auto result2 = filtered_queue->try_pop();
+    auto result2 = ui_event_queue->try_pop();
     CHECK_FALSE(result2.has_value());
   }
 }
@@ -256,13 +315,14 @@ TEST_CASE("display_filter switching between contacts", "[display_filter]")
 {
   auto io_context = std::make_shared<boost::asio::io_context>();
 
-  auto filtered_queue = std::make_shared<async::async_queue<core::events::display_message>>(io_context);
-  const core::display_filter filter(core::display_filter::out_queues_t{ .filtered = filtered_queue });
+  auto ui_event_queue = std::make_shared<async::async_queue<core::events::ui_event_t>>(io_context);
+  const core::display_filter filter(core::display_filter::out_queues_t{ .ui = ui_event_queue });
 
   SECTION("switching contacts filters correctly")
   {
     // Start chatting with Alice
-    filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:alice" });
+    filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:alice", .display_name = "alice" });
+    ui_event_queue->try_pop();// Consume the enter_chat_mode event
 
     auto alice_msg =
       make_message("From Alice", core::events::display_message::source::incoming_message, "RDX:alice", TIMESTAMP_1);
@@ -273,16 +333,21 @@ TEST_CASE("display_filter switching between contacts", "[display_filter]")
     filter.handle(core::events::display_filter_input_t{ bob_msg });
 
     // Alice's message should pass
-    auto result1 = filtered_queue->try_pop();
+    auto result1 = ui_event_queue->try_pop();
     REQUIRE(result1.has_value());
-    if (result1.has_value()) { CHECK(result1->message == "From Alice"); }
+    if (result1.has_value()) {
+      auto *display_msg = std::get_if<core::events::display_message>(&*result1);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) { CHECK(display_msg->message == "From Alice"); }
+    }
 
     // Bob's message should be filtered
-    auto result2 = filtered_queue->try_pop();
+    auto result2 = ui_event_queue->try_pop();
     CHECK_FALSE(result2.has_value());
 
     // Switch to Bob
-    filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:bob" });
+    filter.handle(core::events::enter_chat_mode{ .rdx_fingerprint = "RDX:bob", .display_name = "bob" });
+    ui_event_queue->try_pop();// Consume the enter_chat_mode event
 
     auto alice_msg2 = make_message(
       "From Alice again", core::events::display_message::source::incoming_message, "RDX:alice", TIMESTAMP_3);
@@ -293,12 +358,16 @@ TEST_CASE("display_filter switching between contacts", "[display_filter]")
     filter.handle(core::events::display_filter_input_t{ bob_msg2 });
 
     // Alice's message should be filtered now
-    auto result3 = filtered_queue->try_pop();
+    auto result3 = ui_event_queue->try_pop();
     REQUIRE(result3.has_value());
-    if (result3.has_value()) { CHECK(result3->message == "From Bob again"); }
+    if (result3.has_value()) {
+      auto *display_msg = std::get_if<core::events::display_message>(&*result3);
+      REQUIRE(display_msg != nullptr);
+      if (display_msg != nullptr) { CHECK(display_msg->message == "From Bob again"); }
+    }
 
     // Bob's message should pass
-    auto result4 = filtered_queue->try_pop();
+    auto result4 = ui_event_queue->try_pop();
     CHECK_FALSE(result4.has_value());
   }
 }
