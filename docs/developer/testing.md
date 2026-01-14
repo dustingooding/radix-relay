@@ -40,6 +40,8 @@ test/
 
 ### C++ Tests (Catch2)
 
+Tests use standard `TEST_CASE` format (not SCENARIO/GIVEN/WHEN/THEN syntax):
+
 ```cpp
 #include <catch2/catch_test_macros.hpp>
 
@@ -52,8 +54,18 @@ TEST_CASE("Feature description", "[tag]") {
     auto result = sut.doSomething();
 
     // Assert
-    REQUIRE(result == expected);
+    CHECK(result == expected);
   }
+}
+```
+
+Use `REQUIRE` only for preconditions that guard subsequent assertions:
+
+```cpp
+auto result = queue.try_pop();
+REQUIRE(result.has_value());  // Guards dereferencing
+if (result.has_value()) {
+  CHECK(result->value == expected);  // Actual assertion
 }
 ```
 

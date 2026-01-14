@@ -88,7 +88,7 @@ TEST_CASE("processor populates contact list model with contacts from bridge", "[
     "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   auto contact_list_model = processor.get_contact_list_model();
-  REQUIRE(contact_list_model != nullptr);
+  CHECK(contact_list_model != nullptr);
   CHECK(contact_list_model->row_count() == 3);
 }
 
@@ -128,7 +128,7 @@ TEST_CASE("processor excludes 'self' contact from contact list", "[gui][contact_
     "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   auto contact_list_model = processor.get_contact_list_model();
-  REQUIRE(contact_list_model != nullptr);
+  CHECK(contact_list_model != nullptr);
   CHECK(contact_list_model->row_count() == 2);
 }
 
@@ -149,7 +149,7 @@ TEST_CASE("processor handles empty contact list from bridge", "[gui][contact_lis
     "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   auto contact_list_model = processor.get_contact_list_model();
-  REQUIRE(contact_list_model != nullptr);
+  CHECK(contact_list_model != nullptr);
   CHECK(contact_list_model->row_count() == 0);
 }
 
@@ -177,7 +177,7 @@ TEST_CASE("processor handles contact list with only 'self'", "[gui][contact_list
     "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   auto contact_list_model = processor.get_contact_list_model();
-  REQUIRE(contact_list_model != nullptr);
+  CHECK(contact_list_model != nullptr);
   CHECK(contact_list_model->row_count() == 0);
 }
 
@@ -205,8 +205,8 @@ TEST_CASE("contact list model contains structured contact data", "[gui][contact_
     "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   auto contact_list_model = processor.get_contact_list_model();
-  REQUIRE(contact_list_model != nullptr);
-  REQUIRE(contact_list_model->row_count() == 1);
+  CHECK(contact_list_model != nullptr);
+  CHECK(contact_list_model->row_count() == 1);
 
   const auto contact = contact_list_model->row_data(0);
   REQUIRE(contact.has_value());
@@ -253,8 +253,8 @@ TEST_CASE("contact list preserves contact order from bridge", "[gui][contact_lis
     "RDX:test123", "hybrid", bridge, command_queue, ui_event_queue, window, message_model);
 
   auto contact_list_model = processor.get_contact_list_model();
-  REQUIRE(contact_list_model != nullptr);
-  REQUIRE(contact_list_model->row_count() == 3);
+  CHECK(contact_list_model != nullptr);
+  CHECK(contact_list_model->row_count() == 3);
 
   auto contact0 = contact_list_model->row_data(0);
   auto contact1 = contact_list_model->row_data(1);

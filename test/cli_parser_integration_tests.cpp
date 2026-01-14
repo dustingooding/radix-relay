@@ -23,7 +23,7 @@ TEST_CASE("CLI parsing basic flags", "[cli_utils][cli_parser][integration]")
 
     auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.show_version == true);
+    CHECK(parsed.show_version == true);
   }
 
   SECTION("verbose flag sets verbose")
@@ -33,7 +33,7 @@ TEST_CASE("CLI parsing basic flags", "[cli_utils][cli_parser][integration]")
 
     auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.verbose == true);
+    CHECK(parsed.verbose == true);
   }
 
   SECTION("short verbose flag works")
@@ -43,7 +43,7 @@ TEST_CASE("CLI parsing basic flags", "[cli_utils][cli_parser][integration]")
 
     auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.verbose == true);
+    CHECK(parsed.verbose == true);
   }
 }
 
@@ -56,7 +56,7 @@ TEST_CASE("CLI parsing options", "[cli_utils][cli_parser][integration]")
 
     auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.identity_path == "/custom/path.key");
+    CHECK(parsed.identity_path == "/custom/path.key");
   }
 
   SECTION("short identity option")
@@ -66,7 +66,7 @@ TEST_CASE("CLI parsing options", "[cli_utils][cli_parser][integration]")
 
     auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.identity_path == "/short/path.key");
+    CHECK(parsed.identity_path == "/short/path.key");
   }
 
   SECTION("mode option - internet")
@@ -76,7 +76,7 @@ TEST_CASE("CLI parsing options", "[cli_utils][cli_parser][integration]")
 
     auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.mode == "internet");
+    CHECK(parsed.mode == "internet");
   }
 
   SECTION("mode option - mesh")
@@ -86,7 +86,7 @@ TEST_CASE("CLI parsing options", "[cli_utils][cli_parser][integration]")
 
     auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.mode == "mesh");
+    CHECK(parsed.mode == "mesh");
   }
 }
 
@@ -99,9 +99,9 @@ TEST_CASE("CLI parsing send subcommand", "[cli_utils][cli_parser][integration]")
 
     auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.send_parsed == true);
-    REQUIRE(parsed.send_recipient == "alice");
-    REQUIRE(parsed.send_message == "hello world");
+    CHECK(parsed.send_parsed == true);
+    CHECK(parsed.send_recipient == "alice");
+    CHECK(parsed.send_message == "hello world");
   }
 
   SECTION("send command with flags")
@@ -111,11 +111,11 @@ TEST_CASE("CLI parsing send subcommand", "[cli_utils][cli_parser][integration]")
 
     auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.verbose == true);
-    REQUIRE(parsed.identity_path == "/test.key");
-    REQUIRE(parsed.send_parsed == true);
-    REQUIRE(parsed.send_recipient == "bob");
-    REQUIRE(parsed.send_message == "test message");
+    CHECK(parsed.verbose == true);
+    CHECK(parsed.identity_path == "/test.key");
+    CHECK(parsed.send_parsed == true);
+    CHECK(parsed.send_recipient == "bob");
+    CHECK(parsed.send_message == "test message");
   }
 }
 
@@ -128,7 +128,7 @@ TEST_CASE("CLI parsing other subcommands", "[cli_utils][cli_parser][integration]
 
     auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.peers_parsed == true);
+    CHECK(parsed.peers_parsed == true);
   }
 
   SECTION("status subcommand")
@@ -138,7 +138,7 @@ TEST_CASE("CLI parsing other subcommands", "[cli_utils][cli_parser][integration]
 
     auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.status_parsed == true);
+    CHECK(parsed.status_parsed == true);
   }
 
   SECTION("status with verbose")
@@ -148,8 +148,8 @@ TEST_CASE("CLI parsing other subcommands", "[cli_utils][cli_parser][integration]
 
     auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.verbose == true);
-    REQUIRE(parsed.status_parsed == true);
+    CHECK(parsed.verbose == true);
+    CHECK(parsed.status_parsed == true);
   }
 }
 
@@ -162,12 +162,12 @@ TEST_CASE("CLI parsing defaults", "[cli_utils][cli_parser][integration]")
 
     auto parsed = radix_relay::cli_utils::parse_cli_args(static_cast<int>(args.size()), argv.data());
 
-    REQUIRE(parsed.identity_path.ends_with("/.radix/identity.db"));
-    REQUIRE(parsed.mode == "hybrid");
-    REQUIRE(parsed.verbose == false);
-    REQUIRE(parsed.show_version == false);
-    REQUIRE(parsed.send_parsed == false);
-    REQUIRE(parsed.peers_parsed == false);
-    REQUIRE(parsed.status_parsed == false);
+    CHECK(parsed.identity_path.ends_with("/.radix/identity.db"));
+    CHECK(parsed.mode == "hybrid");
+    CHECK(parsed.verbose == false);
+    CHECK(parsed.show_version == false);
+    CHECK(parsed.send_parsed == false);
+    CHECK(parsed.peers_parsed == false);
+    CHECK(parsed.status_parsed == false);
   }
 }

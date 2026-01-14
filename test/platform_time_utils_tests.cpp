@@ -7,7 +7,7 @@ TEST_CASE("format_current_time_hms returns HH:MM:SS format", "[platform][time]")
   auto result = radix_relay::platform::format_current_time_hms();
 
   const std::regex hms_pattern(R"(\d{2}:\d{2}:\d{2})");
-  REQUIRE(std::regex_match(result, hms_pattern));
+  CHECK(std::regex_match(result, hms_pattern));
 }
 
 TEST_CASE("format_current_time_hms returns valid time range", "[platform][time]")
@@ -20,7 +20,7 @@ TEST_CASE("format_current_time_hms returns valid time range", "[platform][time]"
   constexpr auto seconds_offset = 6;
   constexpr auto component_length = 2;
 
-  REQUIRE(result.length() == expected_length);
+  CHECK(result.length() == expected_length);
 
   auto hours = std::stoi(result.substr(hours_offset, component_length));
   auto minutes = std::stoi(result.substr(minutes_offset, component_length));

@@ -17,9 +17,9 @@ TEST_CASE("Node Identity Functions", "[node_identity]")
       auto fingerprint1 = bridge->get_node_fingerprint();
       auto fingerprint2 = bridge->get_node_fingerprint();
 
-      REQUIRE(fingerprint1.starts_with("RDX:"));
-      REQUIRE(fingerprint1.length() == 68);
-      REQUIRE(fingerprint1 == fingerprint2);
+      CHECK(fingerprint1.starts_with("RDX:"));
+      CHECK(fingerprint1.length() == 68);
+      CHECK(fingerprint1 == fingerprint2);
     }
 
     std::ignore = std::filesystem::remove(

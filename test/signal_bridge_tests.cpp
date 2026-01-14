@@ -21,8 +21,8 @@ TEST_CASE("signal::bridge basic functionality", "[signal][wrapper]")
       auto wrapper = radix_relay::signal::bridge(db_path);
       auto fingerprint = wrapper.get_node_fingerprint();
 
-      REQUIRE(fingerprint.starts_with("RDX:"));
-      REQUIRE(fingerprint.length() == 68);
+      CHECK(fingerprint.starts_with("RDX:"));
+      CHECK(fingerprint.length() == 68);
     }
     std::filesystem::remove(db_path);
   }
@@ -33,8 +33,8 @@ TEST_CASE("signal::bridge basic functionality", "[signal][wrapper]")
       auto wrapper = std::make_shared<radix_relay::signal::bridge>(db_path);
       auto fingerprint = wrapper->get_node_fingerprint();
 
-      REQUIRE(fingerprint.starts_with("RDX:"));
-      REQUIRE(fingerprint.length() == 68);
+      CHECK(fingerprint.starts_with("RDX:"));
+      CHECK(fingerprint.length() == 68);
     }
     std::filesystem::remove(db_path);
   }
@@ -57,7 +57,7 @@ TEST_CASE("signal::bridge contact management", "[signal][wrapper][contacts]")
       auto wrapper = radix_relay::signal::bridge(alice_db);
       auto contacts = wrapper.list_contacts();
 
-      REQUIRE(contacts.empty());
+      CHECK(contacts.empty());
     }
     std::filesystem::remove(alice_db);
   }
@@ -74,15 +74,15 @@ TEST_CASE("signal::bridge contact management", "[signal][wrapper][contacts]")
 
       auto extracted_rdx = alice->extract_rdx_from_bundle_base64(bob_bundle_base64);
 
-      REQUIRE(extracted_rdx.starts_with("RDX:"));
-      REQUIRE(extracted_rdx.length() == 68);
+      CHECK(extracted_rdx.starts_with("RDX:"));
+      CHECK(extracted_rdx.length() == 68);
 
       auto contacts = alice->list_contacts();
-      REQUIRE(contacts.empty());
+      CHECK(contacts.empty());
 
       auto bob_rdx = alice->add_contact_and_establish_session_from_base64(bob_bundle_base64, "bob");
 
-      REQUIRE(extracted_rdx == bob_rdx);
+      CHECK(extracted_rdx == bob_rdx);
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
@@ -102,9 +102,9 @@ TEST_CASE("signal::bridge contact management", "[signal][wrapper][contacts]")
 
       auto contacts = alice->list_contacts();
       REQUIRE(contacts.size() == 1);
-      REQUIRE(contacts[0].rdx_fingerprint == bob_rdx);
-      REQUIRE(contacts[0].user_alias == "bob");
-      REQUIRE(contacts[0].has_active_session);
+      CHECK(contacts[0].rdx_fingerprint == bob_rdx);
+      CHECK(contacts[0].user_alias == "bob");
+      CHECK(contacts[0].has_active_session);
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
@@ -145,7 +145,7 @@ TEST_CASE("signal::bridge encryption/decryption", "[signal][wrapper][encryption]
       auto [decrypted, metadata] = bob->decrypt_message(alice_rdx, encrypted);
 
       std::string decrypted_str(decrypted.begin(), decrypted.end());
-      REQUIRE(decrypted_str == plaintext);
+      CHECK(decrypted_str == plaintext);
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
@@ -178,8 +178,8 @@ TEST_CASE("signal::bridge alias management", "[signal][wrapper][alias]")
       alice->assign_contact_alias(bob_rdx, alias);
 
       auto contact = alice->lookup_contact(alias);
-      REQUIRE(contact.rdx_fingerprint == bob_rdx);
-      REQUIRE(contact.user_alias == alias);
+      CHECK(contact.rdx_fingerprint == bob_rdx);
+      CHECK(contact.user_alias == alias);
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
@@ -199,8 +199,8 @@ TEST_CASE("signal::bridge generate_empty_bundle_announcement creates valid empty
     auto announcement_json = wrapper.generate_empty_bundle_announcement("0.4.0");
     auto event = nlohmann::json::parse(announcement_json);
 
-    REQUIRE(event["kind"].template get<int>() == 30078);
-    REQUIRE(event["content"].template get<std::string>().empty());
+    CHECK(event["kind"].template get<int>() == 30078);
+    CHECK(event["content"].template get<std::string>().empty());
 
     const auto tags = event["tags"];
     bool found_d_tag = false;
@@ -210,18 +210,18 @@ TEST_CASE("signal::bridge generate_empty_bundle_announcement creates valid empty
     for (const auto &tag : tags) {
       if (tag[0] == "d") {
         found_d_tag = true;
-        REQUIRE(tag[1] == "radix_prekey_bundle_v1");
+        CHECK(tag[1] == "radix_prekey_bundle_v1");
       } else if (tag[0] == "radix_version") {
         found_version_tag = true;
-        REQUIRE(tag[1] == "0.4.0");
+        CHECK(tag[1] == "0.4.0");
       } else if (tag[0] == "rdx") {
         found_rdx_tag = true;
       }
     }
 
-    REQUIRE(found_d_tag);
-    REQUIRE(found_version_tag);
-    REQUIRE_FALSE(found_rdx_tag);
+    CHECK(found_d_tag);
+    CHECK(found_version_tag);
+    CHECK_FALSE(found_rdx_tag);
   }
   std::filesystem::remove(db_path);
 }
@@ -260,8 +260,8 @@ TEST_CASE("signal::bridge decrypt_message signals pre-key consumption", "[signal
       auto result = bob->decrypt_message(alice_rdx, encrypted);
 
       std::string decrypted_str(result.plaintext.begin(), result.plaintext.end());
-      REQUIRE(decrypted_str == plaintext);
-      REQUIRE(result.should_republish_bundle);
+      CHECK(decrypted_str == plaintext);
+      CHECK(result.should_republish_bundle);
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
@@ -284,15 +284,15 @@ TEST_CASE("signal::bridge key maintenance", "[signal][wrapper][maintenance]")
       // First call - bridge initializes with 100 pre-keys (>= 50 MIN_PRE_KEY_COUNT)
       // and fresh signed/kyber keys, so no action is needed
       auto result = wrapper.perform_key_maintenance();
-      REQUIRE_FALSE(result.signed_pre_key_rotated);
-      REQUIRE_FALSE(result.kyber_pre_key_rotated);
-      REQUIRE_FALSE(result.pre_keys_replenished);
+      CHECK_FALSE(result.signed_pre_key_rotated);
+      CHECK_FALSE(result.kyber_pre_key_rotated);
+      CHECK_FALSE(result.pre_keys_replenished);
 
       // Second call should also not need any action
       auto result2 = wrapper.perform_key_maintenance();
-      REQUIRE_FALSE(result2.signed_pre_key_rotated);
-      REQUIRE_FALSE(result2.kyber_pre_key_rotated);
-      REQUIRE_FALSE(result2.pre_keys_replenished);
+      CHECK_FALSE(result2.signed_pre_key_rotated);
+      CHECK_FALSE(result2.kyber_pre_key_rotated);
+      CHECK_FALSE(result2.pre_keys_replenished);
     }
     std::filesystem::remove(db_path);
   }
@@ -316,9 +316,9 @@ TEST_CASE("signal::bridge record_published_bundle tracks bundle state", "[signal
       auto event = nlohmann::json::parse(bundle_info.announcement_json);
 
       // Verify we have the key IDs
-      REQUIRE(bundle_info.pre_key_id == 100);// 100 pre-keys initialized
-      REQUIRE(bundle_info.signed_pre_key_id == 1);
-      REQUIRE(bundle_info.kyber_pre_key_id == 1);
+      CHECK(bundle_info.pre_key_id == 100);// 100 pre-keys initialized
+      CHECK(bundle_info.signed_pre_key_id == 1);
+      CHECK(bundle_info.kyber_pre_key_id == 1);
 
       // Simulate publishing to Nostr successfully
       // Then record which bundle was published (using the actual key IDs from the bundle)
@@ -381,14 +381,14 @@ TEST_CASE("signal::bridge X3DH initial message from unknown sender", "[signal][w
 
       // Assert: Message decrypts successfully
       std::string decrypted_str(result.plaintext.begin(), result.plaintext.end());
-      REQUIRE(decrypted_str == plaintext);
+      CHECK(decrypted_str == plaintext);
 
       // Assert: Pre-key was consumed (should republish bundle)
-      REQUIRE(result.should_republish_bundle);
+      CHECK(result.should_republish_bundle);
 
       // Assert: Bob is now in Alice's contacts (one more than before)
       auto alice_contacts_after = alice->list_contacts();
-      REQUIRE(alice_contacts_after.size() == contacts_before_count + 1);
+      CHECK(alice_contacts_after.size() == contacts_before_count + 1);
 
       // Get Bob's actual RDX to verify
       auto bob_rdx = bob->get_node_fingerprint();
@@ -398,10 +398,10 @@ TEST_CASE("signal::bridge X3DH initial message from unknown sender", "[signal][w
         alice_contacts_after.end(),
         [&bob_rdx](const auto &contact) { return contact.rdx_fingerprint == bob_rdx; });
 
-      REQUIRE(bob_it != alice_contacts_after.end());
+      CHECK(bob_it != alice_contacts_after.end());
       auto bob_contact = *bob_it;
-      REQUIRE(bob_contact.user_alias.starts_with("Unknown-"));
-      REQUIRE(bob_contact.has_active_session);
+      CHECK(bob_contact.user_alias.starts_with("Unknown-"));
+      CHECK(bob_contact.has_active_session);
 
       // Assert: Alice can now reply to Bob using his RDX fingerprint
       const std::string response = "Hi Bob! Nice to meet you.";
@@ -411,7 +411,7 @@ TEST_CASE("signal::bridge X3DH initial message from unknown sender", "[signal][w
       // Bob can decrypt Alice's response using Alice's RDX
       auto bob_result = bob->decrypt_message(alice_rdx_from_bundle, response_encrypted);
       std::string bob_decrypted(bob_result.plaintext.begin(), bob_result.plaintext.end());
-      REQUIRE(bob_decrypted == response);
+      CHECK(bob_decrypted == response);
 
       // Assert: Bidirectional session is established
       // Both parties can now send messages without bundle republishing
@@ -422,10 +422,10 @@ TEST_CASE("signal::bridge X3DH initial message from unknown sender", "[signal][w
       auto second_result = alice->decrypt_message(bob_contact.rdx_fingerprint, second_encrypted);
 
       std::string second_decrypted(second_result.plaintext.begin(), second_result.plaintext.end());
-      REQUIRE(second_decrypted == second_msg);
+      CHECK(second_decrypted == second_msg);
 
       // Pre-key should NOT be consumed on subsequent messages
-      REQUIRE_FALSE(second_result.should_republish_bundle);
+      CHECK_FALSE(second_result.should_republish_bundle);
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
@@ -467,13 +467,13 @@ TEST_CASE("signal::bridge message history storage", "[signal][wrapper][message-h
 
       auto alice_messages = alice->get_conversation_messages(bob_rdx, 10, 0);
       REQUIRE(alice_messages.size() == 1);
-      REQUIRE(alice_messages[0].direction == radix_relay::signal::MessageDirection::Outgoing);
-      REQUIRE(alice_messages[0].content == plaintext);
+      CHECK(alice_messages[0].direction == radix_relay::signal::MessageDirection::Outgoing);
+      CHECK(alice_messages[0].content == plaintext);
 
       auto bob_messages = bob->get_conversation_messages(alice_rdx, 10, 0);
       REQUIRE(bob_messages.size() == 1);
-      REQUIRE(bob_messages[0].direction == radix_relay::signal::MessageDirection::Incoming);
-      REQUIRE(bob_messages[0].content == plaintext);
+      CHECK(bob_messages[0].direction == radix_relay::signal::MessageDirection::Incoming);
+      CHECK(bob_messages[0].content == plaintext);
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
@@ -502,12 +502,12 @@ TEST_CASE("signal::bridge message history storage", "[signal][wrapper][message-h
 
       auto conversations = alice->get_conversations(false);
       REQUIRE(conversations.size() == 1);
-      REQUIRE(conversations[0].rdx_fingerprint == bob_rdx);
+      CHECK(conversations[0].rdx_fingerprint == bob_rdx);
 
       auto messages = alice->get_conversation_messages(bob_rdx, 10, 0);
       REQUIRE(messages.size() == 2);
-      REQUIRE(messages[0].content == msg2);
-      REQUIRE(messages[1].content == msg1);
+      CHECK(messages[0].content == msg2);
+      CHECK(messages[1].content == msg1);
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
@@ -540,12 +540,12 @@ TEST_CASE("signal::bridge message history storage", "[signal][wrapper][message-h
       [[maybe_unused]] auto result2 = bob->decrypt_message(alice_rdx, encrypted2);
 
       auto unread_count = bob->get_unread_count(alice_rdx);
-      REQUIRE(unread_count == 2);
+      CHECK(unread_count == 2);
 
       bob->mark_conversation_read(alice_rdx);
 
       auto unread_after = bob->get_unread_count(alice_rdx);
-      REQUIRE(unread_after == 0);
+      CHECK(unread_after == 0);
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
@@ -578,7 +578,7 @@ TEST_CASE("signal::bridge message history storage", "[signal][wrapper][message-h
 
       auto messages_after = alice->get_conversation_messages(bob_rdx, 10, 0);
       REQUIRE(messages_after.size() == 1);
-      REQUIRE(messages_after[0].content == msg1);
+      CHECK(messages_after[0].content == msg1);
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
@@ -609,10 +609,10 @@ TEST_CASE("signal::bridge message history storage", "[signal][wrapper][message-h
       alice->delete_conversation(bob_rdx);
 
       auto messages_after = alice->get_conversation_messages(bob_rdx, 10, 0);
-      REQUIRE(messages_after.empty());
+      CHECK(messages_after.empty());
 
       auto conversations = alice->get_conversations(false);
-      REQUIRE(conversations.empty());
+      CHECK(conversations.empty());
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
@@ -642,7 +642,7 @@ TEST_CASE("signal::bridge message history storage", "[signal][wrapper][message-h
       auto page2 = alice->get_conversation_messages(bob_rdx, 5, 5);
       REQUIRE(page2.size() == 5);
 
-      REQUIRE(page1[0].timestamp > page2[0].timestamp);
+      CHECK(page1[0].timestamp > page2[0].timestamp);
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);
@@ -671,9 +671,9 @@ TEST_CASE("signal::bridge message history storage", "[signal][wrapper][message-h
 
       auto messages = alice->get_conversation_messages(bob_rdx, 10, 0);
       REQUIRE(messages.size() == 2);
-      REQUIRE(messages[0].timestamp > messages[1].timestamp);
-      REQUIRE(messages[0].content == msg2);
-      REQUIRE(messages[1].content == msg1);
+      CHECK(messages[0].timestamp > messages[1].timestamp);
+      CHECK(messages[0].content == msg2);
+      CHECK(messages[1].content == msg1);
     }
     std::filesystem::remove(alice_db);
     std::filesystem::remove(bob_db);

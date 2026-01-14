@@ -42,7 +42,7 @@ TEST_CASE("protocol::event_data can be parsed from JSON", "[nostr][parse]")
       CHECK(evt.kind == radix_kind);
       CHECK(evt.content == "encrypted_signal_payload");
       CHECK(evt.sig == "signature_hex");
-      CHECK(evt.tags.size() == 1);
+      REQUIRE(evt.tags.size() == 1);
       CHECK(evt.tags[0] == std::vector<std::string>{ "p", "recipient_pubkey" });
     }
   }
@@ -72,7 +72,7 @@ TEST_CASE("protocol::event_data can be parsed from JSON", "[nostr][parse]")
   {
     const std::string invalid_json = "not valid json";
     auto event = radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(invalid_json));
-    REQUIRE_FALSE(event.has_value());
+    CHECK_FALSE(event.has_value());
   }
 
   SECTION("reject missing required fields")
@@ -85,7 +85,7 @@ TEST_CASE("protocol::event_data can be parsed from JSON", "[nostr][parse]")
       "content": "test",
       "sig": "test_sig"
     })";
-    REQUIRE_FALSE(radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(missing_id)).has_value());
+    CHECK_FALSE(radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(missing_id)).has_value());
 
     const std::string missing_pubkey = R"({
       "id": "test_id",
@@ -95,7 +95,7 @@ TEST_CASE("protocol::event_data can be parsed from JSON", "[nostr][parse]")
       "content": "test",
       "sig": "test_sig"
     })";
-    REQUIRE_FALSE(radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(missing_pubkey)).has_value());
+    CHECK_FALSE(radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(missing_pubkey)).has_value());
 
     const std::string invalid_created_at = R"({
       "id": "test_id",
@@ -106,8 +106,7 @@ TEST_CASE("protocol::event_data can be parsed from JSON", "[nostr][parse]")
       "content": "test",
       "sig": "test_sig"
     })";
-    REQUIRE_FALSE(
-      radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(invalid_created_at)).has_value());
+    CHECK_FALSE(radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(invalid_created_at)).has_value());
   }
 
   SECTION("reject malformed tags")
@@ -121,7 +120,7 @@ TEST_CASE("protocol::event_data can be parsed from JSON", "[nostr][parse]")
       "content": "test",
       "sig": "test_sig"
     })";
-    REQUIRE_FALSE(radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(invalid_tags)).has_value());
+    CHECK_FALSE(radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(invalid_tags)).has_value());
 
     const std::string invalid_tag_item = R"({
       "id": "test_id",
@@ -132,7 +131,7 @@ TEST_CASE("protocol::event_data can be parsed from JSON", "[nostr][parse]")
       "content": "test",
       "sig": "test_sig"
     })";
-    REQUIRE_FALSE(radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(invalid_tag_item)).has_value());
+    CHECK_FALSE(radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(invalid_tag_item)).has_value());
 
     const std::string invalid_tag_element = R"({
       "id": "test_id",
@@ -143,7 +142,7 @@ TEST_CASE("protocol::event_data can be parsed from JSON", "[nostr][parse]")
       "content": "test",
       "sig": "test_sig"
     })";
-    REQUIRE_FALSE(
+    CHECK_FALSE(
       radix_relay::nostr::protocol::event_data::deserialize(string_to_bytes(invalid_tag_element)).has_value());
   }
 }
@@ -251,7 +250,7 @@ TEST_CASE("protocol::event_data factory methods create correct message types", "
     CHECK(event.created_at == timestamp);
     CHECK(event.kind == radix_relay::nostr::protocol::kind::identity_announcement);
     CHECK(event.content == "radix_relay_node_v1");
-    CHECK(event.tags.size() == 3);
+    REQUIRE(event.tags.size() == 3);
     CHECK(event.tags[0] == std::vector<std::string>{ "signal_fingerprint", signal_fingerprint });
     CHECK(event.tags[1] == std::vector<std::string>{ "radix_capabilities", "mesh,nostr" });
     CHECK(
@@ -271,7 +270,7 @@ TEST_CASE("protocol::event_data factory methods create correct message types", "
     CHECK(event.created_at == timestamp);
     CHECK(event.kind == radix_relay::nostr::protocol::kind::encrypted_message);
     CHECK(event.content == encrypted_payload);
-    CHECK(event.tags.size() == 2);
+    REQUIRE(event.tags.size() == 2);
     CHECK(event.tags[0] == std::vector<std::string>{ "p", recipient_pubkey });
     CHECK(
       event.tags[1] == std::vector<std::string>{ "radix_version", std::string{ radix_relay::cmake::project_version } });
@@ -291,7 +290,7 @@ TEST_CASE("protocol::event_data factory methods create correct message types", "
     CHECK(event.created_at == timestamp);
     CHECK(event.kind == radix_relay::nostr::protocol::kind::session_request);
     CHECK(event.content == prekey_bundle);
-    CHECK(event.tags.size() == 2);
+    REQUIRE(event.tags.size() == 2);
     CHECK(event.tags[0] == std::vector<std::string>{ "p", recipient_pubkey });
     CHECK(
       event.tags[1] == std::vector<std::string>{ "radix_version", std::string{ radix_relay::cmake::project_version } });
