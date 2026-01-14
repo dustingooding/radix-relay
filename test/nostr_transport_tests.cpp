@@ -14,253 +14,251 @@
 
 namespace radix_relay::nostr::test {
 
-SCENARIO("Queue-based transport processes connect command", "[nostr][transport][queue]")
+TEST_CASE("Transport processes connect command and establishes connection", "[nostr][transport][queue]")
 {
-  GIVEN("A transport constructed with queues")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
 
-    auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
-    auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
+  auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
+  auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
 
-    transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, in_queue, out_queue);
+  transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, in_queue, out_queue);
 
-    WHEN("run_once processes a connect command from queue")
-    {
-      in_queue->push(core::events::transport::connect{ .url = "wss://relay.damus.io" });
+  in_queue->push(core::events::transport::connect{ .url = "wss://relay.damus.io" });
 
-      boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
+  boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
 
-      io_context->run();
+  io_context->run();
 
-      THEN("WebSocket stream receives connection request")
-      {
-        const auto &connections = fake->get_connections();
-        REQUIRE(connections.size() == 1);
-        REQUIRE(connections[0].host == "relay.damus.io");
-        REQUIRE(connections[0].port == "443");
-        REQUIRE(connections[0].path == "/");
-      }
-
-      AND_THEN("Transport pushes connected event to out_queue with correct URL")
-      {
-        REQUIRE(out_queue->size() == 1);
-
-        io_context->restart();
-        auto future = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
-        io_context->run();
-        auto event = future.get();
-
-        REQUIRE(std::holds_alternative<core::events::transport::connected>(event));
-        const auto &connected_evt = std::get<core::events::transport::connected>(event);
-        REQUIRE(connected_evt.url == "wss://relay.damus.io");
-        REQUIRE(connected_evt.type == core::events::transport_type::internet);
-      }
-    }
-  }
+  const auto &connections = fake->get_connections();
+  REQUIRE(connections.size() == 1);
+  CHECK(connections[0].host == "relay.damus.io");
+  CHECK(connections[0].port == "443");
+  CHECK(connections[0].path == "/");
 }
 
-SCENARIO("Queue-based transport emits bytes_received events", "[nostr][transport][queue]")
+TEST_CASE("Transport pushes connected event with correct URL after connection", "[nostr][transport][queue]")
 {
-  GIVEN("A connected transport with queues")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
 
-    auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
-    auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
+  auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
+  auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
 
-    transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, in_queue, out_queue);
+  transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, in_queue, out_queue);
 
-    in_queue->push(core::events::transport::connect{ .url = "wss://relay.damus.io" });
-    boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
-    io_context->run();
-    io_context->restart();
+  in_queue->push(core::events::transport::connect{ .url = "wss://relay.damus.io" });
 
-    REQUIRE(out_queue->size() == 1);
-    auto clear_future = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
-    io_context->run();
-    clear_future.get();
+  boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
 
-    WHEN("WebSocket stream receives data")
-    {
-      constexpr std::byte test_byte_1{ 0xAB };
-      constexpr std::byte test_byte_2{ 0xCD };
-      constexpr std::byte test_byte_3{ 0xEF };
-      std::vector<std::byte> incoming_data{ test_byte_1, test_byte_2, test_byte_3 };
-      fake->set_read_data(incoming_data);
+  io_context->run();
 
-      io_context->restart();
-      io_context->run();
+  CHECK(out_queue->size() == 1);
 
-      THEN("Transport pushes bytes_received event to out_queue with correct data")
-      {
-        REQUIRE(out_queue->size() == 1);
+  io_context->restart();
+  auto future = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
+  io_context->run();
+  auto event = future.get();
 
-        io_context->restart();
-        auto future = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
-        io_context->run();
-        auto event = future.get();
-
-        REQUIRE(std::holds_alternative<core::events::transport::bytes_received>(event));
-        const auto &received_evt = std::get<core::events::transport::bytes_received>(event);
-        REQUIRE(received_evt.bytes == incoming_data);
-      }
-    }
-  }
+  CHECK(std::holds_alternative<core::events::transport::connected>(event));
+  const auto &connected_evt = std::get<core::events::transport::connected>(event);
+  CHECK(connected_evt.url == "wss://relay.damus.io");
+  CHECK(connected_evt.type == core::events::transport_type::internet);
 }
 
-SCENARIO("Queue-based transport processes send command", "[nostr][transport][queue]")
+TEST_CASE("Transport emits bytes_received event when WebSocket receives data", "[nostr][transport][queue]")
 {
-  GIVEN("A connected transport with queues")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
 
-    auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
-    auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
+  auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
+  auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
 
-    transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, in_queue, out_queue);
+  transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, in_queue, out_queue);
 
-    in_queue->push(core::events::transport::connect{ .url = "wss://relay.damus.io" });
-    boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
-    io_context->run();
-    io_context->restart();
+  in_queue->push(core::events::transport::connect{ .url = "wss://relay.damus.io" });
+  boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
+  io_context->run();
+  io_context->restart();
 
-    REQUIRE(out_queue->size() == 1);
-    auto clear_future2 = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
-    io_context->run();
-    clear_future2.get();
+  CHECK(out_queue->size() == 1);
+  auto clear_future = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
+  io_context->run();
+  clear_future.get();
 
-    WHEN("run_once processes a send command from queue")
-    {
-      std::vector<std::byte> data{ std::byte{ 0x01 }, std::byte{ 0x02 }, std::byte{ 0x03 } };
-      in_queue->push(core::events::transport::send{ .message_id = "test-msg-id", .bytes = data });
+  constexpr std::byte test_byte_1{ 0xAB };
+  constexpr std::byte test_byte_2{ 0xCD };
+  constexpr std::byte test_byte_3{ 0xEF };
+  std::vector<std::byte> incoming_data{ test_byte_1, test_byte_2, test_byte_3 };
+  fake->set_read_data(incoming_data);
 
-      boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
+  io_context->restart();
+  io_context->run();
 
-      io_context->restart();
-      io_context->run();
+  CHECK(out_queue->size() == 1);
 
-      THEN("WebSocket stream receives write request")
-      {
-        const auto &writes = fake->get_writes();
-        REQUIRE(writes.size() == 1);
-        REQUIRE(writes[0].data == data);
-      }
+  io_context->restart();
+  auto future = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
+  io_context->run();
+  auto event = future.get();
 
-      AND_THEN("Transport pushes sent event to out_queue with correct message ID")
-      {
-        REQUIRE(out_queue->size() == 1);
-
-        io_context->restart();
-        auto future = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
-        io_context->run();
-        auto event = future.get();
-
-        REQUIRE(std::holds_alternative<core::events::transport::sent>(event));
-        const auto &sent_evt = std::get<core::events::transport::sent>(event);
-        REQUIRE(sent_evt.message_id == "test-msg-id");
-      }
-    }
-  }
+  CHECK(std::holds_alternative<core::events::transport::bytes_received>(event));
+  const auto &received_evt = std::get<core::events::transport::bytes_received>(event);
+  CHECK(received_evt.bytes == incoming_data);
 }
 
-SCENARIO("Queue-based transport processes disconnect command", "[nostr][transport][queue]")
+TEST_CASE("Transport processes send command and writes data to WebSocket", "[nostr][transport][queue]")
 {
-  GIVEN("A connected transport with queues")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
 
-    auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
-    auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
+  auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
+  auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
 
-    transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, in_queue, out_queue);
+  transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, in_queue, out_queue);
 
-    in_queue->push(core::events::transport::connect{ .url = "wss://relay.damus.io" });
-    boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
-    io_context->run();
-    io_context->restart();
+  in_queue->push(core::events::transport::connect{ .url = "wss://relay.damus.io" });
+  boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
+  io_context->run();
+  io_context->restart();
 
-    REQUIRE(out_queue->size() == 1);
-    auto clear_future3 = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
-    io_context->run();
-    clear_future3.get();
+  CHECK(out_queue->size() == 1);
+  auto clear_future2 = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
+  io_context->run();
+  clear_future2.get();
 
-    WHEN("run_once processes a disconnect command from queue")
-    {
-      in_queue->push(core::events::transport::disconnect{});
+  const std::vector<std::byte> data{ std::byte{ 0x01 }, std::byte{ 0x02 }, std::byte{ 0x03 } };
+  in_queue->push(core::events::transport::send{ .message_id = "test-msg-id", .bytes = data });
 
-      boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
+  boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
 
-      io_context->restart();
-      io_context->run();
+  io_context->restart();
+  io_context->run();
 
-      THEN("Transport pushes disconnected event to out_queue")
-      {
-        REQUIRE(out_queue->size() == 1);
-
-        io_context->restart();
-        auto future = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
-        io_context->run();
-        auto event = future.get();
-
-        REQUIRE(std::holds_alternative<core::events::transport::disconnected>(event));
-      }
-    }
-  }
+  const auto &writes = fake->get_writes();
+  REQUIRE(writes.size() == 1);
+  CHECK(writes[0].data == data);
 }
 
-SCENARIO("Transport respects cancellation signal", "[nostr][transport][cancellation]")
+TEST_CASE("Transport pushes sent event with message ID after sending data", "[nostr][transport][queue]")
+{
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
+
+  auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
+  auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
+
+  transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, in_queue, out_queue);
+
+  in_queue->push(core::events::transport::connect{ .url = "wss://relay.damus.io" });
+  boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
+  io_context->run();
+  io_context->restart();
+
+  CHECK(out_queue->size() == 1);
+  auto clear_future2 = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
+  io_context->run();
+  clear_future2.get();
+
+  const std::vector<std::byte> data{ std::byte{ 0x01 }, std::byte{ 0x02 }, std::byte{ 0x03 } };
+  in_queue->push(core::events::transport::send{ .message_id = "test-msg-id", .bytes = data });
+
+  boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
+
+  io_context->restart();
+  io_context->run();
+
+  CHECK(out_queue->size() == 1);
+
+  io_context->restart();
+  auto future = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
+  io_context->run();
+  auto event = future.get();
+
+  CHECK(std::holds_alternative<core::events::transport::sent>(event));
+  const auto &sent_evt = std::get<core::events::transport::sent>(event);
+  CHECK(sent_evt.message_id == "test-msg-id");
+}
+
+TEST_CASE("Transport pushes disconnected event after processing disconnect command", "[nostr][transport][queue]")
+{
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
+
+  auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
+  auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
+
+  transport<radix_relay::test::test_double_websocket_stream> transport(fake, io_context, in_queue, out_queue);
+
+  in_queue->push(core::events::transport::connect{ .url = "wss://relay.damus.io" });
+  boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
+  io_context->run();
+  io_context->restart();
+
+  CHECK(out_queue->size() == 1);
+  auto clear_future3 = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
+  io_context->run();
+  clear_future3.get();
+
+  in_queue->push(core::events::transport::disconnect{});
+
+  boost::asio::co_spawn(*io_context, transport.run_once(), boost::asio::detached);
+
+  io_context->restart();
+  io_context->run();
+
+  CHECK(out_queue->size() == 1);
+
+  io_context->restart();
+  auto future = boost::asio::co_spawn(*io_context, out_queue->pop(), boost::asio::use_future);
+  io_context->run();
+  auto event = future.get();
+
+  CHECK(std::holds_alternative<core::events::transport::disconnected>(event));
+}
+
+TEST_CASE("Transport respects cancellation signal while waiting", "[nostr][transport][cancellation]")
 {
   struct test_state
   {
     std::atomic<bool> coroutine_done{ false };
   };
 
-  GIVEN("A transport with cancellation support")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
-    auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
-    auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
-    auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
-    auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
-    auto trans = std::make_shared<transport<radix_relay::test::test_double_websocket_stream>>(
-      fake, io_context, in_queue, out_queue);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  auto fake = std::make_shared<radix_relay::test::test_double_websocket_stream>(io_context);
+  auto in_queue = std::make_shared<async::async_queue<core::events::transport::in_t>>(io_context);
+  auto out_queue = std::make_shared<async::async_queue<core::events::session_orchestrator::in_t>>(io_context);
+  auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
+  auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
+  auto trans =
+    std::make_shared<transport<radix_relay::test::test_double_websocket_stream>>(fake, io_context, in_queue, out_queue);
 
-    auto state = std::make_shared<test_state>();
+  auto state = std::make_shared<test_state>();
 
-    WHEN("cancellation signal is emitted while transport is waiting")
-    {
-      boost::asio::co_spawn(
-        *io_context,
-        [](std::shared_ptr<transport<radix_relay::test::test_double_websocket_stream>> transport_ptr,
-          std::shared_ptr<test_state> test_state_ptr,
-          std::shared_ptr<boost::asio::cancellation_slot> c_slot) -> boost::asio::awaitable<void> {
-          try {
-            co_await transport_ptr->run(c_slot);
-          } catch (const boost::system::system_error &err) {
-            if (err.code() != boost::asio::error::operation_aborted
-                and err.code() != boost::asio::experimental::error::channel_cancelled
-                and err.code() != boost::asio::experimental::error::channel_closed) {
-              throw;
-            }
-          }
-          test_state_ptr->coroutine_done = true;
-        }(trans, state, cancel_slot),
-        boost::asio::detached);
+  boost::asio::co_spawn(
+    *io_context,
+    [](std::shared_ptr<transport<radix_relay::test::test_double_websocket_stream>> transport_ptr,
+      std::shared_ptr<test_state> test_state_ptr,
+      std::shared_ptr<boost::asio::cancellation_slot> c_slot) -> boost::asio::awaitable<void> {
+      try {
+        co_await transport_ptr->run(c_slot);
+      } catch (const boost::system::system_error &err) {
+        if (err.code() != boost::asio::error::operation_aborted
+            and err.code() != boost::asio::experimental::error::channel_cancelled
+            and err.code() != boost::asio::experimental::error::channel_closed) {
+          throw;
+        }
+      }
+      test_state_ptr->coroutine_done = true;
+    }(trans, state, cancel_slot),
+    boost::asio::detached);
 
-      io_context->poll();
+  io_context->poll();
 
-      cancel_signal->emit(boost::asio::cancellation_type::terminal);
-      io_context->run();
+  cancel_signal->emit(boost::asio::cancellation_type::terminal);
+  io_context->run();
 
-      THEN("the transport should be cancelled") { REQUIRE(state->coroutine_done); }
-    }
-  }
+  CHECK(state->coroutine_done);
 }
 
 }// namespace radix_relay::nostr::test

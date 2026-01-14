@@ -46,7 +46,7 @@ TEST_CASE("display_filter passes all messages when not in chat mode", "[display_
     REQUIRE(result.has_value());
     if (result.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) { CHECK(display_msg->message == "System message"); }
     }
   }
@@ -60,7 +60,7 @@ TEST_CASE("display_filter passes all messages when not in chat mode", "[display_
     REQUIRE(result.has_value());
     if (result.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) {
         CHECK(display_msg->message == "Hello");
         CHECK(display_msg->contact_rdx == "RDX:alice");
@@ -78,7 +78,7 @@ TEST_CASE("display_filter passes all messages when not in chat mode", "[display_
     REQUIRE(result.has_value());
     if (result.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) {
         CHECK(display_msg->message == "Hi there");
         CHECK(display_msg->contact_rdx == "RDX:bob");
@@ -95,7 +95,7 @@ TEST_CASE("display_filter passes all messages when not in chat mode", "[display_
     REQUIRE(result.has_value());
     if (result.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) { CHECK(display_msg->message == "Command executed"); }
     }
   }
@@ -120,7 +120,7 @@ TEST_CASE("display_filter system messages always pass through", "[display_filter
     REQUIRE(result.has_value());
     if (result.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) { CHECK(display_msg->message == "System alert"); }
     }
   }
@@ -134,7 +134,7 @@ TEST_CASE("display_filter system messages always pass through", "[display_filter
     REQUIRE(result.has_value());
     if (result.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) { CHECK(display_msg->message == "System info"); }
     }
   }
@@ -148,7 +148,7 @@ TEST_CASE("display_filter system messages always pass through", "[display_filter
     REQUIRE(result.has_value());
     if (result.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) { CHECK(display_msg->message == "Command executed"); }
     }
   }
@@ -174,7 +174,7 @@ TEST_CASE("display_filter filters messages in chat mode", "[display_filter]")
     REQUIRE(result.has_value());
     if (result.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) { CHECK(display_msg->message == "Hello from Alice"); }
     }
   }
@@ -189,7 +189,7 @@ TEST_CASE("display_filter filters messages in chat mode", "[display_filter]")
     REQUIRE(result.has_value());
     if (result.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) { CHECK(display_msg->message == "Reply to Alice"); }
     }
   }
@@ -236,7 +236,7 @@ TEST_CASE("display_filter chat context management", "[display_filter]")
     REQUIRE(result1.has_value());
     if (result1.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result1);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) { CHECK(display_msg->message == "From Alice"); }
     }
 
@@ -269,7 +269,7 @@ TEST_CASE("display_filter chat context management", "[display_filter]")
     REQUIRE(result1.has_value());
     if (result1.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result1);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) { CHECK(display_msg->message == "From Alice"); }
     }
 
@@ -277,7 +277,7 @@ TEST_CASE("display_filter chat context management", "[display_filter]")
     REQUIRE(result2.has_value());
     if (result2.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result2);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) { CHECK(display_msg->message == "From Bob"); }
     }
   }
@@ -302,7 +302,7 @@ TEST_CASE("display_filter chat context management", "[display_filter]")
     REQUIRE(result1.has_value());
     if (result1.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result1);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) { CHECK(display_msg->message == "From Bob"); }
     }
 
@@ -337,7 +337,7 @@ TEST_CASE("display_filter switching between contacts", "[display_filter]")
     REQUIRE(result1.has_value());
     if (result1.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result1);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) { CHECK(display_msg->message == "From Alice"); }
     }
 
@@ -362,7 +362,7 @@ TEST_CASE("display_filter switching between contacts", "[display_filter]")
     REQUIRE(result3.has_value());
     if (result3.has_value()) {
       auto *display_msg = std::get_if<core::events::display_message>(&*result3);
-      REQUIRE(display_msg != nullptr);
+      CHECK(display_msg != nullptr);
       if (display_msg != nullptr) { CHECK(display_msg->message == "From Bob again"); }
     }
 

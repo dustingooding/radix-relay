@@ -102,7 +102,7 @@ TEST_CASE("message_handler handles incoming bundle_announcement without establis
 
     REQUIRE(result.has_value());
     if (result.has_value()) {
-      REQUIRE(std::holds_alternative<radix_relay::core::events::bundle_announcement_received>(*result));
+      CHECK(std::holds_alternative<radix_relay::core::events::bundle_announcement_received>(*result));
       const auto &announcement = std::get<radix_relay::core::events::bundle_announcement_received>(*result);
       CHECK(announcement.pubkey == "alice_nostr_pubkey");
       CHECK(announcement.bundle_content == alice_bundle_base64);
@@ -144,7 +144,7 @@ TEST_CASE("message_handler filters old version bundle announcements", "[message_
       const radix_relay::nostr::message_handler<radix_relay::signal::bridge> handler(alice_bridge);
       auto result = handler.handle(event);
 
-      REQUIRE_FALSE(result.has_value());
+      CHECK_FALSE(result.has_value());
     }
 
     SECTION("accepts bundle announcements with version >= 0.4.0")
@@ -165,7 +165,7 @@ TEST_CASE("message_handler filters old version bundle announcements", "[message_
 
       REQUIRE(result.has_value());
       if (result.has_value()) {
-        REQUIRE(std::holds_alternative<radix_relay::core::events::bundle_announcement_received>(*result));
+        CHECK(std::holds_alternative<radix_relay::core::events::bundle_announcement_received>(*result));
         const auto &announcement = std::get<radix_relay::core::events::bundle_announcement_received>(*result);
         CHECK(announcement.pubkey == "new_client_pubkey");
         CHECK(announcement.bundle_content == alice_bundle_base64);
@@ -188,7 +188,7 @@ TEST_CASE("message_handler filters old version bundle announcements", "[message_
       const radix_relay::nostr::message_handler<radix_relay::signal::bridge> handler(alice_bridge);
       auto result = handler.handle(event);
 
-      REQUIRE_FALSE(result.has_value());
+      CHECK_FALSE(result.has_value());
     }
   }
 
@@ -227,7 +227,7 @@ TEST_CASE("message_handler handles send command", "[message_handler]")
     auto parsed = nlohmann::json::parse(json_str);
 
     CHECK(parsed.is_array());
-    CHECK(parsed.size() == 2);
+    REQUIRE(parsed.size() == 2);
     CHECK(parsed[0] == "EVENT");
     CHECK(parsed[1].contains("kind"));
     CHECK(parsed[1]["kind"] == 40001);
@@ -268,7 +268,7 @@ TEST_CASE("message_handler handles publish_identity command", "[message_handler]
     auto parsed = nlohmann::json::parse(json_str);
 
     CHECK(parsed.is_array());
-    CHECK(parsed.size() == 2);
+    REQUIRE(parsed.size() == 2);
     CHECK(parsed[0] == "EVENT");
     CHECK(parsed[1].contains("kind"));
     CHECK(parsed[1]["kind"] == 30078);
@@ -366,7 +366,7 @@ TEST_CASE("message_handler filters bundle announcements by version", "[message_h
       const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
       auto result = handler.handle(event);
 
-      REQUIRE_FALSE(result.has_value());
+      CHECK_FALSE(result.has_value());
     }
 
     SECTION("accepts bundles with version == 0.4.0")
@@ -436,7 +436,7 @@ TEST_CASE("message_handler filters bundle announcements by version", "[message_h
       const radix_relay::nostr::events::incoming::bundle_announcement event{ event_data };
       auto result = handler.handle(event);
 
-      REQUIRE_FALSE(result.has_value());
+      CHECK_FALSE(result.has_value());
     }
   }
 
@@ -470,7 +470,7 @@ TEST_CASE("message_handler filters bundle announcements by content", "[message_h
 
       REQUIRE(result.has_value());
       if (result.has_value()) {
-        REQUIRE(std::holds_alternative<radix_relay::core::events::bundle_announcement_removed>(*result));
+        CHECK(std::holds_alternative<radix_relay::core::events::bundle_announcement_removed>(*result));
         const auto &removed = std::get<radix_relay::core::events::bundle_announcement_removed>(*result);
         CHECK(removed.pubkey == "test_pubkey");
         CHECK(removed.event_id == "test_event_id");
@@ -502,7 +502,7 @@ TEST_CASE("message_handler filters bundle announcements by content", "[message_h
 
       REQUIRE(result.has_value());
       if (result.has_value()) {
-        REQUIRE(std::holds_alternative<radix_relay::core::events::bundle_announcement_received>(*result));
+        CHECK(std::holds_alternative<radix_relay::core::events::bundle_announcement_received>(*result));
         const auto &announcement = std::get<radix_relay::core::events::bundle_announcement_received>(*result);
         CHECK_FALSE(announcement.bundle_content.empty());
       }

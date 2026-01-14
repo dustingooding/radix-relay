@@ -147,7 +147,7 @@ TEST_CASE("processor tracks chat context for UI display", "[gui][processor][chat
     processor.poll_ui_events();
 
     const auto context = processor.get_chat_context();
-    CHECK(context.has_value());
+    REQUIRE(context.has_value());
     if (context.has_value()) { CHECK(context.value() == "alice"); }
     CHECK(window->get_active_chat_contact() == "alice");
   }

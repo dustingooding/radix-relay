@@ -223,8 +223,8 @@ TEST_CASE("Queue-based session_orchestrator processes publish_identity command",
   fixture.io_context->restart();
   fixture.io_context->poll();
 
-  REQUIRE_FALSE(fixture.transport_out_queue->empty());
-  REQUIRE(fixture.transport_out_queue->size() == 1);
+  CHECK_FALSE(fixture.transport_out_queue->empty());
+  CHECK(fixture.transport_out_queue->size() == 1);
 }
 
 TEST_CASE("Queue-based session_orchestrator processes trust command", "[core][session_orchestrator][queue]")
@@ -237,8 +237,8 @@ TEST_CASE("Queue-based session_orchestrator processes trust command", "[core][se
 
   fixture.io_context->run();
 
-  REQUIRE(fixture.presentation_out_queue->empty());
-  REQUIRE(fixture.transport_out_queue->empty());
+  CHECK(fixture.presentation_out_queue->empty());
+  CHECK(fixture.transport_out_queue->empty());
 }
 
 TEST_CASE("Queue-based session_orchestrator processes bytes_received with unknown protocol",
@@ -255,8 +255,8 @@ TEST_CASE("Queue-based session_orchestrator processes bytes_received with unknow
 
   fixture.io_context->run();
 
-  REQUIRE(fixture.presentation_out_queue->empty());
-  REQUIRE(fixture.transport_out_queue->empty());
+  CHECK(fixture.presentation_out_queue->empty());
+  CHECK(fixture.transport_out_queue->empty());
 }
 
 TEST_CASE("Queue-based session_orchestrator processes bytes_received with OK message",
@@ -273,8 +273,8 @@ TEST_CASE("Queue-based session_orchestrator processes bytes_received with OK mes
 
   fixture.io_context->run();
 
-  REQUIRE(fixture.presentation_out_queue->empty());
-  REQUIRE(fixture.transport_out_queue->empty());
+  CHECK(fixture.presentation_out_queue->empty());
+  CHECK(fixture.transport_out_queue->empty());
 }
 
 TEST_CASE("Queue-based session_orchestrator processes bytes_received with EOSE message",
@@ -291,8 +291,8 @@ TEST_CASE("Queue-based session_orchestrator processes bytes_received with EOSE m
 
   fixture.io_context->run();
 
-  REQUIRE(fixture.presentation_out_queue->empty());
-  REQUIRE(fixture.transport_out_queue->empty());
+  CHECK(fixture.presentation_out_queue->empty());
+  CHECK(fixture.transport_out_queue->empty());
 }
 
 TEST_CASE("Queue-based session_orchestrator processes transport disconnected event",
@@ -306,8 +306,8 @@ TEST_CASE("Queue-based session_orchestrator processes transport disconnected eve
 
   fixture.io_context->run();
 
-  REQUIRE(fixture.presentation_out_queue->empty());
-  REQUIRE(fixture.transport_out_queue->empty());
+  CHECK(fixture.presentation_out_queue->empty());
+  CHECK(fixture.transport_out_queue->empty());
 }
 
 TEST_CASE("Queue-based session_orchestrator processes transport sent event", "[core][session_orchestrator][queue]")
@@ -321,8 +321,8 @@ TEST_CASE("Queue-based session_orchestrator processes transport sent event", "[c
 
   fixture.io_context->run();
 
-  REQUIRE(fixture.presentation_out_queue->empty());
-  REQUIRE(fixture.transport_out_queue->empty());
+  CHECK(fixture.presentation_out_queue->empty());
+  CHECK(fixture.transport_out_queue->empty());
 }
 
 TEST_CASE("Queue-based session_orchestrator processes transport send_failed event",
@@ -337,8 +337,8 @@ TEST_CASE("Queue-based session_orchestrator processes transport send_failed even
 
   fixture.io_context->run();
 
-  REQUIRE(fixture.presentation_out_queue->empty());
-  REQUIRE(fixture.transport_out_queue->empty());
+  CHECK(fixture.presentation_out_queue->empty());
+  CHECK(fixture.transport_out_queue->empty());
 }
 
 TEST_CASE("Queue-based session_orchestrator processes transport connect_failed event",
@@ -353,8 +353,8 @@ TEST_CASE("Queue-based session_orchestrator processes transport connect_failed e
 
   fixture.io_context->run();
 
-  REQUIRE(fixture.presentation_out_queue->empty());
-  REQUIRE(fixture.transport_out_queue->empty());
+  CHECK(fixture.presentation_out_queue->empty());
+  CHECK(fixture.transport_out_queue->empty());
 }
 
 TEST_CASE("Queue-based session_orchestrator Alice encrypts and Bob decrypts end-to-end",
@@ -387,7 +387,7 @@ TEST_CASE("Queue-based session_orchestrator Alice encrypts and Bob decrypts end-
   boost::asio::co_spawn(*fixture.bob_io, fixture.bob_orch->run_once(), boost::asio::detached);
   fixture.bob_io->run();
 
-  REQUIRE_FALSE(fixture.bob_presentation_out->empty());
+  CHECK_FALSE(fixture.bob_presentation_out->empty());
 
   fixture.bob_io->restart();
   auto main_future =
@@ -395,11 +395,11 @@ TEST_CASE("Queue-based session_orchestrator Alice encrypts and Bob decrypts end-
   fixture.bob_io->run();
   auto main_event = main_future.get();
 
-  REQUIRE(std::holds_alternative<events::message_received>(main_event));
+  CHECK(std::holds_alternative<events::message_received>(main_event));
 
   const auto &msg = std::get<events::message_received>(main_event);
-  REQUIRE(msg.sender_rdx == fixture.alice_rdx);
-  REQUIRE(msg.content == plaintext);
+  CHECK(msg.sender_rdx == fixture.alice_rdx);
+  CHECK(msg.content == plaintext);
 }
 
 TEST_CASE("session_orchestrator handles subscribe_identities command", "[session_orchestrator][subscribe]")
@@ -414,12 +414,12 @@ TEST_CASE("session_orchestrator handles subscribe_identities command", "[session
   fixture.io_context->restart();
   fixture.io_context->run();
 
-  REQUIRE(not fixture.transport_out_queue->empty());
+  CHECK(not fixture.transport_out_queue->empty());
   auto transport_cmd = fixture.transport_out_queue->try_pop();
   REQUIRE(transport_cmd.has_value());
 
   if (transport_cmd.has_value()) {
-    REQUIRE(std::holds_alternative<core::events::transport::send>(transport_cmd.value()));
+    CHECK(std::holds_alternative<core::events::transport::send>(transport_cmd.value()));
 
     const auto &send_cmd = std::get<core::events::transport::send>(transport_cmd.value());
     std::string json_str;
@@ -428,17 +428,17 @@ TEST_CASE("session_orchestrator handles subscribe_identities command", "[session
       send_cmd.bytes, json_str.begin(), [](std::byte byte) -> char { return std::bit_cast<char>(byte); });
 
     auto parsed = nlohmann::json::parse(json_str);
-    REQUIRE(parsed.is_array());
-    REQUIRE(parsed[0] == "REQ");
+    CHECK(parsed.is_array());
+    CHECK(parsed[0] == "REQ");
 
     const std::string subscription_id = parsed[1];
-    REQUIRE(not subscription_id.empty());
-    REQUIRE(subscription_id.length() <= 64);
+    CHECK(not subscription_id.empty());
+    CHECK(subscription_id.length() <= 64);
 
-    REQUIRE(parsed[2].contains("kinds"));
-    REQUIRE(parsed[2]["kinds"][0] == 30078);
-    REQUIRE(parsed[2].contains("#d"));
-    REQUIRE(parsed[2]["#d"][0] == "radix_prekey_bundle_v1");
+    CHECK(parsed[2].contains("kinds"));
+    CHECK(parsed[2]["kinds"][0] == 30078);
+    CHECK(parsed[2].contains("#d"));
+    CHECK(parsed[2]["#d"][0] == "radix_prekey_bundle_v1");
   }
 }
 
@@ -454,12 +454,12 @@ TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_o
   fixture.io_context->restart();
   fixture.io_context->run();
 
-  REQUIRE(not fixture.transport_out_queue->empty());
+  CHECK(not fixture.transport_out_queue->empty());
   auto transport_cmd = fixture.transport_out_queue->try_pop();
   REQUIRE(transport_cmd.has_value());
 
   if (transport_cmd.has_value()) {
-    REQUIRE(std::holds_alternative<core::events::transport::send>(transport_cmd.value()));
+    CHECK(std::holds_alternative<core::events::transport::send>(transport_cmd.value()));
 
     const auto &send_cmd = std::get<core::events::transport::send>(transport_cmd.value());
     std::string json_str;
@@ -468,14 +468,14 @@ TEST_CASE("session_orchestrator handles subscribe_messages command", "[session_o
       send_cmd.bytes, json_str.begin(), [](std::byte byte) -> char { return std::bit_cast<char>(byte); });
 
     auto parsed = nlohmann::json::parse(json_str);
-    REQUIRE(parsed.is_array());
+    CHECK(parsed.is_array());
     CHECK_NOTHROW(parsed[0] == "REQ");
 
     const std::string subscription_id = parsed[1];
     CHECK(not subscription_id.empty());
     CHECK(subscription_id.length() <= 64);
 
-    REQUIRE(parsed[2].contains("kinds"));
+    CHECK(parsed[2].contains("kinds"));
     CHECK(parsed[2]["kinds"][0] == 40001);
     CHECK(parsed[2].contains("#p"));
   }
@@ -492,16 +492,16 @@ TEST_CASE("session_orchestrator handles connect command and manages connection l
   fixture.io_context->run();
   fixture.io_context->restart();
 
-  REQUIRE(not fixture.transport_out_queue->empty());
+  CHECK(not fixture.transport_out_queue->empty());
   auto transport_cmd = fixture.transport_out_queue->try_pop();
   REQUIRE(transport_cmd.has_value());
   if (transport_cmd.has_value()) {
-    REQUIRE(std::holds_alternative<core::events::transport::connect>(transport_cmd.value()));
+    CHECK(std::holds_alternative<core::events::transport::connect>(transport_cmd.value()));
     const auto &connect_cmd = std::get<core::events::transport::connect>(transport_cmd.value());
-    REQUIRE(connect_cmd.url == "wss://relay.example.com");
+    CHECK(connect_cmd.url == "wss://relay.example.com");
   }
 
-  REQUIRE(fixture.transport_out_queue->empty());
+  CHECK(fixture.transport_out_queue->empty());
 }
 
 TEST_CASE("session_orchestrator sends subscriptions when transport connects", "[session_orchestrator][connect]")
@@ -527,7 +527,7 @@ TEST_CASE("session_orchestrator sends subscriptions when transport connects", "[
     }
   }
 
-  REQUIRE(req_count == 2);
+  CHECK(req_count == 2);
 }
 
 TEST_CASE("session_orchestrator respects cancellation signal", "[core][session_orchestrator][cancellation]")
@@ -567,7 +567,7 @@ TEST_CASE("session_orchestrator respects cancellation signal", "[core][session_o
   cancel_signal->emit(boost::asio::cancellation_type::terminal);
   fixture.io_context->run();
 
-  REQUIRE(state->coroutine_done);
+  CHECK(state->coroutine_done);
 }
 
 TEST_CASE("session_orchestrator returns empty identities list initially", "[session_orchestrator][bundles]")
@@ -588,9 +588,9 @@ TEST_CASE("session_orchestrator returns empty identities list initially", "[sess
   REQUIRE(response.has_value());
 
   if (response.has_value()) {
-    REQUIRE(std::holds_alternative<core::events::identities_listed>(*response));
+    CHECK(std::holds_alternative<core::events::identities_listed>(*response));
     const auto &listed = std::get<core::events::identities_listed>(*response);
-    REQUIRE(listed.identities.empty());
+    CHECK(listed.identities.empty());
   }
 }
 
@@ -642,13 +642,13 @@ TEST_CASE("session_orchestrator stores discovered bundle identities", "[session_
   REQUIRE(response.has_value());
 
   if (response.has_value()) {
-    REQUIRE(std::holds_alternative<core::events::identities_listed>(*response));
+    CHECK(std::holds_alternative<core::events::identities_listed>(*response));
     const auto &listed = std::get<core::events::identities_listed>(*response);
     REQUIRE(listed.identities.size() == 1);
-    REQUIRE(listed.identities[0].nostr_pubkey == bob_pubkey);
-    REQUIRE(listed.identities[0].event_id == bob_event_id);
-    REQUIRE(listed.identities[0].rdx_fingerprint.starts_with("RDX:"));
-    REQUIRE(listed.identities[0].rdx_fingerprint.length() == 68);
+    CHECK(listed.identities[0].nostr_pubkey == bob_pubkey);
+    CHECK(listed.identities[0].event_id == bob_event_id);
+    CHECK(listed.identities[0].rdx_fingerprint.starts_with("RDX:"));
+    CHECK(listed.identities[0].rdx_fingerprint.length() == 68);
   }
 }
 
@@ -701,8 +701,8 @@ TEST_CASE("session_orchestrator removes bundle when bundle_announcement_removed 
   auto initial_response = alice.presentation_out_queue->try_pop();
   REQUIRE(initial_response.has_value());
   if (initial_response.has_value()) {
-    REQUIRE(std::holds_alternative<core::events::identities_listed>(*initial_response));
-    REQUIRE(std::get<core::events::identities_listed>(*initial_response).identities.size() == 1);
+    CHECK(std::holds_alternative<core::events::identities_listed>(*initial_response));
+    CHECK(std::get<core::events::identities_listed>(*initial_response).identities.size() == 1);
   }
 
   const core::events::session_orchestrator::in_t removal_event =
@@ -733,9 +733,9 @@ TEST_CASE("session_orchestrator removes bundle when bundle_announcement_removed 
   REQUIRE(response.has_value());
 
   if (response.has_value()) {
-    REQUIRE(std::holds_alternative<core::events::identities_listed>(*response));
+    CHECK(std::holds_alternative<core::events::identities_listed>(*response));
     const auto &listed = std::get<core::events::identities_listed>(*response);
-    REQUIRE(listed.identities.empty());
+    CHECK(listed.identities.empty());
   }
 }
 
@@ -807,11 +807,11 @@ TEST_CASE("session_orchestrator updates bundle when duplicate bundle_announcemen
   REQUIRE(response.has_value());
 
   if (response.has_value()) {
-    REQUIRE(std::holds_alternative<core::events::identities_listed>(*response));
+    CHECK(std::holds_alternative<core::events::identities_listed>(*response));
     const auto &listed = std::get<core::events::identities_listed>(*response);
     REQUIRE(listed.identities.size() == 1);
-    REQUIRE(listed.identities[0].nostr_pubkey == bob_pubkey);
-    REQUIRE(listed.identities[0].event_id == bob_event_id_2);
+    CHECK(listed.identities[0].nostr_pubkey == bob_pubkey);
+    CHECK(listed.identities[0].event_id == bob_event_id_2);
   }
 }
 
@@ -863,16 +863,16 @@ TEST_CASE("session_orchestrator establishes session when trusting discovered ide
 
   REQUIRE(response.has_value());
   if (response.has_value()) {
-    REQUIRE(std::holds_alternative<core::events::session_established>(*response));
+    CHECK(std::holds_alternative<core::events::session_established>(*response));
     const auto &session = std::get<core::events::session_established>(*response);
-    REQUIRE(session.peer_rdx == bob_rdx);
+    CHECK(session.peer_rdx == bob_rdx);
   }
 
   const auto contacts = alice.bridge->list_contacts();
   REQUIRE(contacts.size() == 1);
-  REQUIRE(contacts[0].rdx_fingerprint == bob_rdx);
-  REQUIRE(contacts[0].user_alias == "Bob");
-  REQUIRE(contacts[0].has_active_session);
+  CHECK(contacts[0].rdx_fingerprint == bob_rdx);
+  CHECK(contacts[0].user_alias == "Bob");
+  CHECK(contacts[0].has_active_session);
 }
 
 TEST_CASE("session_orchestrator ignores duplicate encrypted messages", "[session_orchestrator][messages][duplicate]")
@@ -905,10 +905,10 @@ TEST_CASE("session_orchestrator ignores duplicate encrypted messages", "[session
   fixture.bob_io->run();
   fixture.bob_io->restart();
 
-  REQUIRE_FALSE(fixture.bob_presentation_out->empty());
+  CHECK_FALSE(fixture.bob_presentation_out->empty());
   auto first_response = fixture.bob_presentation_out->try_pop();
   REQUIRE(first_response.has_value());
-  if (first_response.has_value()) { REQUIRE(std::holds_alternative<events::message_received>(*first_response)); }
+  if (first_response.has_value()) { CHECK(std::holds_alternative<events::message_received>(*first_response)); }
 
   if (not fixture.bob_in->empty()) {
     boost::asio::co_spawn(*fixture.bob_io, fixture.bob_orch->run_once(), boost::asio::detached);
@@ -939,7 +939,7 @@ TEST_CASE("session_orchestrator ignores duplicate encrypted messages", "[session
 
   while (not fixture.bob_presentation_out->empty()) {
     auto event = fixture.bob_presentation_out->try_pop();
-    if (event.has_value()) { REQUIRE_FALSE(std::holds_alternative<events::message_received>(*event)); }
+    if (event.has_value()) { CHECK_FALSE(std::holds_alternative<events::message_received>(*event)); }
   }
 }
 
@@ -958,21 +958,21 @@ TEST_CASE("session_orchestrator includes since filter when subscribing to messag
   fixture.io_context->restart();
   fixture.io_context->run();
 
-  REQUIRE(not fixture.transport_out_queue->empty());
+  CHECK(not fixture.transport_out_queue->empty());
   auto transport_cmd = fixture.transport_out_queue->try_pop();
   REQUIRE(transport_cmd.has_value());
 
   if (transport_cmd.has_value()) {
-    REQUIRE(std::holds_alternative<core::events::transport::send>(transport_cmd.value()));
+    CHECK(std::holds_alternative<core::events::transport::send>(transport_cmd.value()));
 
     const auto &send_cmd = std::get<core::events::transport::send>(transport_cmd.value());
     const std::string json_str = bytes_to_string(send_cmd.bytes);
 
     auto parsed = nlohmann::json::parse(json_str);
-    REQUIRE(parsed.is_array());
-    REQUIRE(parsed[0] == "REQ");
-    REQUIRE(parsed[2].contains("since"));
-    REQUIRE(parsed[2]["since"] == test_timestamp);
+    CHECK(parsed.is_array());
+    CHECK(parsed[0] == "REQ");
+    CHECK(parsed[2].contains("since"));
+    CHECK(parsed[2]["since"] == test_timestamp);
   }
 }
 
@@ -996,20 +996,20 @@ TEST_CASE("encrypted message event structure contains correct sender and recipie
 
   auto event_parsed = nlohmann::json::parse(signed_event_json);
 
-  REQUIRE(event_parsed.contains("pubkey"));
+  CHECK(event_parsed.contains("pubkey"));
   const std::string sender_nostr_pubkey = event_parsed["pubkey"].template get<std::string>();
-  REQUIRE(sender_nostr_pubkey.length() == 64);
+  CHECK(sender_nostr_pubkey.length() == 64);
 
-  REQUIRE(event_parsed.contains("tags"));
-  REQUIRE(event_parsed["tags"].is_array());
+  CHECK(event_parsed.contains("tags"));
+  CHECK(event_parsed["tags"].is_array());
 
   auto p_tag = std::ranges::find_if(
     event_parsed["tags"], [](const auto &tag) -> auto { return tag.is_array() and tag[0] == "p"; });
-  REQUIRE(p_tag != event_parsed["tags"].end());
+  CHECK(p_tag != event_parsed["tags"].end());
 
   const std::string recipient_nostr_pubkey = (*p_tag)[1].template get<std::string>();
-  REQUIRE(recipient_nostr_pubkey.length() == 64);
-  REQUIRE(recipient_nostr_pubkey != sender_nostr_pubkey);
+  CHECK(recipient_nostr_pubkey.length() == 64);
+  CHECK(recipient_nostr_pubkey != sender_nostr_pubkey);
 }
 
 TEST_CASE("received encrypted message can be decrypted using sender's RDX identity",
@@ -1034,8 +1034,8 @@ TEST_CASE("received encrypted message can be decrypted using sender's RDX identi
   const std::string alice_nostr_pubkey = event_parsed["pubkey"].template get<std::string>();
 
   auto alice_contact = fixture.bob_bridge->lookup_contact(alice_nostr_pubkey);
-  REQUIRE(alice_contact.rdx_fingerprint == fixture.alice_rdx);
-  REQUIRE(alice_contact.user_alias == "alice");
+  CHECK(alice_contact.rdx_fingerprint == fixture.alice_rdx);
+  CHECK(alice_contact.user_alias == "alice");
 
   std::vector<uint8_t> encrypted_bytes_from_event;
   const std::string content_hex = event_parsed["content"].template get<std::string>();
@@ -1049,7 +1049,7 @@ TEST_CASE("received encrypted message can be decrypted using sender's RDX identi
   auto [decrypted_bytes, metadata] = fixture.bob_bridge->decrypt_message(fixture.alice_rdx, encrypted_bytes_from_event);
 
   const std::string decrypted_content(decrypted_bytes.begin(), decrypted_bytes.end());
-  REQUIRE(decrypted_content == plaintext);
+  CHECK(decrypted_content == plaintext);
 }
 
 TEST_CASE("received encrypted message produces message_received event with correct sender identification",
@@ -1079,7 +1079,7 @@ TEST_CASE("received encrypted message produces message_received event with corre
   boost::asio::co_spawn(*fixture.bob_io, fixture.bob_orch->run_once(), boost::asio::detached);
   fixture.bob_io->run();
 
-  REQUIRE_FALSE(fixture.bob_presentation_out->empty());
+  CHECK_FALSE(fixture.bob_presentation_out->empty());
 
   fixture.bob_io->restart();
   auto main_future =
@@ -1087,11 +1087,11 @@ TEST_CASE("received encrypted message produces message_received event with corre
   fixture.bob_io->run();
   auto main_event = main_future.get();
 
-  REQUIRE(std::holds_alternative<events::message_received>(main_event));
+  CHECK(std::holds_alternative<events::message_received>(main_event));
 
   const auto &msg = std::get<events::message_received>(main_event);
-  REQUIRE(msg.content == plaintext);
-  REQUIRE(msg.sender_rdx == fixture.alice_rdx);
+  CHECK(msg.content == plaintext);
+  CHECK(msg.sender_rdx == fixture.alice_rdx);
 }
 
 TEST_CASE("session_orchestrator republishes bundle when encrypted message indicates pre-key consumption",
@@ -1120,18 +1120,18 @@ TEST_CASE("session_orchestrator republishes bundle when encrypted message indica
   boost::asio::co_spawn(*fixture.bob_io, fixture.bob_orch->run_once(), boost::asio::detached);
   fixture.bob_io->run();
 
-  REQUIRE_FALSE(fixture.bob_transport_out->empty());
+  CHECK_FALSE(fixture.bob_transport_out->empty());
   auto transport_cmd = fixture.bob_transport_out->try_pop();
   REQUIRE(transport_cmd.has_value());
   if (transport_cmd.has_value()) {
-    REQUIRE(std::holds_alternative<core::events::transport::send>(*transport_cmd));
+    CHECK(std::holds_alternative<core::events::transport::send>(*transport_cmd));
     const auto &send_cmd = std::get<core::events::transport::send>(*transport_cmd);
     const std::string json_str = bytes_to_string(send_cmd.bytes);
     auto parsed = nlohmann::json::parse(json_str);
-    REQUIRE(parsed.is_array());
-    REQUIRE(parsed[0] == "EVENT");
-    REQUIRE(parsed[1].contains("kind"));
-    REQUIRE(parsed[1]["kind"] == 30078);
+    CHECK(parsed.is_array());
+    CHECK(parsed[0] == "EVENT");
+    CHECK(parsed[1].contains("kind"));
+    CHECK(parsed[1]["kind"] == 30078);
   }
 }
 
@@ -1166,7 +1166,7 @@ TEST_CASE("session_orchestrator republishes bundle on connection if keys rotated
     }
   }
 
-  REQUIRE(found_bundle);
+  CHECK(found_bundle);
 }
 
 TEST_CASE("reply to unknown sender includes correct nostr pubkey in p tag",
@@ -1217,17 +1217,17 @@ TEST_CASE("reply to unknown sender includes correct nostr pubkey in p tag",
   alice.io_context->run();
 
   // Verify Alice received the message
-  REQUIRE_FALSE(alice.presentation_out_queue->empty());
+  CHECK_FALSE(alice.presentation_out_queue->empty());
   alice.io_context->restart();
   auto msg_future =
     boost::asio::co_spawn(*alice.io_context, alice.presentation_out_queue->pop(), boost::asio::use_future);
   alice.io_context->run();
   auto msg_event = msg_future.get();
 
-  REQUIRE(std::holds_alternative<events::message_received>(msg_event));
+  CHECK(std::holds_alternative<events::message_received>(msg_event));
   const auto &received = std::get<events::message_received>(msg_event);
-  REQUIRE(received.content == plaintext);
-  REQUIRE(received.sender_alias.starts_with("Unknown-"));
+  CHECK(received.content == plaintext);
+  CHECK(received.sender_alias.starts_with("Unknown-"));
 
   // Alice sends a reply to Bob using his Unknown alias
   const std::string reply = "Hi Bob!";
@@ -1237,7 +1237,7 @@ TEST_CASE("reply to unknown sender includes correct nostr pubkey in p tag",
   alice.io_context->run();
 
   // Alice's transport queue should have messages (bundle republish first, then reply)
-  REQUIRE_FALSE(alice.transport_out_queue->empty());
+  CHECK_FALSE(alice.transport_out_queue->empty());
 
   // Pop the bundle republish message (kind 30078)
   alice.io_context->restart();
@@ -1245,35 +1245,35 @@ TEST_CASE("reply to unknown sender includes correct nostr pubkey in p tag",
     boost::asio::co_spawn(*alice.io_context, alice.transport_out_queue->pop(), boost::asio::use_future);
   alice.io_context->run();
   auto bundle_cmd = bundle_future.get();
-  REQUIRE(std::holds_alternative<core::events::transport::send>(bundle_cmd));
+  CHECK(std::holds_alternative<core::events::transport::send>(bundle_cmd));
 
   // Now pop the actual reply message (kind 40001)
-  REQUIRE_FALSE(alice.transport_out_queue->empty());
+  CHECK_FALSE(alice.transport_out_queue->empty());
   alice.io_context->restart();
   auto reply_future =
     boost::asio::co_spawn(*alice.io_context, alice.transport_out_queue->pop(), boost::asio::use_future);
   alice.io_context->run();
   auto reply_cmd = reply_future.get();
 
-  REQUIRE(std::holds_alternative<core::events::transport::send>(reply_cmd));
+  CHECK(std::holds_alternative<core::events::transport::send>(reply_cmd));
   const auto &send_cmd = std::get<core::events::transport::send>(reply_cmd);
   const std::string json_str = bytes_to_string(send_cmd.bytes);
   auto parsed = nlohmann::json::parse(json_str);
 
   // Verify it's an EVENT message
-  REQUIRE(parsed.is_array());
-  REQUIRE(parsed[0] == "EVENT");
+  CHECK(parsed.is_array());
+  CHECK(parsed[0] == "EVENT");
   const auto &reply_event = parsed[1];
 
   // Verify it's an encrypted message, not a bundle
-  REQUIRE(reply_event["kind"] == 40001);
+  CHECK(reply_event["kind"] == 40001);
 
   // Verify the p tag contains Bob's Nostr pubkey
-  REQUIRE(reply_event.contains("tags"));
+  CHECK(reply_event.contains("tags"));
   auto p_tag = std::ranges::find_if(
     reply_event["tags"], [](const auto &tag) -> auto { return tag.is_array() and tag.size() >= 2 and tag[0] == "p"; });
 
-  REQUIRE(p_tag != reply_event["tags"].end());
+  CHECK(p_tag != reply_event["tags"].end());
   const std::string recipient_nostr_pubkey = (*p_tag)[1].template get<std::string>();
   CHECK(recipient_nostr_pubkey == bob_nostr_pubkey);
 }
@@ -1316,16 +1316,16 @@ TEST_CASE("trust updates alias for existing contact without bundle", "[session_o
   boost::asio::co_spawn(*alice.io_context, alice.orchestrator->run_once(), boost::asio::detached);
   alice.io_context->run();
 
-  REQUIRE_FALSE(alice.presentation_out_queue->empty());
+  CHECK_FALSE(alice.presentation_out_queue->empty());
   alice.io_context->restart();
   auto msg_future =
     boost::asio::co_spawn(*alice.io_context, alice.presentation_out_queue->pop(), boost::asio::use_future);
   alice.io_context->run();
   auto msg_event = msg_future.get();
 
-  REQUIRE(std::holds_alternative<events::message_received>(msg_event));
+  CHECK(std::holds_alternative<events::message_received>(msg_event));
   const auto &received = std::get<events::message_received>(msg_event);
-  REQUIRE(received.sender_alias.starts_with("Unknown-"));
+  CHECK(received.sender_alias.starts_with("Unknown-"));
 
   const std::string bob_rdx = received.sender_rdx;
 

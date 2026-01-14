@@ -14,387 +14,306 @@
 
 #include <async/async_queue.hpp>
 
-SCENARIO("async_queue can be constructed", "[async_queue][construction]")
+TEST_CASE("async_queue can be constructed with int type", "[async_queue][construction]")
 {
-  GIVEN("An io_context")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  const radix_relay::async::async_queue<int> queue(io_context);
 
-    WHEN("constructing an async_queue with int type")
-    {
-      const radix_relay::async::async_queue<int> queue(io_context);
-
-      THEN("the queue should be empty") { REQUIRE(queue.empty()); }
-    }
-
-    WHEN("constructing an async_queue with string type")
-    {
-      const radix_relay::async::async_queue<std::string> queue(io_context);
-
-      THEN("the queue should be empty") { REQUIRE(queue.empty()); }
-    }
-  }
+  CHECK(queue.empty());
 }
 
-SCENARIO("async_queue push operation", "[async_queue][push]")
+TEST_CASE("async_queue can be constructed with string type", "[async_queue][construction]")
 {
-  GIVEN("An empty queue")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    radix_relay::async::async_queue<int> queue(io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  const radix_relay::async::async_queue<std::string> queue(io_context);
 
-    WHEN("pushing a value")
-    {
-      constexpr int test_value = 42;
-      queue.push(test_value);
-
-      THEN("the queue should not be empty") { REQUIRE_FALSE(queue.empty()); }
-
-      THEN("the queue size should be 1") { REQUIRE(queue.size() == 1); }
-    }
-
-    WHEN("pushing multiple values")
-    {
-      queue.push(1);
-      queue.push(2);
-      queue.push(3);
-
-      THEN("the queue should not be empty") { REQUIRE_FALSE(queue.empty()); }
-
-      THEN("the queue size should be 3") { REQUIRE(queue.size() == 3); }
-    }
-  }
-
-  GIVEN("A queue with move-only types")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    radix_relay::async::async_queue<std::unique_ptr<int>> queue(io_context);
-
-    WHEN("pushing a unique_ptr")
-    {
-      constexpr int test_value = 42;
-      queue.push(std::make_unique<int>(test_value));
-
-      THEN("the queue should not be empty") { REQUIRE_FALSE(queue.empty()); }
-
-      THEN("the queue size should be 1") { REQUIRE(queue.size() == 1); }
-    }
-  }
+  CHECK(queue.empty());
 }
 
-SCENARIO("async_queue pop operation with coroutine", "[async_queue][pop]")
+TEST_CASE("async_queue push single value", "[async_queue][push]")
 {
-  GIVEN("A queue with values")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    radix_relay::async::async_queue<int> queue(io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::async::async_queue<int> queue(io_context);
 
-    constexpr int first_value = 10;
-    constexpr int second_value = 20;
-    queue.push(first_value);
-    queue.push(second_value);
+  constexpr int test_value = 42;
+  queue.push(test_value);
 
-    WHEN("popping values with co_await")
-    {
-      auto result = std::make_shared<int>(0);
-      auto completed = std::make_shared<bool>(false);
-
-      boost::asio::co_spawn(
-        *io_context,
-        [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
-          std::shared_ptr<int> result_ptr,
-          std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
-          *result_ptr = co_await queue_ref.get().pop();
-          *completed_ptr = true;
-        }(std::ref(queue), result, completed),
-        boost::asio::detached);
-
-      io_context->run();
-
-      THEN("the coroutine should complete")
-      {
-        REQUIRE(*completed);
-        REQUIRE(*result == first_value);
-      }
-
-      THEN("the queue size should decrease")
-      {
-        REQUIRE(queue.size() == 1);
-        REQUIRE_FALSE(queue.empty());
-      }
-    }
-  }
-
-  GIVEN("An empty queue")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    radix_relay::async::async_queue<int> queue(io_context);
-
-    WHEN("attempting to pop from empty queue")
-    {
-      auto completed = std::make_shared<bool>(false);
-
-      boost::asio::co_spawn(
-        *io_context,
-        [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
-          std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
-          co_await queue_ref.get().pop();
-          *completed_ptr = true;
-        }(std::ref(queue), completed),
-        boost::asio::detached);
-
-      io_context->poll();
-
-      THEN("the coroutine should suspend") { REQUIRE_FALSE(*completed); }
-
-      AND_WHEN("a value is pushed")
-      {
-        constexpr int pushed_value = 30;
-        queue.push(pushed_value);
-        io_context->run();
-
-        THEN("the coroutine should resume and complete") { REQUIRE(*completed); }
-      }
-    }
-  }
+  CHECK_FALSE(queue.empty());
+  REQUIRE(queue.size() == 1);
 }
 
-SCENARIO("async_queue handles concurrent multi-producer push", "[async_queue][concurrent]")
+TEST_CASE("async_queue push multiple values", "[async_queue][push]")
 {
-  GIVEN("A queue with multiple producer threads")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    radix_relay::async::async_queue<int> queue(io_context);
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::async::async_queue<int> queue(io_context);
 
-    constexpr int num_producers = 4;
-    constexpr int items_per_producer = 100;
-    constexpr int total_items = num_producers * items_per_producer;
+  queue.push(1);
+  queue.push(2);
+  queue.push(3);
 
-    WHEN("multiple threads push concurrently")
-    {
-      auto received_count = std::make_shared<int>(0);
-      auto completed = std::make_shared<bool>(false);
+  CHECK_FALSE(queue.empty());
+  REQUIRE(queue.size() == 3);
+}
 
-      boost::asio::co_spawn(
-        *io_context,
-        [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
-          std::shared_ptr<int> count_ptr,
-          std::shared_ptr<bool> completed_ptr,
-          int total) -> boost::asio::awaitable<void> {
-          for (int idx = 0; idx < total; ++idx) {
-            co_await queue_ref.get().pop();
-            ++(*count_ptr);
-          }
-          *completed_ptr = true;
-        }(std::ref(queue), received_count, completed, total_items),
-        boost::asio::detached);
+TEST_CASE("async_queue push move-only types", "[async_queue][push]")
+{
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::async::async_queue<std::unique_ptr<int>> queue(io_context);
 
-      std::vector<std::thread> producers;
-      producers.reserve(num_producers);
-      for (int producer_id = 0; producer_id < num_producers; ++producer_id) {
-        producers.emplace_back([&queue, producer_id]() -> void {
-          for (int idx = 0; idx < items_per_producer; ++idx) { queue.push((producer_id * items_per_producer) + idx); }
-        });
+  constexpr int test_value = 42;
+  queue.push(std::make_unique<int>(test_value));
+
+  CHECK_FALSE(queue.empty());
+  REQUIRE(queue.size() == 1);
+}
+
+TEST_CASE("async_queue pop with coroutine from queue with values", "[async_queue][pop]")
+{
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::async::async_queue<int> queue(io_context);
+
+  constexpr int first_value = 10;
+  constexpr int second_value = 20;
+  queue.push(first_value);
+  queue.push(second_value);
+
+  auto result = std::make_shared<int>(0);
+  auto completed = std::make_shared<bool>(false);
+
+  boost::asio::co_spawn(
+    *io_context,
+    [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
+      std::shared_ptr<int> result_ptr,
+      std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
+      *result_ptr = co_await queue_ref.get().pop();
+      *completed_ptr = true;
+    }(std::ref(queue), result, completed),
+    boost::asio::detached);
+
+  io_context->run();
+
+  CHECK(*completed);
+  CHECK(*result == first_value);
+  REQUIRE(queue.size() == 1);
+  CHECK_FALSE(queue.empty());
+}
+
+TEST_CASE("async_queue pop suspends on empty queue and resumes when value pushed", "[async_queue][pop]")
+{
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::async::async_queue<int> queue(io_context);
+
+  auto completed = std::make_shared<bool>(false);
+
+  boost::asio::co_spawn(
+    *io_context,
+    [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
+      std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
+      co_await queue_ref.get().pop();
+      *completed_ptr = true;
+    }(std::ref(queue), completed),
+    boost::asio::detached);
+
+  io_context->poll();
+
+  CHECK_FALSE(*completed);
+
+  constexpr int pushed_value = 30;
+  queue.push(pushed_value);
+  io_context->run();
+
+  CHECK(*completed);
+}
+
+TEST_CASE("async_queue concurrent multi-producer push with threads", "[async_queue][concurrent]")
+{
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::async::async_queue<int> queue(io_context);
+
+  constexpr int num_producers = 4;
+  constexpr int items_per_producer = 100;
+  constexpr int total_items = num_producers * items_per_producer;
+
+  auto received_count = std::make_shared<int>(0);
+  auto completed = std::make_shared<bool>(false);
+
+  boost::asio::co_spawn(
+    *io_context,
+    [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
+      std::shared_ptr<int> count_ptr,
+      std::shared_ptr<bool> completed_ptr,
+      int total) -> boost::asio::awaitable<void> {
+      for (int idx = 0; idx < total; ++idx) {
+        co_await queue_ref.get().pop();
+        ++(*count_ptr);
       }
+      *completed_ptr = true;
+    }(std::ref(queue), received_count, completed, total_items),
+    boost::asio::detached);
 
-      for (auto &thread : producers) { thread.join(); }
+  std::vector<std::thread> producers;
+  producers.reserve(num_producers);
+  for (int producer_id = 0; producer_id < num_producers; ++producer_id) {
+    producers.emplace_back([&queue, producer_id]() -> void {
+      for (int idx = 0; idx < items_per_producer; ++idx) { queue.push((producer_id * items_per_producer) + idx); }
+    });
+  }
 
-      io_context->run();
+  for (auto &thread : producers) { thread.join(); }
 
-      THEN("all items should be received")
-      {
-        REQUIRE(*completed);
-        REQUIRE(*received_count == total_items);
+  io_context->run();
+
+  CHECK(*completed);
+  CHECK(*received_count == total_items);
+  CHECK(queue.empty());
+}
+
+TEST_CASE("async_queue concurrent multi-strand push", "[async_queue][concurrent]")
+{
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::async::async_queue<int> queue(io_context);
+
+  constexpr int num_strands = 3;
+  constexpr int items_per_strand = 50;
+  constexpr int total_items = num_strands * items_per_strand;
+
+  auto received_count = std::make_shared<int>(0);
+  auto completed = std::make_shared<bool>(false);
+
+  boost::asio::co_spawn(
+    *io_context,
+    [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
+      std::shared_ptr<int> count_ptr,
+      std::shared_ptr<bool> completed_ptr,
+      int total) -> boost::asio::awaitable<void> {
+      for (int idx = 0; idx < total; ++idx) {
+        co_await queue_ref.get().pop();
+        ++(*count_ptr);
       }
+      *completed_ptr = true;
+    }(std::ref(queue), received_count, completed, total_items),
+    boost::asio::detached);
 
-      THEN("the queue should be empty") { REQUIRE(queue.empty()); }
+  std::vector<boost::asio::strand<boost::asio::io_context::executor_type>> strands;
+  strands.reserve(static_cast<std::size_t>(num_strands));
+  for (int idx = 0; idx < num_strands; ++idx) { strands.emplace_back(boost::asio::make_strand(*io_context)); }
+
+  for (int strand_id = 0; strand_id < num_strands; ++strand_id) {
+    for (int idx = 0; idx < items_per_strand; ++idx) {
+      boost::asio::post(strands[static_cast<std::size_t>(strand_id)],
+        [&queue, strand_id, idx]() -> void { queue.push((strand_id * items_per_strand) + idx); });
     }
   }
 
-  GIVEN("A queue with multiple strands pushing")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    radix_relay::async::async_queue<int> queue(io_context);
+  io_context->run();
 
-    constexpr int num_strands = 3;
-    constexpr int items_per_strand = 50;
-    constexpr int total_items = num_strands * items_per_strand;
+  CHECK(*completed);
+  CHECK(*received_count == total_items);
+  CHECK(queue.empty());
+}
 
-    WHEN("multiple strands post push operations")
-    {
-      auto received_count = std::make_shared<int>(0);
-      auto completed = std::make_shared<bool>(false);
+struct cancellation_test_state
+{
+  std::shared_ptr<bool> was_cancelled;
+  std::shared_ptr<bool> completed_normally;
+};
 
-      boost::asio::co_spawn(
-        *io_context,
-        [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
-          std::shared_ptr<int> count_ptr,
-          std::shared_ptr<bool> completed_ptr,
-          int total) -> boost::asio::awaitable<void> {
-          for (int idx = 0; idx < total; ++idx) {
-            co_await queue_ref.get().pop();
-            ++(*count_ptr);
-          }
-          *completed_ptr = true;
-        }(std::ref(queue), received_count, completed, total_items),
-        boost::asio::detached);
+TEST_CASE("async_queue pop respects cancellation signal", "[async_queue][cancellation]")
+{
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::async::async_queue<int> queue(io_context);
 
-      std::vector<boost::asio::strand<boost::asio::io_context::executor_type>> strands;
-      strands.reserve(static_cast<std::size_t>(num_strands));
-      for (int idx = 0; idx < num_strands; ++idx) { strands.emplace_back(boost::asio::make_strand(*io_context)); }
+  auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
+  auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
+  auto state = std::make_shared<cancellation_test_state>(cancellation_test_state{
+    .was_cancelled = std::make_shared<bool>(false), .completed_normally = std::make_shared<bool>(false) });
 
-      for (int strand_id = 0; strand_id < num_strands; ++strand_id) {
-        for (int idx = 0; idx < items_per_strand; ++idx) {
-          boost::asio::post(strands[static_cast<std::size_t>(strand_id)],
-            [&queue, strand_id, idx]() -> void { queue.push((strand_id * items_per_strand) + idx); });
+  boost::asio::co_spawn(
+    *io_context,
+    [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
+      std::shared_ptr<boost::asio::cancellation_slot> c_slot,
+      std::shared_ptr<cancellation_test_state> tstate) -> boost::asio::awaitable<void> {
+      try {
+        co_await queue_ref.get().pop(c_slot);
+        *tstate->completed_normally = true;
+      } catch (const boost::system::system_error &e) {
+        if (e.code() == boost::asio::error::operation_aborted
+            or e.code() == boost::asio::experimental::error::channel_cancelled) {
+          *tstate->was_cancelled = true;
+        } else {
+          throw;
         }
       }
+    }(std::ref(queue), cancel_slot, state),
+    boost::asio::detached);
 
-      io_context->run();
+  io_context->poll();
 
-      THEN("all items should be received")
-      {
-        REQUIRE(*completed);
-        REQUIRE(*received_count == total_items);
-      }
+  CHECK_FALSE(*state->was_cancelled);
+  CHECK_FALSE(*state->completed_normally);
 
-      THEN("the queue should be empty") { REQUIRE(queue.empty()); }
-    }
-  }
+  cancel_signal->emit(boost::asio::cancellation_type::terminal);
+  io_context->run();
+
+  CHECK(*state->was_cancelled);
+  CHECK_FALSE(*state->completed_normally);
 }
 
-SCENARIO("async_queue pop operation respects cancellation signal", "[async_queue][cancellation]")
+TEST_CASE("async_queue pop with cancellation slot and value available", "[async_queue][cancellation]")
 {
-  struct test_state
-  {
-    std::shared_ptr<bool> was_cancelled;
-    std::shared_ptr<bool> completed_normally;
-  };
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::async::async_queue<int> queue(io_context);
+  constexpr int test_value = 42;
+  queue.push(test_value);
 
-  GIVEN("A queue with a pending pop operation")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    radix_relay::async::async_queue<int> queue(io_context);
+  auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
+  auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
+  auto result = std::make_shared<int>(0);
+  auto completed = std::make_shared<bool>(false);
 
-    WHEN("cancellation signal is emitted before value is available")
-    {
-      auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
-      auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
-      auto state = std::make_shared<test_state>(test_state{
-        .was_cancelled = std::make_shared<bool>(false), .completed_normally = std::make_shared<bool>(false) });
+  boost::asio::co_spawn(
+    *io_context,
+    [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
+      std::shared_ptr<boost::asio::cancellation_slot> c_slot,
+      std::shared_ptr<int> result_ptr,
+      std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
+      *result_ptr = co_await queue_ref.get().pop(c_slot);
+      *completed_ptr = true;
+    }(std::ref(queue), cancel_slot, result, completed),
+    boost::asio::detached);
 
-      boost::asio::co_spawn(
-        *io_context,
-        [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
-          std::shared_ptr<boost::asio::cancellation_slot> c_slot,
-          std::shared_ptr<test_state> tstate) -> boost::asio::awaitable<void> {
-          try {
-            co_await queue_ref.get().pop(c_slot);
-            *tstate->completed_normally = true;
-          } catch (const boost::system::system_error &e) {
-            if (e.code() == boost::asio::error::operation_aborted
-                or e.code() == boost::asio::experimental::error::channel_cancelled) {
-              *tstate->was_cancelled = true;
-            } else {
-              throw;
-            }
-          }
-        }(std::ref(queue), cancel_slot, state),
-        boost::asio::detached);
+  io_context->run();
 
-      io_context->poll();
+  CHECK(*completed);
+  CHECK(*result == test_value);
+}
 
-      THEN("the coroutine should be waiting")
-      {
-        REQUIRE_FALSE(*state->was_cancelled);
-        REQUIRE_FALSE(*state->completed_normally);
-      }
+TEST_CASE("async_queue pop without cancellation slot waits for value", "[async_queue][cancellation]")
+{
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::async::async_queue<int> queue(io_context);
 
-      AND_WHEN("the cancellation signal is emitted")
-      {
-        cancel_signal->emit(boost::asio::cancellation_type::terminal);
-        io_context->run();
+  auto completed = std::make_shared<bool>(false);
+  auto result = std::make_shared<int>(0);
 
-        THEN("the pop operation should be cancelled")
-        {
-          REQUIRE(*state->was_cancelled);
-          REQUIRE_FALSE(*state->completed_normally);
-        }
-      }
-    }
-  }
+  boost::asio::co_spawn(
+    *io_context,
+    [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
+      std::shared_ptr<int> result_ptr,
+      std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
+      *result_ptr = co_await queue_ref.get().pop();
+      *completed_ptr = true;
+    }(std::ref(queue), result, completed),
+    boost::asio::detached);
 
-  GIVEN("A queue with a value available")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    radix_relay::async::async_queue<int> queue(io_context);
-    constexpr int test_value = 42;
-    queue.push(test_value);
+  io_context->poll();
 
-    WHEN("pop is called with a cancellation slot")
-    {
-      auto cancel_signal = std::make_shared<boost::asio::cancellation_signal>();
-      auto cancel_slot = std::make_shared<boost::asio::cancellation_slot>(cancel_signal->slot());
-      auto result = std::make_shared<int>(0);
-      auto completed = std::make_shared<bool>(false);
+  CHECK_FALSE(*completed);
 
-      boost::asio::co_spawn(
-        *io_context,
-        [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
-          std::shared_ptr<boost::asio::cancellation_slot> c_slot,
-          std::shared_ptr<int> result_ptr,
-          std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
-          *result_ptr = co_await queue_ref.get().pop(c_slot);
-          *completed_ptr = true;
-        }(std::ref(queue), cancel_slot, result, completed),
-        boost::asio::detached);
+  constexpr int pushed_value = 99;
+  queue.push(pushed_value);
+  io_context->run();
 
-      io_context->run();
-
-      THEN("the value should be received normally")
-      {
-        REQUIRE(*completed);
-        REQUIRE(*result == test_value);
-      }
-    }
-  }
-
-  GIVEN("A queue with pop called without cancellation slot")
-  {
-    auto io_context = std::make_shared<boost::asio::io_context>();
-    radix_relay::async::async_queue<int> queue(io_context);
-
-    WHEN("pop is called with nullptr")
-    {
-      auto completed = std::make_shared<bool>(false);
-      auto result = std::make_shared<int>(0);
-
-      boost::asio::co_spawn(
-        *io_context,
-        [](std::reference_wrapper<radix_relay::async::async_queue<int>> queue_ref,
-          std::shared_ptr<int> result_ptr,
-          std::shared_ptr<bool> completed_ptr) -> boost::asio::awaitable<void> {
-          *result_ptr = co_await queue_ref.get().pop();
-          *completed_ptr = true;
-        }(std::ref(queue), result, completed),
-        boost::asio::detached);
-
-      io_context->poll();
-
-      THEN("the coroutine should wait for a value") { REQUIRE_FALSE(*completed); }
-
-      AND_WHEN("a value is pushed")
-      {
-        constexpr int pushed_value = 99;
-        queue.push(pushed_value);
-        io_context->run();
-
-        THEN("the coroutine should complete normally")
-        {
-          REQUIRE(*completed);
-          REQUIRE(*result == pushed_value);
-        }
-      }
-    }
-  }
+  CHECK(*completed);
+  CHECK(*result == pushed_value);
 }
