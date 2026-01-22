@@ -109,6 +109,12 @@ struct leave
 {
 };
 
+/// Unknown or unrecognized command
+struct unknown_command
+{
+  std::string input;///< The original unrecognized input
+};
+
 /// Subscribe to custom Nostr events
 struct subscribe
 {
@@ -312,7 +318,7 @@ concept Command =
   or std::same_as<T, publish_identity> or std::same_as<T, unpublish_identity> or std::same_as<T, trust>
   or std::same_as<T, verify> or std::same_as<T, subscribe> or std::same_as<T, subscribe_identities>
   or std::same_as<T, subscribe_messages> or std::same_as<T, establish_session> or std::same_as<T, chat>
-  or std::same_as<T, leave>;
+  or std::same_as<T, leave> or std::same_as<T, unknown_command>;
 
 /// Concept for presentation layer event types
 template<typename T>

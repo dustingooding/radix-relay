@@ -1,9 +1,9 @@
 #pragma once
 
 #include <async/async_queue.hpp>
-#include <concepts/command_handler.hpp>
 #include <concepts/signal_bridge.hpp>
 #include <core/events.hpp>
+#include <core/overload.hpp>
 #include <fmt/core.h>
 #include <memory>
 #include <platform/time_utils.hpp>
@@ -12,302 +12,246 @@
 
 namespace radix_relay::core {
 
-/**
- * @brief Handles typed command events and coordinates with subsystems.
- *
- * @tparam Bridge Type satisfying the signal_bridge concept
- *
- * Routes commands to appropriate subsystems (display, transport, session orchestrator)
- * and interacts with the Signal Protocol bridge for cryptographic operations.
- */
-template<concepts::signal_bridge Bridge> struct command_handler
+template<concepts::signal_bridge Bridge> struct command_handler_context
 {
-  // Type traits for standard_processor
-  using in_queue_t = async::async_queue<events::raw_command>;
+  using display_queue_t = std::shared_ptr<async::async_queue<events::display_filter_input_t>>;
+  using transport_queue_t = std::shared_ptr<async::async_queue<events::transport::in_t>>;
+  using session_queue_t = std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>>;
+  using connection_monitor_queue_t = std::shared_ptr<async::async_queue<events::connection_monitor::in_t>>;
 
-  struct out_queues_t
-  {
-    std::shared_ptr<async::async_queue<events::display_filter_input_t>> display;
-    std::shared_ptr<async::async_queue<events::transport::in_t>> transport;
-    std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> session;
-    std::shared_ptr<async::async_queue<events::connection_monitor::in_t>> connection_monitor;
-  };
+  std::shared_ptr<Bridge> bridge;
+  display_queue_t display_queue;
+  transport_queue_t transport_queue;
+  session_queue_t session_queue;
+  connection_monitor_queue_t connection_monitor_queue;
 
-  /**
-   * @brief Constructs a command handler with required subsystem queues.
-   *
-   * @param bridge Signal Protocol bridge for crypto operations
-   * @param queues Output queues for subsystems
-   */
-  explicit command_handler(const std::shared_ptr<Bridge> &bridge, const out_queues_t &queues)
-    : bridge_(bridge), display_out_queue_(queues.display), transport_out_queue_(queues.transport),
-      session_out_queue_(queues.session), connection_monitor_out_queue_(queues.connection_monitor)
-  {}
-
-  /**
-   * @brief Handles a typed command event.
-   *
-   * @tparam T Command type satisfying the Command concept
-   * @param command The command to handle
-   */
-  template<events::Command T> auto handle(const T &command) const -> void { handle_impl(command); }
-
-  /**
-   * @brief Returns the Signal Protocol bridge.
-   *
-   * @return Shared pointer to the bridge
-   */
-  [[nodiscard]] auto get_bridge() const -> std::shared_ptr<Bridge> { return bridge_; }
-
-private:
   template<typename... Args> auto emit(fmt::format_string<Args...> format_string, Args &&...args) const -> void
   {
-    display_out_queue_->push(
-      events::display_message{ .message = fmt::format(format_string, std::forward<Args>(args)...),
-        .contact_rdx = std::nullopt,
-        .timestamp = platform::current_timestamp_ms(),
-        .source_type = events::display_message::source::command_feedback });
+    display_queue->push(events::display_message{ .message = fmt::format(format_string, std::forward<Args>(args)...),
+      .contact_rdx = std::nullopt,
+      .timestamp = platform::current_timestamp_ms(),
+      .source_type = events::display_message::source::command_feedback });
   }
+};
 
-  auto handle_impl(const events::help & /*command*/) const -> void
-  {
-    std::ignore = initialized_;
-    emit(
-      "Interactive Commands:\n"
-      "  /broadcast <message>          Send to all local peers\n"
-      "  /chat <contact>               Enter chat mode with contact\n"
-      "  /connect <relay>              Add Nostr relay\n"
-      "  /disconnect                   Disconnect from Nostr relay\n"
-      "  /identities                   List discovered identities\n"
-      "  /leave                        Exit chat mode\n"
-      "  /mode <internet|mesh|hybrid>  Switch transport mode\n"
-      "  /peers                        List discovered peers\n"
-      "  /publish                      Publish identity to network\n"
-      "  /scan                         Force peer discovery\n"
-      "  /send <peer> <message>        Send encrypted message to peer\n"
-      "  /sessions                     Show encrypted sessions\n"
-      "  /status                       Show network status\n"
-      "  /trust <peer> [alias]         Establish session with peer\n"
-      "  /verify <peer>                Show safety numbers\n"
-      "  /version                      Show version information\n"
-      "  /quit                         Exit interactive mode\n");
-  }
+template<concepts::signal_bridge Bridge>
+auto make_command_handler(std::shared_ptr<Bridge> bridge,
+  std::shared_ptr<async::async_queue<events::display_filter_input_t>> display_queue,
+  std::shared_ptr<async::async_queue<events::transport::in_t>> transport_queue,
+  std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> session_queue,
+  std::shared_ptr<async::async_queue<events::connection_monitor::in_t>> connection_monitor_queue)
+{
+  auto ctx = std::make_shared<command_handler_context<Bridge>>(command_handler_context<Bridge>{
+    .bridge = std::move(bridge),
+    .display_queue = std::move(display_queue),
+    .transport_queue = std::move(transport_queue),
+    .session_queue = std::move(session_queue),
+    .connection_monitor_queue = std::move(connection_monitor_queue),
+  });
 
-  auto handle_impl(const events::peers & /*command*/) const -> void
-  {
-    std::ignore = initialized_;
-    emit(
-      "Connected Peers: (transport layer not implemented)\n"
-      "  No peers discovered yet\n");
-  }
+  return overload{
+    [ctx](const events::help &) {
+      ctx->emit(
+        "Interactive Commands:\n"
+        "  /broadcast <message>          Send to all local peers\n"
+        "  /chat <contact>               Enter chat mode with contact\n"
+        "  /connect <relay>              Add Nostr relay\n"
+        "  /disconnect                   Disconnect from Nostr relay\n"
+        "  /identities                   List discovered identities\n"
+        "  /leave                        Exit chat mode\n"
+        "  /mode <internet|mesh|hybrid>  Switch transport mode\n"
+        "  /peers                        List discovered peers\n"
+        "  /publish                      Publish identity to network\n"
+        "  /scan                         Force peer discovery\n"
+        "  /send <peer> <message>        Send encrypted message to peer\n"
+        "  /sessions                     Show encrypted sessions\n"
+        "  /status                       Show network status\n"
+        "  /trust <peer> [alias]         Establish session with peer\n"
+        "  /verify <peer>                Show safety numbers\n"
+        "  /version                      Show version information\n"
+        "  /quit                         Exit interactive mode\n");
+    },
 
-  auto handle_impl(const events::status & /*command*/) const -> void
-  {
-    std::ignore = initialized_;
+    [ctx](const events::peers &) {
+      ctx->emit(
+        "Connected Peers: (transport layer not implemented)\n"
+        "  No peers discovered yet\n");
+    },
 
-    connection_monitor_out_queue_->push(events::connection_monitor::query_status{});
+    [ctx](const events::status &) {
+      ctx->connection_monitor_queue->push(events::connection_monitor::query_status{});
+      std::string node_fingerprint = ctx->bridge->get_node_fingerprint();
+      ctx->emit("\nCrypto Status:\n  Node Fingerprint: {}\n", node_fingerprint);
+    },
 
-    std::string node_fingerprint = bridge_->get_node_fingerprint();
-    emit("\nCrypto Status:\n  Node Fingerprint: {}\n", node_fingerprint);
-  }
+    [ctx](const events::sessions &) {
+      auto contacts = ctx->bridge->list_contacts();
 
-  auto handle_impl(const events::sessions & /*command*/) const -> void
-  {
-    std::ignore = initialized_;
-    auto contacts = bridge_->list_contacts();
-
-    if (contacts.empty()) {
-      emit("No active sessions\n");
-      return;
-    }
-
-    emit("Active Sessions ({}):\n", contacts.size());
-    for (const auto &contact : contacts) {
-      if (contact.user_alias.empty()) {
-        emit("  {}\n", contact.rdx_fingerprint);
-      } else {
-        emit("  {} ({})\n", contact.user_alias, contact.rdx_fingerprint);
+      if (contacts.empty()) {
+        ctx->emit("No active sessions\n");
+        return;
       }
-    }
-  }
 
-  auto handle_impl(const events::identities & /*command*/) const -> void
-  {
-    std::ignore = initialized_;
-    session_out_queue_->push(events::list_identities{});
-  }
+      ctx->emit("Active Sessions ({}):\n", contacts.size());
+      for (const auto &contact : contacts) {
+        if (contact.user_alias.empty()) {
+          ctx->emit("  {}\n", contact.rdx_fingerprint);
+        } else {
+          ctx->emit("  {} ({})\n", contact.user_alias, contact.rdx_fingerprint);
+        }
+      }
+    },
 
-  auto handle_impl(const events::publish_identity & /*command*/) const -> void
-  {
-    std::ignore = initialized_;
-    session_out_queue_->push(events::publish_identity{});
-    emit("Publishing identity to network...\n");
-  }
+    [ctx](const events::identities &) { ctx->session_queue->push(events::list_identities{}); },
 
-  auto handle_impl(const events::unpublish_identity & /*command*/) const -> void
-  {
-    std::ignore = initialized_;
-    session_out_queue_->push(events::unpublish_identity{});
-    emit("Unpublishing identity from network...\n");
-  }
+    [ctx](const events::publish_identity &) {
+      ctx->session_queue->push(events::publish_identity{});
+      ctx->emit("Publishing identity to network...\n");
+    },
 
-  auto handle_impl(const events::scan & /*command*/) const -> void
-  {
-    std::ignore = initialized_;
-    emit(
-      "Scanning for BLE peers... (BLE transport not implemented)\n"
-      "  No peers found\n");
-  }
+    [ctx](const events::unpublish_identity &) {
+      ctx->session_queue->push(events::unpublish_identity{});
+      ctx->emit("Unpublishing identity from network...\n");
+    },
 
-  auto handle_impl(const events::version & /*command*/) const -> void
-  {
-    std::ignore = initialized_;
-    emit("Radix Relay v{}\n", radix_relay::cmake::project_version);
-  }
+    [ctx](const events::scan &) {
+      ctx->emit(
+        "Scanning for BLE peers... (BLE transport not implemented)\n"
+        "  No peers found\n");
+    },
 
-  auto handle_impl(const events::mode &command) const -> void
-  {
-    std::ignore = initialized_;
-    if (command.new_mode == "internet" or command.new_mode == "mesh" or command.new_mode == "hybrid") {
-      emit("Switched to {} mode\n", command.new_mode);
-    } else {
-      emit("Invalid mode. Use: internet, mesh, or hybrid\n");
-    }
-  }
+    [ctx](const events::version &) { ctx->emit("Radix Relay v{}\n", radix_relay::cmake::project_version); },
 
-  auto handle_impl(const events::send &command) const -> void
-  {
-    std::ignore = initialized_;
-    if (not command.peer.empty() and not command.message.empty()) {
-      session_out_queue_->push(command);
-      emit("Sending '{}' to '{}'...\n", command.message, command.peer);
-    } else {
-      emit("Usage: send <peer> <message>\n");
-    }
-  }
+    [ctx](const events::mode &command) {
+      if (command.new_mode == "internet" or command.new_mode == "mesh" or command.new_mode == "hybrid") {
+        ctx->emit("Switched to {} mode\n", command.new_mode);
+      } else {
+        ctx->emit("Invalid mode. Use: internet, mesh, or hybrid\n");
+      }
+    },
 
-  auto handle_impl(const events::broadcast &command) const -> void
-  {
-    std::ignore = initialized_;
-    if (not command.message.empty()) {
-      emit("Broadcasting '{}' to all local peers (not implemented)\n", command.message);
-    } else {
-      emit("Usage: broadcast <message>\n");
-    }
-  }
+    [ctx](const events::send &command) {
+      if (not command.peer.empty() and not command.message.empty()) {
+        ctx->session_queue->push(command);
+        ctx->emit("Sending '{}' to '{}'...\n", command.message, command.peer);
+      } else {
+        ctx->emit("Usage: send <peer> <message>\n");
+      }
+    },
 
-  auto handle_impl(const events::connect &command) const -> void
-  {
-    std::ignore = initialized_;
-    if (not command.relay.empty()) {
-      session_out_queue_->push(command);
-      emit("Connecting to Nostr relay {}\n", command.relay);
-    } else {
-      emit("Usage: connect <relay>\n");
-    }
-  }
+    [ctx](const events::broadcast &command) {
+      if (not command.message.empty()) {
+        ctx->emit("Broadcasting '{}' to all local peers (not implemented)\n", command.message);
+      } else {
+        ctx->emit("Usage: broadcast <message>\n");
+      }
+    },
 
-  auto handle_impl(const events::disconnect & /*command*/) const -> void
-  {
-    std::ignore = initialized_;
-    transport_out_queue_->push(events::transport::disconnect{});
-    emit("Disconnecting from Nostr relay\n");
-  }
+    [ctx](const events::connect &command) {
+      if (not command.relay.empty()) {
+        ctx->session_queue->push(command);
+        ctx->emit("Connecting to Nostr relay {}\n", command.relay);
+      } else {
+        ctx->emit("Usage: connect <relay>\n");
+      }
+    },
 
-  auto handle_impl(const events::trust &command) const -> void
-  {
-    std::ignore = initialized_;
-    if (not command.peer.empty()) {
-      session_out_queue_->push(command);
-      emit("Establishing session with {}...\n", command.peer);
-    } else {
-      emit("Usage: trust <peer> [alias]\n");
-    }
-  }
+    [ctx](const events::disconnect &) {
+      ctx->transport_queue->push(events::transport::disconnect{});
+      ctx->emit("Disconnecting from Nostr relay\n");
+    },
 
-  auto handle_impl(const events::verify &command) const -> void
-  {
-    std::ignore = initialized_;
-    if (not command.peer.empty()) {
-      emit("Safety numbers for {} (Signal Protocol not implemented)\n", command.peer);
-    } else {
-      emit("Usage: verify <peer>\n");
-    }
-  }
+    [ctx](const events::trust &command) {
+      if (not command.peer.empty()) {
+        ctx->session_queue->push(command);
+        ctx->emit("Establishing session with {}...\n", command.peer);
+      } else {
+        ctx->emit("Usage: trust <peer> [alias]\n");
+      }
+    },
 
-  auto handle_impl(const events::chat &command) const -> void
-  {
-    std::ignore = initialized_;
-    if (command.contact.empty()) {
-      emit("Usage: /chat <contact>\n");
-      return;
-    }
+    [ctx](const events::verify &command) {
+      if (not command.peer.empty()) {
+        ctx->emit("Safety numbers for {} (Signal Protocol not implemented)\n", command.peer);
+      } else {
+        ctx->emit("Usage: verify <peer>\n");
+      }
+    },
 
-    try {
-      const auto contact = bridge_->lookup_contact(command.contact);
-      const auto display_name = contact.user_alias.empty() ? contact.rdx_fingerprint : contact.user_alias;
+    [ctx](const events::chat &command) {
+      if (command.contact.empty()) {
+        ctx->emit("Usage: /chat <contact>\n");
+        return;
+      }
 
-      display_out_queue_->push(
-        events::enter_chat_mode{ .rdx_fingerprint = contact.rdx_fingerprint, .display_name = display_name });
+      try {
+        const auto contact = ctx->bridge->lookup_contact(command.contact);
+        const auto display_name = contact.user_alias.empty() ? contact.rdx_fingerprint : contact.user_alias;
 
-      constexpr std::uint32_t history_limit = 5;
-      const auto messages = bridge_->get_conversation_messages(contact.rdx_fingerprint, history_limit, 0);
+        ctx->display_queue->push(
+          events::enter_chat_mode{ .rdx_fingerprint = contact.rdx_fingerprint, .display_name = display_name });
 
-      if (not messages.empty()) {
-        display_out_queue_->push(events::display_message{
-          .message = fmt::format("--- Conversation History ({} messages) ---", messages.size()),
-          .contact_rdx = contact.rdx_fingerprint,
-          .timestamp = platform::current_timestamp_ms(),
-          .source_type = events::display_message::source::system });
+        constexpr std::uint32_t history_limit = 5;
+        const auto messages = ctx->bridge->get_conversation_messages(contact.rdx_fingerprint, history_limit, 0);
 
-        for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
-          const auto &msg = *it;
-
-          const auto direction_indicator = (msg.direction == signal::MessageDirection::Incoming) ? "← " : "→ ";
-          const auto sender_name = (msg.direction == signal::MessageDirection::Incoming) ? display_name : "You";
-
-          const auto formatted_message = fmt::format("{}{}: {}", direction_indicator, sender_name, msg.content);
-
-          const auto source_type = (msg.direction == signal::MessageDirection::Incoming)
-                                     ? events::display_message::source::incoming_message
-                                     : events::display_message::source::outgoing_message;
-
-          display_out_queue_->push(events::display_message{ .message = formatted_message,
+        if (not messages.empty()) {
+          ctx->display_queue->push(events::display_message{
+            .message = fmt::format("--- Conversation History ({} messages) ---", messages.size()),
             .contact_rdx = contact.rdx_fingerprint,
-            .timestamp = msg.timestamp,
-            .source_type = source_type });
+            .timestamp = platform::current_timestamp_ms(),
+            .source_type = events::display_message::source::system });
+
+          for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
+            const auto &msg = *it;
+
+            const auto direction_indicator = (msg.direction == signal::MessageDirection::Incoming) ? "← " : "→ ";
+            const auto sender_name = (msg.direction == signal::MessageDirection::Incoming) ? display_name : "You";
+
+            const auto formatted_message = fmt::format("{}{}: {}", direction_indicator, sender_name, msg.content);
+
+            const auto source_type = (msg.direction == signal::MessageDirection::Incoming)
+                                       ? events::display_message::source::incoming_message
+                                       : events::display_message::source::outgoing_message;
+
+            ctx->display_queue->push(events::display_message{ .message = formatted_message,
+              .contact_rdx = contact.rdx_fingerprint,
+              .timestamp = msg.timestamp,
+              .source_type = source_type });
+          }
+
+          ctx->display_queue->push(events::display_message{ .message = "--- End of History ---",
+            .contact_rdx = contact.rdx_fingerprint,
+            .timestamp = platform::current_timestamp_ms(),
+            .source_type = events::display_message::source::system });
+
+          const auto newest_timestamp = messages.front().timestamp;
+          ctx->bridge->mark_conversation_read_up_to(contact.rdx_fingerprint, newest_timestamp);
+        } else {
+          ctx->bridge->mark_conversation_read(contact.rdx_fingerprint);
         }
 
-        display_out_queue_->push(events::display_message{ .message = "--- End of History ---",
-          .contact_rdx = contact.rdx_fingerprint,
-          .timestamp = platform::current_timestamp_ms(),
-          .source_type = events::display_message::source::system });
-
-        const auto newest_timestamp = messages.front().timestamp;
-        bridge_->mark_conversation_read_up_to(contact.rdx_fingerprint, newest_timestamp);
-      } else {
-        bridge_->mark_conversation_read(contact.rdx_fingerprint);
+        ctx->emit("Entering chat with {}\n", display_name);
+      } catch (const std::exception &) {
+        ctx->emit("Contact not found: {}\n", command.contact);
       }
+    },
 
-      emit("Entering chat with {}\n", display_name);
-    } catch (const std::exception & /*e*/) {
-      emit("Contact not found: {}\n", command.contact);
-    }
-  }
+    [ctx](const events::leave &) {
+      ctx->display_queue->push(events::exit_chat_mode{});
+      ctx->emit("Exiting chat mode\n");
+    },
 
-  auto handle_impl(const events::leave & /*command*/) const -> void
-  {
-    std::ignore = initialized_;
-    display_out_queue_->push(events::exit_chat_mode{});
-    emit("Exiting chat mode\n");
-  }
+    [](const events::unknown_command & /*command*/) {
+      // No-op: unknown commands are silently ignored
+    },
+  };
+}
 
-  std::shared_ptr<Bridge> bridge_;
-  std::shared_ptr<async::async_queue<events::display_filter_input_t>> display_out_queue_;
-  std::shared_ptr<async::async_queue<events::transport::in_t>> transport_out_queue_;
-  std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> session_out_queue_;
-  std::shared_ptr<async::async_queue<events::connection_monitor::in_t>> connection_monitor_out_queue_;
-  bool initialized_ = true;
-};
+template<concepts::signal_bridge Bridge>
+using command_handler = decltype(make_command_handler(std::declval<std::shared_ptr<Bridge>>(),
+  std::declval<std::shared_ptr<async::async_queue<events::display_filter_input_t>>>(),
+  std::declval<std::shared_ptr<async::async_queue<events::transport::in_t>>>(),
+  std::declval<std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>>>(),
+  std::declval<std::shared_ptr<async::async_queue<events::connection_monitor::in_t>>>()));
 
 }// namespace radix_relay::core
