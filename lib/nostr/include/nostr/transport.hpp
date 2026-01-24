@@ -1,7 +1,7 @@
 #pragma once
 
 #include <async/async_queue.hpp>
-#include <concepts/websocket_stream.hpp>
+#include <concepts/transport_stream.hpp>
 #include <core/events.hpp>
 #include <core/uuid_generator.hpp>
 
@@ -24,12 +24,12 @@ namespace radix_relay::nostr {
 /**
  * @brief Nostr WebSocket transport layer.
  *
- * @tparam WebSocketStream Type satisfying the websocket_stream concept
+ * @tparam WebSocketStream Type satisfying the transport_stream concept
  *
  * Manages WebSocket connection to Nostr relays, handling connection lifecycle,
  * message sending/receiving, and forwarding parsed events to the session orchestrator.
  */
-template<concepts::websocket_stream WebSocketStream> struct transport
+template<concepts::transport_stream WebSocketStream> struct transport
 {
   /**
    * @brief Constructs a Nostr transport.
