@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DeliveryStatus","MessageDirection","MessageHistoryError","MessageType"],"struct":["Conversation","MessageHistory","StoredMessage"]};

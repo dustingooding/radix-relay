@@ -1,0 +1,27 @@
+var namespaceradix__relay_1_1core =
+[
+    [ "events", "namespaceradix__relay_1_1core_1_1events.html", "namespaceradix__relay_1_1core_1_1events" ],
+    [ "command_handler_context", "structradix__relay_1_1core_1_1command__handler__context.html", "structradix__relay_1_1core_1_1command__handler__context" ],
+    [ "command_parser", "structradix__relay_1_1core_1_1command__parser.html", "structradix__relay_1_1core_1_1command__parser" ],
+    [ "connection_monitor", "classradix__relay_1_1core_1_1connection__monitor.html", "classradix__relay_1_1core_1_1connection__monitor" ],
+    [ "connection_monitor_processor", "classradix__relay_1_1core_1_1connection__monitor__processor.html", "classradix__relay_1_1core_1_1connection__monitor__processor" ],
+    [ "connection_status", "structradix__relay_1_1core_1_1connection__status.html", "structradix__relay_1_1core_1_1connection__status" ],
+    [ "contact_info", "structradix__relay_1_1core_1_1contact__info.html", "structradix__relay_1_1core_1_1contact__info" ],
+    [ "coroutine_state", "structradix__relay_1_1core_1_1coroutine__state.html", "structradix__relay_1_1core_1_1coroutine__state" ],
+    [ "default_printer", "classradix__relay_1_1core_1_1default__printer.html", "classradix__relay_1_1core_1_1default__printer" ],
+    [ "display_filter", "structradix__relay_1_1core_1_1display__filter.html", "structradix__relay_1_1core_1_1display__filter" ],
+    [ "event_handler", "structradix__relay_1_1core_1_1event__handler.html", "structradix__relay_1_1core_1_1event__handler" ],
+    [ "overload", "structradix__relay_1_1core_1_1overload.html", null ],
+    [ "presentation_handler", "structradix__relay_1_1core_1_1presentation__handler.html", "structradix__relay_1_1core_1_1presentation__handler" ],
+    [ "standard_processor", "classradix__relay_1_1core_1_1standard__processor.html", "classradix__relay_1_1core_1_1standard__processor" ],
+    [ "transport_state", "structradix__relay_1_1core_1_1transport__state.html", "structradix__relay_1_1core_1_1transport__state" ],
+    [ "uuid_generator", "classradix__relay_1_1core_1_1uuid__generator.html", "classradix__relay_1_1core_1_1uuid__generator" ],
+    [ "Processor", "conceptradix__relay_1_1core_1_1Processor.html", null ],
+    [ "command_handler", "namespaceradix__relay_1_1core.html#a3de56f71948377f08beb43e7c283eec5", null ],
+    [ "standard_event_handler_t", "namespaceradix__relay_1_1core.html#a6baa5a07613c63d0566190ba8e71ced5", null ],
+    [ "is_version_compatible", "namespaceradix__relay_1_1core.html#a878296935424282b4081eebd803dc192", null ],
+    [ "make_command_handler", "namespaceradix__relay_1_1core.html#a341ebbd74bc7b61c177d5f261a041396", null ],
+    [ "overload", "namespaceradix__relay_1_1core.html#a57b39d0ceb37421293b9e908438d5e1e", null ],
+    [ "run_processor", "namespaceradix__relay_1_1core.html#a167523cc3609b22f36313b2a39d718a3", null ],
+    [ "spawn_processor", "namespaceradix__relay_1_1core.html#a076e5078002cb31a43aa44aa6e4df0cb", null ]
+];

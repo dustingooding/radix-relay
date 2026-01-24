@@ -1,0 +1,334 @@
+/* Doxygen Custom Theme - Black + Green Terminal Aesthetic */
+
+:root {
+  --terminal-green: #00ff00;
+  --terminal-green-dim: #00cc00;
+  --terminal-green-bright: #33ff33;
+  --terminal-green-muted: #00aa00;
+  --terminal-black: #0a0a0a;        /* Softer than pure black */
+  --terminal-dark-gray: #1a1a1a;
+  --terminal-gray: #2a2a2a;
+  --terminal-light-gray: #3a3a3a;
+  --terminal-text-gray: #cccccc;    /* For body text */
+}
+
+/* Base styles */
+body, table, div, p, dl {
+  font-family: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background-color: var(--terminal-black) !important;
+  color: var(--terminal-text-gray) !important;
+}
+
+/* Code/monospace elements */
+code, pre, .fragment, .line, tt {
+  font-family: 'Fira Code', 'Monaco', 'Courier New', monospace !important;
+  background-color: var(--terminal-dark-gray) !important;
+  color: var(--terminal-green-bright) !important;
+}
+
+/* Headers */
+h1, h2, h3, h4, h5, h6,
+.title, .summary {
+  color: var(--terminal-green) !important;
+  border-bottom: 1px solid var(--terminal-green-dim) !important;
+  font-weight: 600 !important;
+}
+
+/* Navigation */
+#nav-tree, .ui-resizable,
+#side-nav, .navpath {
+  background-color: var(--terminal-dark-gray) !important;
+  border-right: 1px solid var(--terminal-green-dim) !important;
+}
+
+.navpath li.navelem a {
+  color: var(--terminal-green) !important;
+  background-color: var(--terminal-gray) !important;
+  border: 1px solid var(--terminal-green-dim) !important;
+}
+
+.navpath li.navelem a:hover {
+  background-color: var(--terminal-light-gray) !important;
+  box-shadow: 0 0 5px var(--terminal-green-dim) !important;
+}
+
+/* Links */
+a, a:link, a:visited {
+  color: var(--terminal-green) !important;
+  text-decoration: none !important;
+}
+
+a:hover {
+  color: var(--terminal-green-bright) !important;
+  text-shadow: 0 0 3px var(--terminal-green-muted) !important;
+}
+
+/* Tables */
+table.directory, table.memberdecls,
+table.fieldtable, .params, .retval {
+  background-color: var(--terminal-dark-gray) !important;
+  border: 1px solid var(--terminal-green-dim) !important;
+  color: var(--terminal-text-gray) !important;
+}
+
+table.directory tr.even,
+table.memberdecls tr:nth-child(even) {
+  background-color: var(--terminal-gray) !important;
+}
+
+th, .mdescLeft, .mdescRight,
+.memItemLeft, .memItemRight {
+  background-color: var(--terminal-black) !important;
+  color: var(--terminal-text-gray) !important;
+  border-color: var(--terminal-green-dim) !important;
+}
+
+/* Content area */
+#doc-content, .contents,
+div.header, div.headertitle {
+  background-color: var(--terminal-black) !important;
+  color: var(--terminal-text-gray) !important;
+}
+
+/* Member items */
+.memitem, .memproto,
+.memdoc {
+  background-color: var(--terminal-dark-gray) !important;
+  border: 1px solid var(--terminal-green-dim) !important;
+  color: var(--terminal-text-gray) !important;
+}
+
+.memtitle {
+  background-color: var(--terminal-gray) !important;
+  border-color: var(--terminal-green-dim) !important;
+  color: var(--terminal-green-bright) !important;
+}
+
+/* Search box */
+#MSearchField {
+  background-color: var(--terminal-gray) !important;
+  color: var(--terminal-green) !important;
+  border: 1px solid var(--terminal-green-dim) !important;
+}
+
+#MSearchField:focus {
+  border-color: var(--terminal-green) !important;
+  box-shadow: 0 0 5px var(--terminal-green-muted) !important;
+}
+
+/* Tree view */
+.arrow {
+  color: var(--terminal-green-dim) !important;
+}
+
+#nav-tree .label {
+  color: var(--terminal-text-gray) !important;
+}
+
+#nav-tree .selected {
+  background-color: var(--terminal-light-gray) !important;
+  color: var(--terminal-green-bright) !important;
+}
+
+/* Top navigation bar - FORCE dark backgrounds */
+.tabs, .tabs2, .tabs3,
+.tablist,
+#nav-path,
+div.summary,
+.sm, .sm-dox {
+  background-image: none !important;
+  background-color: var(--terminal-dark-gray) !important;
+  background: var(--terminal-dark-gray) !important;
+  border-bottom: 1px solid var(--terminal-green-dim) !important;
+}
+
+.tablist li,
+.tablist a,
+#nav-path li,
+#nav-path a,
+.sm-dox a,
+.sm-dox a:focus,
+.sm-dox a:hover,
+.sm-dox a:active,
+.sm-dox a.highlighted {
+  background-color: var(--terminal-black) !important;
+  background-image: none !important;
+  background: var(--terminal-black) !important;
+  border: none !important;
+  color: var(--terminal-text-gray) !important;
+  text-shadow: none !important;
+}
+
+.tablist li:hover,
+.tablist li.current,
+.tablist a:hover,
+#nav-path li:hover,
+#nav-path a:hover,
+.sm-dox a:hover,
+.sm-dox a.current {
+  background-color: var(--terminal-gray) !important;
+  background-image: none !important;
+  background: var(--terminal-gray) !important;
+  color: var(--terminal-green-bright) !important;
+  text-shadow: 0 0 3px var(--terminal-green-muted) !important;
+}
+
+/* Fragment/code blocks */
+.fragment, .line {
+  border-left: 2px solid var(--terminal-green-dim) !important;
+  padding-left: 10px !important;
+}
+
+.line:hover {
+  background-color: var(--terminal-gray) !important;
+}
+
+/* Line numbers */
+.lineno {
+  color: var(--terminal-green-muted) !important;
+  background-color: var(--terminal-dark-gray) !important;
+  border-right: 1px solid var(--terminal-green-dim) !important;
+}
+
+/* Highlighted code */
+span.keyword { color: #00ffaa !important; }
+span.keywordtype { color: #00ffcc !important; }
+span.keywordflow { color: #00ff88 !important; }
+span.comment { color: #008866 !important; font-style: italic !important; }
+span.preprocessor { color: #00cc88 !important; }
+span.stringliteral { color: #00dd99 !important; }
+span.charliteral { color: #00dd99 !important; }
+
+/* Footer */
+.footer {
+  background-color: var(--terminal-dark-gray) !important;
+  color: var(--terminal-green-dim) !important;
+  border-top: 1px solid var(--terminal-green-dim) !important;
+}
+
+/* Adjust for accessibility - soften the harshest contrasts */
+p, .textblock, .mdescRight, .mdescLeft {
+  line-height: 1.6 !important;
+}
+
+/* Scrollbars (webkit) */
+::-webkit-scrollbar {
+  width: 12px;
+  background-color: var(--terminal-dark-gray);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--terminal-green-dim);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--terminal-green);
+}
+
+/* Fix any remaining light backgrounds that might have poor contrast */
+.memTemplParams, .memTemplItemParams,
+.memname, .memproto table,
+div.ah, span.mlabels {
+  background-color: var(--terminal-dark-gray) !important;
+  color: var(--terminal-text-gray) !important;
+}
+
+/* Ensure all table cells have good contrast */
+td, th {
+  background-color: var(--terminal-black) !important;
+  color: var(--terminal-text-gray) !important;
+}
+
+/* Striped table rows */
+tr:nth-child(odd) {
+  background-color: var(--terminal-black) !important;
+}
+
+tr:nth-child(even) {
+  background-color: var(--terminal-dark-gray) !important;
+}
+
+/* Member declarations - use gray text, not green */
+.memItemLeft, .memItemRight,
+.memTemplItemLeft, .memTemplItemRight,
+.memTemplParams {
+  color: var(--terminal-text-gray) !important;
+}
+
+/* Green for member names/links only */
+.memname, .memname a {
+  color: var(--terminal-green-bright) !important;
+  background-color: transparent !important;
+}
+
+/* Directory/file listings */
+.directory .icona, .directory .arrow {
+  color: var(--terminal-green-dim) !important;
+}
+
+.directory tr.even {
+  background-color: var(--terminal-dark-gray) !important;
+}
+
+/* Ensure labels and badges have dark backgrounds */
+.mlabel {
+  background-color: var(--terminal-gray) !important;
+  color: var(--terminal-green-bright) !important;
+  border: 1px solid var(--terminal-green-dim) !important;
+}
+
+/* NUCLEAR OPTION: Force all potential light backgrounds to dark */
+/* This catches any Doxygen elements we missed */
+div.header, div.headertitle, div.title,
+.memdoc, .memitem, .memproto,
+.groupheader, .grouptext,
+div.ah, div.memtitle, div.memtemplate,
+.textblock, .fragment,
+div.line, .lineno {
+  background-color: var(--terminal-black) !important;
+  background-image: none !important;
+}
+
+/* Specific fix for memtitle (member titles) */
+h2.memtitle, .memtitle {
+  background-color: var(--terminal-dark-gray) !important;
+  background-image: none !important;
+  background: var(--terminal-dark-gray) !important;
+  color: var(--terminal-green-bright) !important;
+  border: 1px solid var(--terminal-green-dim) !important;
+  padding: 8px !important;
+}
+
+/* Member data documentation sections */
+.groupheader {
+  background-color: var(--terminal-dark-gray) !important;
+  color: var(--terminal-green) !important;
+  border-bottom: 1px solid var(--terminal-green-dim) !important;
+}
+
+/* Any remaining DIVs that might have light backgrounds */
+div {
+  background-image: none !important;
+}
+
+/* Force text color on anything that might be hard to read */
+.memItemLeft, .memItemRight, .memTemplItemLeft, .memTemplItemRight,
+.mdescLeft, .mdescRight, .memname, .memproto,
+td, th, p, span, div, a {
+  color: var(--terminal-text-gray) !important;
+}
+
+/* But keep links and headings green */
+a, a:link, a:visited,
+h1, h2, h3, h4, h5, h6,
+.memname a, .el {
+  color: var(--terminal-green) !important;
+}
+
+/* And bright green for current/active states */
+.tablist li.current a,
+#nav-tree .selected,
+a:hover {
+  color: var(--terminal-green-bright) !important;
+}
