@@ -31,6 +31,9 @@ struct websocket_connection_params
  */
 class websocket_stream
 {
+public:
+  using connection_params_t = websocket_connection_params;
+
 private:
   static constexpr int connection_timeout_seconds = 30;
 

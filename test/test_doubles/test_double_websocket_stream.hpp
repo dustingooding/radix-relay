@@ -1,6 +1,6 @@
 #pragma once
 
-#include <concepts/websocket_stream.hpp>
+#include <concepts/transport_stream.hpp>
 #include <transport/websocket_stream.hpp>
 
 #include <boost/asio.hpp>
@@ -17,6 +17,8 @@ namespace radix_relay::test {
 class test_double_websocket_stream
 {
 public:
+  using connection_params_t = radix_relay::transport::websocket_connection_params;
+
   struct connection_record
   {
     std::string host;
@@ -160,6 +162,6 @@ private:
   boost::asio::mutable_buffer pending_read_buffer_;
 };
 
-static_assert(radix_relay::concepts::websocket_stream<test_double_websocket_stream>);
+static_assert(radix_relay::concepts::transport_stream<test_double_websocket_stream>);
 
 }// namespace radix_relay::test
