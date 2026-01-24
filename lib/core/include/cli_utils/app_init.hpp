@@ -3,7 +3,6 @@
 #include <async/async_queue.hpp>
 #include <cli_utils/cli_parser.hpp>
 #include <cli_utils/tui_sink.hpp>
-#include <concepts/command_handler.hpp>
 #include <core/events.hpp>
 #include <core/standard_event_handler.hpp>
 #include <fmt/core.h>
@@ -67,33 +66,31 @@ inline auto print_available_commands() -> void
 /**
  * @brief Executes a command specified via CLI arguments.
  *
- * @tparam CmdHandler Command handler type
+ * @tparam CommandHandler Callable type that handles typed commands
  * @param args Parsed CLI arguments
- * @param command_handler Handler to execute commands
+ * @param command_handler Handler to invoke for commands
  * @return true if a command was executed, false otherwise
  */
-template<concepts::command_handler CmdHandler>
-[[nodiscard]] inline auto execute_cli_command(const cli_args &args, std::shared_ptr<CmdHandler> command_handler) -> bool
+template<typename CommandHandler>
+[[nodiscard]] inline auto execute_cli_command(const cli_args &args, CommandHandler &command_handler) -> bool
 {
-
   if (args.show_version) {
-    command_handler->handle(radix_relay::core::events::version{});
+    command_handler(radix_relay::core::events::version{});
     return true;
   }
 
   if (args.send_parsed) {
-    command_handler->handle(
-      radix_relay::core::events::send{ .peer = args.send_recipient, .message = args.send_message });
+    command_handler(radix_relay::core::events::send{ .peer = args.send_recipient, .message = args.send_message });
     return true;
   }
 
   if (args.peers_parsed) {
-    command_handler->handle(radix_relay::core::events::peers{});
+    command_handler(radix_relay::core::events::peers{});
     return true;
   }
 
   if (args.status_parsed) {
-    command_handler->handle(radix_relay::core::events::status{});
+    command_handler(radix_relay::core::events::status{});
     return true;
   }
 

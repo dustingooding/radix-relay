@@ -1,173 +1,63 @@
 #pragma once
 
 #include <async/async_queue.hpp>
-#include <concepts/command_handler.hpp>
 #include <core/events.hpp>
 #include <memory>
-#include <string>
-#include <string_view>
+#include <variant>
 
 namespace radix_relay::core {
 
 /**
- * @brief Parses raw command strings into typed command events.
+ * @brief Dispatches parsed command events to the command handler.
  *
- * @tparam CmdHandler Type satisfying the command_handler concept
+ * @tparam CommandHandler Callable type that handles typed command events via operator()
+ * @tparam CommandParser Parser type with command_variant_t type trait and parse() method
  *
- * Converts raw text commands from the user into strongly-typed event structures
- * and dispatches them to the command handler.
+ * Uses Chain of Responsibility (parser) + Visitor (command_handler) pattern:
+ * - Parser converts raw string to strongly-typed command variant
+ * - std::visit dispatches the variant to command_handler
  */
-template<concepts::command_handler CmdHandler> struct event_handler
+template<typename CommandHandler, typename CommandParser> struct event_handler
 {
-  using command_handler_t = CmdHandler;
-
-  // Type traits for standard_processor
   using in_queue_t = async::async_queue<events::raw_command>;
 
-  // No output queues - forwards to command_handler
   struct out_queues_t
   {
+    std::shared_ptr<async::async_queue<events::display_filter_input_t>> display;
+    std::shared_ptr<async::async_queue<events::transport::in_t>> transport;
+    std::shared_ptr<async::async_queue<events::session_orchestrator::in_t>> session;
+    std::shared_ptr<async::async_queue<events::connection_monitor::in_t>> connection_monitor;
   };
 
   /**
-   * @brief Constructs an event handler with the given command handler.
+   * @brief Constructs an event handler with command handler and parser.
    *
-   * @param command_handler Shared pointer to the command handler
-   * @param queues Output queues (unused for event_handler)
+   * @param command_handler Command handler that handles typed commands (shared ownership)
+   * @param parser Command parser for converting strings to typed events
+   * @param queues Output queues (stored for type compatibility, handler uses its own references)
    */
-  explicit event_handler(std::shared_ptr<CmdHandler> command_handler, const out_queues_t & /*queues*/)
-    : command_handler_(command_handler)
+  explicit event_handler(std::shared_ptr<CommandHandler> command_handler,
+    std::shared_ptr<CommandParser> parser,
+    const out_queues_t & /*queues*/)
+    : command_handler_(std::move(command_handler)), parser_(std::move(parser))
   {}
 
   /**
    * @brief Parses and handles a raw command string.
    *
+   * Parses input to typed command and dispatches via std::visit.
+   *
    * @param event Raw command event containing unparsed user input
    */
   auto handle(const events::raw_command &event) const -> void
   {
-    auto input = event.input;
-
-    if (active_chat_rdx_.has_value() and not input.starts_with("/")) {
-      input = "/send " + active_chat_rdx_.value() + " " + input;
-    }
-
-    if (input == "/help") {
-      command_handler_->handle(events::help{});
-      return;
-    }
-    if (input == "/peers") {
-      command_handler_->handle(events::peers{});
-      return;
-    }
-    if (input == "/status") {
-      command_handler_->handle(events::status{});
-      return;
-    }
-    if (input == "/sessions") {
-      command_handler_->handle(events::sessions{});
-      return;
-    }
-    if (input == "/scan") {
-      command_handler_->handle(events::scan{});
-      return;
-    }
-    if (input == "/version") {
-      command_handler_->handle(events::version{});
-      return;
-    }
-    if (input == "/identities") {
-      command_handler_->handle(events::identities{});
-      return;
-    }
-    if (input == "/publish") {
-      command_handler_->handle(events::publish_identity{});
-      return;
-    }
-    if (input == "/unpublish") {
-      command_handler_->handle(events::unpublish_identity{});
-      return;
-    }
-
-    constexpr auto mode_cmd = "/mode ";
-    if (input.starts_with(mode_cmd)) {
-      command_handler_->handle(events::mode{ .new_mode = input.substr(std::string_view(mode_cmd).length()) });
-      return;
-    }
-
-    constexpr auto send_cmd = "/send ";
-    if (input.starts_with(send_cmd)) {
-      const auto args = input.substr(std::string_view(send_cmd).length());
-      const auto first_space = args.find(' ');
-      if (first_space != std::string::npos and not args.empty()) {
-        command_handler_->handle(
-          events::send{ .peer = args.substr(0, first_space), .message = args.substr(first_space + 1) });
-      } else {
-        command_handler_->handle(events::send{ .peer = "", .message = "" });
-      }
-      return;
-    }
-
-    constexpr auto broadcast_cmd = "/broadcast ";
-    if (input.starts_with(broadcast_cmd)) {
-      command_handler_->handle(events::broadcast{ .message = input.substr(std::string_view(broadcast_cmd).length()) });
-      return;
-    }
-
-    constexpr auto connect_cmd = "/connect ";
-    if (input.starts_with(connect_cmd)) {
-      command_handler_->handle(events::connect{ .relay = input.substr(std::string_view(connect_cmd).length()) });
-      return;
-    }
-
-    if (input == "/disconnect") {
-      command_handler_->handle(events::disconnect{});
-      return;
-    }
-
-    constexpr auto trust_cmd = "/trust ";
-    if (input.starts_with(trust_cmd)) {
-      const auto args = input.substr(std::string_view(trust_cmd).length());
-      const auto first_space = args.find(' ');
-      if (first_space != std::string::npos and not args.empty()) {
-        command_handler_->handle(
-          events::trust{ .peer = args.substr(0, first_space), .alias = args.substr(first_space + 1) });
-      } else {
-        command_handler_->handle(events::trust{ .peer = args, .alias = "" });
-      }
-      return;
-    }
-
-    constexpr auto verify_cmd = "/verify ";
-    if (input.starts_with(verify_cmd)) {
-      command_handler_->handle(events::verify{ .peer = input.substr(std::string_view(verify_cmd).length()) });
-      return;
-    }
-
-    constexpr auto chat_cmd = "/chat ";
-    if (input.starts_with(chat_cmd)) {
-      const auto contact_arg = input.substr(std::string_view(chat_cmd).length());
-      if (not contact_arg.empty()) {
-        try {
-          const auto contact = command_handler_->get_bridge()->lookup_contact(std::string(contact_arg));
-          active_chat_rdx_ = contact.rdx_fingerprint;
-        } catch (const std::exception & /*e*/) {
-          // Contact lookup failed, don't enter chat mode
-        }
-      }
-      command_handler_->handle(events::chat{ .contact = std::string(contact_arg) });
-      return;
-    }
-
-    if (input == "/leave") {
-      active_chat_rdx_.reset();
-      command_handler_->handle(events::leave{});
-      return;
-    }
+    auto command = parser_->parse(event.input);
+    std::visit(*command_handler_, command);
   }
 
-  std::shared_ptr<CmdHandler> command_handler_;
-  mutable std::optional<std::string> active_chat_rdx_;
+private:
+  std::shared_ptr<CommandHandler> command_handler_;
+  std::shared_ptr<CommandParser> parser_;
 };
 
 }// namespace radix_relay::core

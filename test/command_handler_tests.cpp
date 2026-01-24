@@ -13,10 +13,7 @@
 #include <platform/env_utils.hpp>
 #include <signal/signal_bridge.hpp>
 
-template<class... Ts> struct overload : Ts...
-{
-  using Ts::operator()...;
-};
+using radix_relay::core::overload;
 
 struct command_handler_fixture
 {
@@ -28,7 +25,7 @@ struct command_handler_fixture
   std::shared_ptr<radix_relay_test::test_double_signal_bridge> bridge;
   std::shared_ptr<radix_relay::async::async_queue<radix_relay::core::events::connection_monitor::in_t>>
     connection_monitor_queue;
-  radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge> handler;
+  radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge> visitor;
 
   command_handler_fixture()
     : io_context(std::make_shared<boost::asio::io_context>()),
@@ -44,12 +41,11 @@ struct command_handler_fixture
       connection_monitor_queue(
         std::make_shared<radix_relay::async::async_queue<radix_relay::core::events::connection_monitor::in_t>>(
           io_context)),
-      handler(bridge,
-        radix_relay::core::command_handler<radix_relay_test::test_double_signal_bridge>::out_queues_t{
-          .display = display_out_queue,
-          .transport = transport_out_queue,
-          .session = session_out_queue,
-          .connection_monitor = connection_monitor_queue })
+      visitor(radix_relay::core::make_command_handler(bridge,
+        display_out_queue,
+        transport_out_queue,
+        session_out_queue,
+        connection_monitor_queue))
   {}
 
   [[nodiscard]] auto get_all_output() const -> std::string
@@ -68,38 +64,38 @@ struct command_handler_fixture
   }
 };
 
-TEST_CASE("help command emits display_message event with available commands", "[commands][handler][simple]")
+TEST_CASE("help command emits display_message event with available commands", "[commands][visitor][simple]")
 {
   auto help_command = radix_relay::core::events::help{};
   const command_handler_fixture fixture;
-  fixture.handler.handle(help_command);
+  fixture.visitor(help_command);
 
   const auto output = fixture.get_all_output();
   CHECK(output.find("Interactive Commands") != std::string::npos);
 }
 
-TEST_CASE("version command outputs version information", "[commands][handler][simple]")
+TEST_CASE("version command outputs version information", "[commands][visitor][simple]")
 {
   auto version_command = radix_relay::core::events::version{};
   const command_handler_fixture fixture;
-  fixture.handler.handle(version_command);
+  fixture.visitor(version_command);
   CHECK(fixture.get_all_output().find("Radix Relay v") != std::string::npos);
 }
 
-TEST_CASE("peers command outputs peer discovery information", "[commands][handler][simple]")
+TEST_CASE("peers command outputs peer discovery information", "[commands][visitor][simple]")
 {
   auto peers_command = radix_relay::core::events::peers{};
   const command_handler_fixture fixture;
-  fixture.handler.handle(peers_command);
+  fixture.visitor(peers_command);
   CHECK(fixture.get_all_output().find("Connected Peers") != std::string::npos);
 }
 
 TEST_CASE("status command forwards query to connection monitor and outputs crypto status",
-  "[commands][handler][simple]")
+  "[commands][visitor][simple]")
 {
   auto status_command = radix_relay::core::events::status{};
   const command_handler_fixture fixture;
-  fixture.handler.handle(status_command);
+  fixture.visitor(status_command);
 
   auto monitor_event = fixture.connection_monitor_queue->try_pop();
   REQUIRE(monitor_event.has_value());
@@ -112,17 +108,17 @@ TEST_CASE("status command forwards query to connection monitor and outputs crypt
   CHECK(output.find("RDX:") != std::string::npos);
 }
 
-TEST_CASE("sessions command with no sessions outputs no active sessions message", "[commands][handler][simple]")
+TEST_CASE("sessions command with no sessions outputs no active sessions message", "[commands][visitor][simple]")
 {
   auto sessions_command = radix_relay::core::events::sessions{};
   const command_handler_fixture fixture;
   fixture.bridge->contacts_to_return = {};
-  fixture.handler.handle(sessions_command);
+  fixture.visitor(sessions_command);
   CHECK(fixture.get_all_output().find("No active sessions") != std::string::npos);
 }
 
 TEST_CASE("sessions command with established sessions outputs active sessions with contact information",
-  "[commands][handler][simple]")
+  "[commands][visitor][simple]")
 {
   auto sessions_command = radix_relay::core::events::sessions{};
   const command_handler_fixture fixture;
@@ -140,7 +136,7 @@ TEST_CASE("sessions command with established sessions outputs active sessions wi
       .has_active_session = true,
     },
   };
-  fixture.handler.handle(sessions_command);
+  fixture.visitor(sessions_command);
   const auto output = fixture.get_all_output();
   CHECK(output.find("Active Sessions") != std::string::npos);
   CHECK(output.find("Alice") != std::string::npos);
@@ -148,38 +144,38 @@ TEST_CASE("sessions command with established sessions outputs active sessions wi
   CHECK(output.find("RDX:bob456") != std::string::npos);
 }
 
-TEST_CASE("scan command outputs scan information", "[commands][handler][simple]")
+TEST_CASE("scan command outputs scan information", "[commands][visitor][simple]")
 {
   auto scan_command = radix_relay::core::events::scan{};
   const command_handler_fixture fixture;
-  fixture.handler.handle(scan_command);
+  fixture.visitor(scan_command);
   CHECK(fixture.get_all_output().find("Scanning") != std::string::npos);
 }
 
-TEST_CASE("identities command pushes list_identities event to session queue", "[commands][handler][simple]")
+TEST_CASE("identities command pushes list_identities event to session queue", "[commands][visitor][simple]")
 {
   auto identities_command = radix_relay::core::events::identities{};
   const command_handler_fixture fixture;
-  fixture.handler.handle(identities_command);
+  fixture.visitor(identities_command);
 
   auto session_event = fixture.session_out_queue->try_pop();
   REQUIRE(session_event.has_value());
   if (session_event) { CHECK(std::holds_alternative<radix_relay::core::events::list_identities>(*session_event)); }
 }
 
-TEST_CASE("mode command outputs mode change confirmation", "[commands][handler][parameterized]")
+TEST_CASE("mode command outputs mode change confirmation", "[commands][visitor][parameterized]")
 {
   auto mode_command = radix_relay::core::events::mode{ .new_mode = "internet" };
   const command_handler_fixture fixture;
-  fixture.handler.handle(mode_command);
+  fixture.visitor(mode_command);
   CHECK(fixture.get_all_output().find("internet") != std::string::npos);
 }
 
-TEST_CASE("send command pushes send event to session queue", "[commands][handler][parameterized]")
+TEST_CASE("send command pushes send event to session queue", "[commands][visitor][parameterized]")
 {
   auto send_command = radix_relay::core::events::send{ .peer = "alice", .message = "hello world" };
   const command_handler_fixture fixture;
-  fixture.handler.handle(send_command);
+  fixture.visitor(send_command);
 
   auto session_event = fixture.session_out_queue->try_pop();
   REQUIRE(session_event.has_value());
@@ -191,37 +187,37 @@ TEST_CASE("send command pushes send event to session queue", "[commands][handler
   }
 }
 
-TEST_CASE("send command outputs send command confirmation with peer and message", "[commands][handler][parameterized]")
+TEST_CASE("send command outputs send command confirmation with peer and message", "[commands][visitor][parameterized]")
 {
   auto send_command = radix_relay::core::events::send{ .peer = "alice", .message = "hello world" };
   const command_handler_fixture fixture;
-  fixture.handler.handle(send_command);
+  fixture.visitor(send_command);
   const auto output = fixture.get_all_output();
   CHECK(output.find("alice") != std::string::npos);
   CHECK(output.find("hello world") != std::string::npos);
 }
 
-TEST_CASE("broadcast command outputs broadcast command confirmation with message", "[commands][handler][parameterized]")
+TEST_CASE("broadcast command outputs broadcast command confirmation with message", "[commands][visitor][parameterized]")
 {
   auto broadcast_command = radix_relay::core::events::broadcast{ .message = "hello everyone" };
   const command_handler_fixture fixture;
-  fixture.handler.handle(broadcast_command);
+  fixture.visitor(broadcast_command);
   CHECK(fixture.get_all_output().find("hello everyone") != std::string::npos);
 }
 
-TEST_CASE("connect command outputs connect command confirmation with relay URL", "[commands][handler][parameterized]")
+TEST_CASE("connect command outputs connect command confirmation with relay URL", "[commands][visitor][parameterized]")
 {
   auto connect_command = radix_relay::core::events::connect{ .relay = "wss://relay.damus.io" };
   const command_handler_fixture fixture;
-  fixture.handler.handle(connect_command);
+  fixture.visitor(connect_command);
   CHECK(fixture.get_all_output().find("relay.damus.io") != std::string::npos);
 }
 
-TEST_CASE("connect command pushes connect event to session queue", "[commands][handler][parameterized]")
+TEST_CASE("connect command pushes connect event to session queue", "[commands][visitor][parameterized]")
 {
   auto connect_command = radix_relay::core::events::connect{ .relay = "wss://relay.damus.io" };
   const command_handler_fixture fixture;
-  fixture.handler.handle(connect_command);
+  fixture.visitor(connect_command);
 
   auto session_event = fixture.session_out_queue->try_pop();
   REQUIRE(session_event.has_value());
@@ -232,20 +228,20 @@ TEST_CASE("connect command pushes connect event to session queue", "[commands][h
   }
 }
 
-TEST_CASE("disconnect command outputs disconnect confirmation", "[commands][handler][parameterized]")
+TEST_CASE("disconnect command outputs disconnect confirmation", "[commands][visitor][parameterized]")
 {
   auto disconnect_command = radix_relay::core::events::disconnect{};
   const command_handler_fixture fixture;
-  fixture.handler.handle(disconnect_command);
+  fixture.visitor(disconnect_command);
   CHECK(fixture.get_all_output().find("Disconnecting") != std::string::npos);
 }
 
 TEST_CASE("disconnect command pushes transport disconnect event to transport queue",
-  "[commands][handler][parameterized]")
+  "[commands][visitor][parameterized]")
 {
   auto disconnect_command = radix_relay::core::events::disconnect{};
   const command_handler_fixture fixture;
-  fixture.handler.handle(disconnect_command);
+  fixture.visitor(disconnect_command);
 
   auto transport_event = fixture.transport_out_queue->try_pop();
   REQUIRE(transport_event.has_value());
@@ -254,11 +250,11 @@ TEST_CASE("disconnect command pushes transport disconnect event to transport que
   }
 }
 
-TEST_CASE("trust command pushes trust event to session queue", "[commands][handler][parameterized]")
+TEST_CASE("trust command pushes trust event to session queue", "[commands][visitor][parameterized]")
 {
   auto trust_command = radix_relay::core::events::trust{ .peer = "RDX:alice123", .alias = "Alice" };
   const command_handler_fixture fixture;
-  fixture.handler.handle(trust_command);
+  fixture.visitor(trust_command);
 
   auto session_event = fixture.session_out_queue->try_pop();
   REQUIRE(session_event.has_value());
@@ -272,47 +268,47 @@ TEST_CASE("trust command pushes trust event to session queue", "[commands][handl
   CHECK(fixture.get_all_output().find("RDX:alice123") != std::string::npos);
 }
 
-TEST_CASE("verify command outputs verify command confirmation with peer", "[commands][handler][parameterized]")
+TEST_CASE("verify command outputs verify command confirmation with peer", "[commands][visitor][parameterized]")
 {
   auto verify_command = radix_relay::core::events::verify{ .peer = "bob" };
   const command_handler_fixture fixture;
-  fixture.handler.handle(verify_command);
+  fixture.visitor(verify_command);
   CHECK(fixture.get_all_output().find("bob") != std::string::npos);
 }
 
-TEST_CASE("send command with empty parameters outputs usage information", "[commands][handler][validation]")
+TEST_CASE("send command with empty parameters outputs usage information", "[commands][visitor][validation]")
 {
   auto send_command = radix_relay::core::events::send{ .peer = "", .message = "" };
   const command_handler_fixture fixture;
-  fixture.handler.handle(send_command);
+  fixture.visitor(send_command);
   CHECK(fixture.get_all_output().find("Usage") != std::string::npos);
 }
 
-TEST_CASE("broadcast command with empty message outputs usage information", "[commands][handler][validation]")
+TEST_CASE("broadcast command with empty message outputs usage information", "[commands][visitor][validation]")
 {
   auto broadcast_command = radix_relay::core::events::broadcast{ .message = "" };
   const command_handler_fixture fixture;
-  fixture.handler.handle(broadcast_command);
+  fixture.visitor(broadcast_command);
   CHECK(fixture.get_all_output().find("Usage") != std::string::npos);
 }
 
-TEST_CASE("mode command with invalid mode outputs invalid mode error message", "[commands][handler][validation]")
+TEST_CASE("mode command with invalid mode outputs invalid mode error message", "[commands][visitor][validation]")
 {
   auto mode_command = radix_relay::core::events::mode{ .new_mode = "invalid" };
   const command_handler_fixture fixture;
-  fixture.handler.handle(mode_command);
+  fixture.visitor(mode_command);
   CHECK(fixture.get_all_output().find("Invalid mode") != std::string::npos);
 }
 
-SCENARIO("Command handler processes chat context commands correctly", "[commands][handler][chat]")
+SCENARIO("Command visitor processes chat context commands correctly", "[commands][visitor][chat]")
 {
-  GIVEN("A command handler with test fixture")
+  GIVEN("A command visitor with test fixture")
   {
     WHEN("handling chat command with valid contact")
     {
       auto chat_command = radix_relay::core::events::chat{ .contact = "alice" };
 
-      THEN("handler should enter chat mode and emit enter_chat_mode event")
+      THEN("visitor should enter chat mode and emit enter_chat_mode event")
       {
         const command_handler_fixture fixture;
         fixture.bridge->contacts_to_return.push_back(radix_relay::core::contact_info{
@@ -321,7 +317,7 @@ SCENARIO("Command handler processes chat context commands correctly", "[commands
           .user_alias = "alice",
           .has_active_session = true,
         });
-        fixture.handler.handle(chat_command);
+        fixture.visitor(chat_command);
 
         bool found_enter_chat_mode = false;
         bool found_display_message = false;
@@ -344,7 +340,7 @@ SCENARIO("Command handler processes chat context commands correctly", "[commands
     {
       auto chat_command = radix_relay::core::events::chat{ .contact = "unknown" };
 
-      THEN("handler should emit error message")
+      THEN("visitor should emit error message")
       {
         const command_handler_fixture fixture;
         fixture.bridge->contacts_to_return.push_back(radix_relay::core::contact_info{
@@ -353,7 +349,7 @@ SCENARIO("Command handler processes chat context commands correctly", "[commands
           .user_alias = "alice",
           .has_active_session = true,
         });
-        fixture.handler.handle(chat_command);
+        fixture.visitor(chat_command);
 
         const auto output = fixture.get_all_output();
         CHECK(output.find("Contact not found") != std::string::npos);
@@ -364,10 +360,10 @@ SCENARIO("Command handler processes chat context commands correctly", "[commands
     {
       auto leave_command = radix_relay::core::events::leave{};
 
-      THEN("handler should exit chat mode and emit exit_chat_mode event")
+      THEN("visitor should exit chat mode and emit exit_chat_mode event")
       {
         const command_handler_fixture fixture;
-        fixture.handler.handle(leave_command);
+        fixture.visitor(leave_command);
 
         bool found_exit_chat_mode = false;
         bool found_display_message = false;
@@ -388,7 +384,7 @@ SCENARIO("Command handler processes chat context commands correctly", "[commands
   }
 }
 
-SCENARIO("Command handler displays conversation history when entering chat", "[commands][handler][chat][history]")
+SCENARIO("Command visitor displays conversation history when entering chat", "[commands][visitor][chat][history]")
 {
   GIVEN("A contact with message history")
   {
@@ -396,7 +392,7 @@ SCENARIO("Command handler displays conversation history when entering chat", "[c
     {
       auto chat_command = radix_relay::core::events::chat{ .contact = "alice" };
 
-      THEN("handler should load and display conversation history")
+      THEN("visitor should load and display conversation history")
       {
         const command_handler_fixture fixture;
         const std::string alice_rdx = "RDX:alice123";
@@ -443,7 +439,7 @@ SCENARIO("Command handler displays conversation history when entering chat", "[c
             .session_established = false },
         };
 
-        fixture.handler.handle(chat_command);
+        fixture.visitor(chat_command);
 
         CHECK(fixture.bridge->was_called("get_conversation_messages"));
         CHECK(fixture.bridge->was_called("mark_conversation_read_up_to"));
@@ -480,7 +476,7 @@ SCENARIO("Command handler displays conversation history when entering chat", "[c
     {
       auto chat_command = radix_relay::core::events::chat{ .contact = "bob" };
 
-      THEN("handler should still enter chat mode but display no history")
+      THEN("visitor should still enter chat mode but display no history")
       {
         const command_handler_fixture fixture;
         fixture.bridge->contacts_to_return.push_back(radix_relay::core::contact_info{
@@ -492,7 +488,7 @@ SCENARIO("Command handler displays conversation history when entering chat", "[c
 
         fixture.bridge->messages_to_return = {};
 
-        fixture.handler.handle(chat_command);
+        fixture.visitor(chat_command);
 
         CHECK(fixture.bridge->was_called("get_conversation_messages"));
         CHECK(fixture.bridge->was_called("mark_conversation_read"));
@@ -509,4 +505,14 @@ SCENARIO("Command handler displays conversation history when entering chat", "[c
       }
     }
   }
+}
+
+TEST_CASE("unknown_command is silently handled (no-op)", "[commands][visitor][unknown]")
+{
+  auto unknown = radix_relay::core::events::unknown_command{ .input = "/notacommand" };
+  const command_handler_fixture fixture;
+  fixture.visitor(unknown);
+
+  const auto output = fixture.get_all_output();
+  CHECK(output.empty());
 }

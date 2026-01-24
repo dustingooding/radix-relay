@@ -1,143 +1,127 @@
 #pragma once
 
 #include <algorithm>
-#include <concepts/command_handler.hpp>
-#include <core/contact_info.hpp>
 #include <core/events.hpp>
-#include <memory>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace radix_relay_test {
 
-struct test_double_bridge
-{
-  mutable std::vector<radix_relay::core::contact_info> contacts;
-
-  auto lookup_contact(const std::string &contact_identifier) const -> radix_relay::core::contact_info
-  {
-    const auto it = std::find_if(contacts.cbegin(), contacts.cend(), [&contact_identifier](const auto &c) {
-      return c.rdx_fingerprint == contact_identifier || c.user_alias == contact_identifier;
-    });
-    if (it != contacts.cend()) { return *it; }
-    throw std::runtime_error("Contact not found");
-  }
-};
-
-struct test_double_command_handler
+/**
+ * @brief Recording command handler that tracks which commands were dispatched.
+ *
+ * This is a test double that can be used as a CommandHandler template parameter
+ * for event_handler in tests. It records all command invocations for verification.
+ */
+struct recording_command_handler
 {
   mutable std::vector<std::string> called_commands;
-  std::shared_ptr<test_double_bridge> bridge = std::make_shared<test_double_bridge>();
 
-  template<radix_relay::core::events::Command T> auto handle(const T &command) const -> void { handle_impl(command); }
-
-  [[nodiscard]] auto get_bridge() const -> std::shared_ptr<test_double_bridge> { return bridge; }
-
-private:
-  auto handle_impl(const radix_relay::core::events::help & /*command*/) const -> void
+  auto operator()(const radix_relay::core::events::help & /*command*/) const -> void
   {
     called_commands.push_back("help");
   }
 
-  auto handle_impl(const radix_relay::core::events::peers & /*command*/) const -> void
+  auto operator()(const radix_relay::core::events::peers & /*command*/) const -> void
   {
     called_commands.push_back("peers");
   }
 
-  auto handle_impl(const radix_relay::core::events::status & /*command*/) const -> void
+  auto operator()(const radix_relay::core::events::status & /*command*/) const -> void
   {
     called_commands.push_back("status");
   }
 
-  auto handle_impl(const radix_relay::core::events::sessions & /*command*/) const -> void
+  auto operator()(const radix_relay::core::events::sessions & /*command*/) const -> void
   {
     called_commands.push_back("sessions");
   }
 
-  auto handle_impl(const radix_relay::core::events::scan & /*command*/) const -> void
+  auto operator()(const radix_relay::core::events::scan & /*command*/) const -> void
   {
     called_commands.push_back("scan");
   }
 
-  auto handle_impl(const radix_relay::core::events::version & /*command*/) const -> void
+  auto operator()(const radix_relay::core::events::version & /*command*/) const -> void
   {
     called_commands.push_back("version");
   }
 
-  auto handle_impl(const radix_relay::core::events::mode &command) const -> void
+  auto operator()(const radix_relay::core::events::mode &command) const -> void
   {
     called_commands.push_back("mode:" + command.new_mode);
   }
 
-  auto handle_impl(const radix_relay::core::events::send &command) const -> void
+  auto operator()(const radix_relay::core::events::send &command) const -> void
   {
     called_commands.push_back("send:" + command.peer + ":" + command.message);
   }
 
-  auto handle_impl(const radix_relay::core::events::broadcast &command) const -> void
+  auto operator()(const radix_relay::core::events::broadcast &command) const -> void
   {
     called_commands.push_back("broadcast:" + command.message);
   }
 
-  auto handle_impl(const radix_relay::core::events::connect &command) const -> void
+  auto operator()(const radix_relay::core::events::connect &command) const -> void
   {
     called_commands.push_back("connect:" + command.relay);
   }
 
-  auto handle_impl(const radix_relay::core::events::disconnect & /*command*/) const -> void
+  auto operator()(const radix_relay::core::events::disconnect & /*command*/) const -> void
   {
     called_commands.push_back("disconnect");
   }
 
-  auto handle_impl(const radix_relay::core::events::trust &command) const -> void
+  auto operator()(const radix_relay::core::events::trust &command) const -> void
   {
     called_commands.push_back("trust:" + command.peer);
   }
 
-  auto handle_impl(const radix_relay::core::events::verify &command) const -> void
+  auto operator()(const radix_relay::core::events::verify &command) const -> void
   {
     called_commands.push_back("verify:" + command.peer);
   }
 
-  auto handle_impl(const radix_relay::core::events::identities & /*command*/) const -> void
+  auto operator()(const radix_relay::core::events::identities & /*command*/) const -> void
   {
     called_commands.push_back("identities");
   }
 
-  auto handle_impl(const radix_relay::core::events::publish_identity & /*command*/) const -> void
+  auto operator()(const radix_relay::core::events::publish_identity & /*command*/) const -> void
   {
     called_commands.push_back("publish_identity");
   }
 
-  auto handle_impl(const radix_relay::core::events::unpublish_identity & /*command*/) const -> void
+  auto operator()(const radix_relay::core::events::unpublish_identity & /*command*/) const -> void
   {
     called_commands.push_back("unpublish_identity");
   }
 
-  auto handle_impl(const radix_relay::core::events::chat &command) const -> void
+  auto operator()(const radix_relay::core::events::chat &command) const -> void
   {
     called_commands.push_back("chat:" + command.contact);
   }
 
-  auto handle_impl(const radix_relay::core::events::leave & /*command*/) const -> void
+  auto operator()(const radix_relay::core::events::leave & /*command*/) const -> void
   {
     called_commands.push_back("leave");
   }
 
-public:
-  auto was_called(const std::string &command) const -> bool
+  auto operator()(const radix_relay::core::events::unknown_command &command) const -> void
+  {
+    called_commands.push_back("unknown_command:" + command.input);
+  }
+
+  [[nodiscard]] auto was_called(const std::string &command) const -> bool
   {
     return std::any_of(called_commands.cbegin(), called_commands.cend(), [&command](const std::string &call) {
       return call.find(command) == 0;
     });
   }
 
-  auto get_call_count() const -> size_t { return called_commands.size(); }
+  [[nodiscard]] auto get_call_count() const -> size_t { return called_commands.size(); }
 
   auto clear_calls() const -> void { called_commands.clear(); }
 };
-
-static_assert(radix_relay::concepts::command_handler<test_double_command_handler>);
 
 }// namespace radix_relay_test

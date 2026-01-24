@@ -5,6 +5,7 @@
 #include <cli_utils/app_init.hpp>
 #include <cli_utils/cli_parser.hpp>
 #include <core/command_handler.hpp>
+#include <core/command_parser.hpp>
 #include <core/connection_monitor.hpp>
 #include <core/display_filter.hpp>
 #include <core/event_handler.hpp>
@@ -51,13 +52,10 @@ auto main(int argc, char **argv) -> int
     auto connection_monitor_queue =
       std::make_shared<async::async_queue<core::events::connection_monitor::in_t>>(io_context);
 
-    auto command_handler = std::make_shared<core::command_handler<bridge_t>>(bridge,
-      core::command_handler<bridge_t>::out_queues_t{ .display = display_filter_queue,
-        .transport = transport_queue,
-        .session = session_queue,
-        .connection_monitor = connection_monitor_queue });
+    auto command_handler = std::make_shared<core::command_handler<bridge_t>>(core::make_command_handler(
+      bridge, display_filter_queue, transport_queue, session_queue, connection_monitor_queue));
 
-    if (cli_utils::execute_cli_command(args, command_handler)) {
+    if (cli_utils::execute_cli_command(args, *command_handler)) {
       cli_utils::configure_logging(args);
       while (auto msg = display_filter_queue->try_pop()) {
         std::visit(
@@ -97,14 +95,20 @@ auto main(int argc, char **argv) -> int
     auto transport = std::make_shared<nostr::transport<transport::websocket_stream>>(
       websocket, io_context, transport_queue, session_queue);
 
-    using cmd_handler_t = core::command_handler<bridge_t>;
-    using evt_handler_t = core::event_handler<cmd_handler_t>;
+    auto command_parser = std::make_shared<core::command_parser<bridge_t>>(bridge);
+
+    using evt_handler_t = core::event_handler<core::command_handler<bridge_t>, core::command_parser<bridge_t>>;
     using cmd_processor_t = core::standard_processor<evt_handler_t>;
     using presentation_evt_handler_t = core::presentation_handler;
     using presentation_processor_t = core::standard_processor<presentation_evt_handler_t>;
 
+    auto event_handler_queues = evt_handler_t::out_queues_t{ .display = display_filter_queue,
+      .transport = transport_queue,
+      .session = session_queue,
+      .connection_monitor = connection_monitor_queue };
+
     auto cmd_processor = std::make_shared<cmd_processor_t>(
-      io_context, event_handler_queue, evt_handler_t::out_queues_t{}, command_handler);
+      io_context, event_handler_queue, event_handler_queues, command_handler, command_parser);
 
     auto presentation_evt_processor = std::make_shared<presentation_processor_t>(io_context,
       presentation_event_queue,
