@@ -17,7 +17,8 @@ target_link_system_libraries(
           Boost::beast
           Boost::system
           OpenSSL::SSL
-          OpenSSL::Crypto)
+          OpenSSL::Crypto
+          simpleble::simpleble)
 
 target_include_directories(radix_relay_transport ${WARNING_GUARD} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
