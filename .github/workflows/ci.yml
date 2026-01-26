@@ -174,13 +174,22 @@ jobs:
           rustc --version
           cargo --version
 
-      - name: Install Protocol Buffers (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libprotobuf-dev
+      - name: Setup vcpkg environment (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          echo "VCPKG_ROOT=$HOME/vcpkg" >> $GITHUB_ENV
 
-      - name: Install Protocol Buffers (macOS)
-        if: runner.os == 'macOS'
-        run: brew install protobuf
+      - name: Install vcpkg dependencies (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cd $VCPKG_ROOT
+          ./vcpkg install protobuf
+          echo "$VCPKG_ROOT/installed/${{ runner.os == 'macOS' && 'arm64-osx' || 'x64-linux' }}/tools/protobuf" >> $GITHUB_PATH
+        shell: bash
+
+      - name: Install D-Bus (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev
 
       - name: Install Dependencies (Windows)
         if: runner.os == 'Windows'
@@ -194,9 +203,6 @@ jobs:
           echo "OPENSSL_DIR=${{ github.workspace }}\vcpkg_installed\x64-windows-static-md" >> $env:GITHUB_ENV
         env:
           VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg_cache,readwrite
-
-      - name: Verify Protobuf installation
-        run: protoc --version
 
       - name: Determine CMake preset
         id: preset
@@ -232,7 +238,7 @@ jobs:
 
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
-        run: cmake --preset=${{ steps.preset.outputs.preset }} -DCMAKE_TOOLCHAIN_FILE="$env:USERPROFILE\vcpkg\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static-md -D${{ env.PROJECT_NAME }}_ENABLE_IPO=${{matrix.enable_ipo }} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }} -DGIT_SHA:STRING=${{ github.sha }}
+        run: cmake --preset=${{ steps.preset.outputs.preset }} -D${{ env.PROJECT_NAME }}_ENABLE_IPO=${{matrix.enable_ipo }} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }} -DGIT_SHA:STRING=${{ github.sha }}
         env:
           VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg_cache,readwrite
 
@@ -240,9 +246,18 @@ jobs:
         if: runner.os != 'Windows'
         run: cmake --preset=${{ steps.preset.outputs.preset }} -D${{ env.PROJECT_NAME }}_ENABLE_IPO=${{matrix.enable_ipo }} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }} -DGIT_SHA:STRING=${{ github.sha }}
 
+      - name: Verify protoc installation
+        run: |
+          PROTOC_PATH="${{ runner.os == 'Windows' && format('{0}\vcpkg_installed\x64-windows-static-md\tools\protobuf\protoc.exe', github.workspace) || format('{0}/out/build/{1}/vcpkg_installed/{2}/tools/protobuf/protoc', github.workspace, steps.preset.outputs.preset, runner.os == 'macOS' && 'arm64-osx' || 'x64-linux') }}"
+          echo "Checking for protoc at: $PROTOC_PATH"
+          ls -la "$PROTOC_PATH" || find ${{ github.workspace }}/out/build -name protoc -type f
+        shell: bash
+
       - name: Build
         run: |
           cmake --build --preset=${{ steps.preset.outputs.preset }}
+        env:
+          PROTOC: ${{ runner.os == 'Windows' && format('{0}\vcpkg_installed\x64-windows-static-md\tools\protobuf\protoc.exe', github.workspace) || format('{0}/out/build/{1}/vcpkg_installed/{2}/tools/protobuf/protoc', github.workspace, steps.preset.outputs.preset, runner.os == 'macOS' && 'arm64-osx' || 'x64-linux') }}
 
       - name: Rust Quality Checks
         if: matrix.packaging_maintainer_mode == 'ON'
