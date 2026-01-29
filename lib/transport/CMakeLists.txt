@@ -1,5 +1,6 @@
 add_library(radix_relay_transport
-  src/websocket_stream.cpp)
+  src/websocket_stream.cpp
+  src/ble_stream.cpp)
 
 add_library(radix_relay::transport ALIAS radix_relay_transport)
 

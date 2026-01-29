@@ -1,4 +1,4 @@
-// Integration test for SimpleBLE library with BlueZ stack
+// Integration test for BLE stream with SimpleBLE/BlueZ stack
 // Not included in default test suite - build manually when needed
 //
 // Usage:
@@ -16,14 +16,18 @@
 //   # Verify device exists
 //   hciconfig
 //
-// This test will scan for nearby BLE devices to validate SimpleBLE integration
+// This test validates ble_stream integration with real BLE hardware
+
+#include <transport/ble_stream.hpp>
 
 #include <simpleble/SimpleBLE.h>
 
+#include <boost/asio.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <iostream>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -134,4 +138,106 @@ TEST_CASE("SimpleBLE adapter can start and stop scanning", "[integration][ble][l
 
   REQUIRE(scan_started);
   REQUIRE(scan_stopped);
+}
+
+TEST_CASE("ble_stream can be constructed and has default MTU", "[integration][ble][stream]")
+{
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::transport::ble_stream stream(io_context);
+
+  REQUIRE(stream.get_mtu() == 20);
+}
+
+TEST_CASE("ble_stream async_connect handles no adapter gracefully", "[integration][ble][stream]")
+{
+  auto adapters = SimpleBLE::Adapter::get_adapters();
+
+  if (not adapters.empty()) { WARN("BLE adapter found - test may not verify no-adapter path"); }
+
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::transport::ble_stream stream(io_context);
+
+  const radix_relay::transport::ble_connection_params params{ .device_address = "FF:FF:FF:FF:FF:FF",
+    .service_uuid = "00001234-0000-1000-8000-00805f9b34fb",
+    .characteristic_uuid = "00005678-0000-1000-8000-00805f9b34fb" };
+
+  bool callback_invoked = false;
+  boost::system::error_code received_error;
+
+  stream.async_connect(params, [&](const boost::system::error_code &error, std::size_t) {
+    callback_invoked = true;
+    received_error = error;
+    std::cout << "Connection result: " << (error ? error.message() : "success") << '\n';
+  });
+
+  io_context->run();
+
+  REQUIRE(callback_invoked);
+
+  if (adapters.empty()) {
+    INFO("No adapter available - connection should fail");
+    REQUIRE(received_error == boost::asio::error::connection_refused);
+  } else {
+    INFO("Adapter available but device not found - connection should fail");
+    REQUIRE(received_error);
+  }
+}
+
+TEST_CASE("ble_stream async_close always succeeds", "[integration][ble][stream]")
+{
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::transport::ble_stream stream(io_context);
+
+  bool callback_invoked = false;
+  boost::system::error_code received_error;
+
+  stream.async_close([&](const boost::system::error_code &error, std::size_t) {
+    callback_invoked = true;
+    received_error = error;
+  });
+
+  io_context->run();
+
+  REQUIRE(callback_invoked);
+  REQUIRE_FALSE(received_error);
+}
+
+TEST_CASE("ble_stream operations fail gracefully when not connected", "[integration][ble][stream]")
+{
+  auto io_context = std::make_shared<boost::asio::io_context>();
+  radix_relay::transport::ble_stream stream(io_context);
+
+  SECTION("async_write fails when not connected")
+  {
+    std::array<std::byte, 10> data{};
+    bool callback_invoked = false;
+    boost::system::error_code received_error;
+
+    stream.async_write(std::span<const std::byte>(data), [&](const boost::system::error_code &error, std::size_t) {
+      callback_invoked = true;
+      received_error = error;
+    });
+
+    io_context->run();
+
+    REQUIRE(callback_invoked);
+    REQUIRE(received_error == boost::asio::error::not_connected);
+  }
+
+  SECTION("async_read fails when not connected")
+  {
+    std::array<std::byte, 100> buffer{};
+    bool callback_invoked = false;
+    boost::system::error_code received_error;
+
+    stream.async_read(boost::asio::buffer(buffer), [&](const boost::system::error_code &error, std::size_t) {
+      callback_invoked = true;
+      received_error = error;
+    });
+
+    io_context->run();
+
+    REQUIRE(callback_invoked);
+    REQUIRE(received_error == boost::asio::error::not_connected);
+  }
 }
