@@ -32,6 +32,57 @@ curl -LJO "https://github.com/aminya/setup-cpp/releases/latest/download/setup_cp
 RefreshEnv.cmd
 ```
 
+## Dependency Management Strategy
+
+Radix Relay uses a multi-layered dependency management approach:
+
+### Build Tools & Compilers (Spack - Local Development)
+
+For local development with precise version control:
+
+- **cmake** @3.27 - Build system
+- **ninja** @1.12 - Build generator
+- **llvm** @19.1 - Clang compiler toolchain
+- **gcc** @13.3 - GCC compiler toolchain
+- **doxygen** @1.9 - Documentation generator
+- **graphviz** @2.42 - Documentation diagrams
+- **pkgconf** @2.3 - Package config tool (required for SimpleBLE on Linux)
+
+**Installation:** See spack.yaml in the project root. Spack automatically installs these when you activate the environment.
+
+### C++ Library Dependencies (vcpkg)
+
+Managed via vcpkg.json, automatically installed during CMake configuration:
+
+- **protobuf** - All platforms (Protocol Buffers)
+- **openssl** - Windows only (Linux/macOS use system OpenSSL)
+- **sqlcipher** - Windows only (Linux/macOS use system packages)
+
+**Installation:** Automatically handled during CMake configuration.
+
+### Additional C++ Libraries (CPM - Automatic)
+
+Downloaded and built automatically via CMake Package Manager (CPM):
+
+- **SimpleBLE** (v0.6.1) - Cross-platform BLE library
+- **Boost** (asio, beast, system) - Async I/O and HTTP
+- **Slint** - GUI framework
+- **Replxx** - TUI readline library
+- **Catch2** - Testing framework
+- **libsignal** (Rust) - Signal Protocol via Corrosion
+
+**Installation:** No action required - handled by Dependencies.cmake.
+
+### System Libraries (Platform Package Managers)
+
+Platform-specific system dependencies:
+
+- **OpenSSL** - Linux/macOS only (vcpkg on Windows)
+- **SQLCipher** - Linux/macOS only (vcpkg on Windows)
+- **D-Bus** - Linux only (for SimpleBLE BlueZ backend)
+
+**Installation:** Use your system package manager (apt/dnf/pacman/brew).
+
 ## Manual Installation
 
 ### Required Dependencies
@@ -138,6 +189,53 @@ brew install protobuf
 
 Protocol Buffers is installed automatically via vcpkg during the build process.
 
+#### 6. BLE Transport Dependencies
+
+Required for Bluetooth Low Energy transport functionality.
+
+**System D-Bus (Linux only):**
+
+SimpleBLE on Linux uses the BlueZ backend which requires D-Bus development headers. On Windows and macOS, SimpleBLE uses native Bluetooth APIs (no D-Bus needed).
+
+```bash
+# Ubuntu/Debian
+sudo apt install libdbus-1-dev
+
+# Fedora/RHEL
+sudo dnf install dbus-devel
+
+# Arch
+sudo pacman -S dbus
+```
+
+**SimpleBLE (all platforms):**
+
+SimpleBLE is automatically downloaded and built via CPM (CMake Package Manager) during configuration. No manual installation needed.
+
+- **Version**: v0.6.1
+- **Linux**: Uses BlueZ backend (requires system D-Bus installed above)
+- **Windows**: Uses native Windows Bluetooth API
+- **macOS**: Uses CoreBluetooth framework
+
+**vcpkg Setup (for Protobuf):**
+
+Install vcpkg if you haven't already:
+
+```bash
+git clone https://github.com/microsoft/vcpkg.git /data/git/vcpkg
+/data/git/vcpkg/bootstrap-vcpkg.sh  # Linux/macOS
+# or
+git clone https://github.com/microsoft/vcpkg.git %USERPROFILE%\vcpkg
+%USERPROFILE%\vcpkg\bootstrap-vcpkg.bat  # Windows
+
+# Set environment variable (add to your shell profile or .envrc)
+export VCPKG_ROOT=/data/git/vcpkg  # Linux/macOS
+# or
+set VCPKG_ROOT=%USERPROFILE%\vcpkg  # Windows
+```
+
+The project's CMake presets automatically use the vcpkg toolchain for Protobuf and other dependencies.
+
 ### Optional Dependencies
 
 #### Documentation Tools
@@ -211,6 +309,8 @@ brew install llvm@19
 | C++ Compiler | C++20 support | Clang 19.1.1, GCC 14, or MSVC 2022 |
 | Rust | stable | Latest stable |
 | Protocol Buffers | 3.x | Latest |
+| pkg-config (Linux BLE) | Any | Latest |
+| D-Bus (Linux BLE) | 1.x | Latest |
 | Python (for docs) | 3.8 | 3.12+ |
 
 ## Verification
@@ -230,6 +330,10 @@ clang++ --version       # 19.1.1+ (Linux/macOS)
 g++ --version          # 14+ (Linux)
 # or
 cl                     # MSVC 2022 (Windows)
+
+# BLE dependencies (Linux only)
+pkg-config --version    # Any version
+pkg-config --exists dbus-1 && echo "D-Bus found" || echo "D-Bus not found"
 ```
 
 ## Next Steps
@@ -272,6 +376,24 @@ Verify protoc is installed and on PATH:
 protoc --version
 which protoc  # Linux/macOS
 where protoc  # Windows
+```
+
+### BLE dependencies missing (Linux)
+
+If CMake cannot find DBus1 or pkg-config:
+
+```bash
+# Verify pkg-config is installed
+pkg-config --version
+
+# Verify D-Bus development libraries are installed
+pkg-config --exists dbus-1 && echo "Found" || echo "Not found"
+
+# If not found, install them:
+sudo apt install pkg-config libdbus-1-dev  # Ubuntu/Debian
+sudo dnf install pkgconfig dbus-devel      # Fedora/RHEL
+sudo pacman -S pkgconf dbus                # Arch
+spack install pkgconf dbus                 # Spack
 ```
 
 If issues persist, see the [GitHub Issues](https://github.com/dustingooding/radix-relay/issues) or join discussions.

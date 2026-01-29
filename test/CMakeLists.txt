@@ -108,3 +108,14 @@ target_link_libraries(
           radix_relay::radix_relay_options
           radix_relay::transport
           Catch2::Catch2WithMain)
+
+# Integration test for SimpleBLE with BlueZ (not in ALL target, requires BLE hardware or virtual HCI)
+# Build with: cmake --build <build-dir> --target simpleble_bluez_integration_test
+# Run with: ./test/simpleble_bluez_integration_test
+add_executable(simpleble_bluez_integration_test EXCLUDE_FROM_ALL simpleble_bluez_integration_test.cpp)
+target_link_libraries(
+  simpleble_bluez_integration_test
+  PRIVATE radix_relay::radix_relay_warnings
+          radix_relay::radix_relay_options
+          radix_relay::transport
+          Catch2::Catch2WithMain)
