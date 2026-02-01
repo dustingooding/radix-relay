@@ -33,6 +33,8 @@
                 "strategy": "external"
             },
             "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
                 "ENABLE_CPPCHECK_DEFAULT": "FALSE",
                 "ENABLE_CLANG_TIDY_DEFAULT": "FALSE"
             }
@@ -49,6 +51,9 @@
                     "Linux",
                     "Darwin"
                 ]
+            },
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
             },
             "vendor": {
                 "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
