@@ -61,8 +61,12 @@ jobs:
         echo "Disk space after cleanup:"
         df -h
 
-    - name: Install Protocol Buffers
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libprotobuf-dev
+    - name: Install D-Bus
+      run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev
+
+    - name: Setup vcpkg environment
+      run: |
+        echo "VCPKG_ROOT=$HOME/vcpkg" >> $GITHUB_ENV
 
     - name: Setup Cache
       uses: ./.github/actions/setup_cache
@@ -86,7 +90,7 @@ jobs:
 
         cmake: true
         ninja: true
-        vcpkg: false
+        vcpkg: true
         ccache: true
         clangtidy: false
 
@@ -107,11 +111,28 @@ jobs:
         rustc --version
         cargo --version
 
+    - name: Determine CMake preset
+      id: preset
+      run: |
+        if [ "${{ matrix.compiler }}" = "gcc-14" ]; then
+          if [ "${{ matrix.build_type }}" = "Debug" ]; then
+            echo "preset=unixlike-gcc-debug" >> $GITHUB_OUTPUT
+          else
+            echo "preset=unixlike-gcc-release" >> $GITHUB_OUTPUT
+          fi
+        else
+          if [ "${{ matrix.build_type }}" = "Debug" ]; then
+            echo "preset=unixlike-clang-debug" >> $GITHUB_OUTPUT
+          else
+            echo "preset=unixlike-clang-release" >> $GITHUB_OUTPUT
+          fi
+        fi
+      shell: bash
+
       # make sure coverage is only enabled for Debug builds, since it sets -O0 to make sure coverage
       # has meaningful results
     - name: Configure CMake
-      run: |
-        cmake -S . -B ./build -G "${{matrix.generator}}" -DCMAKE_BUILD_TYPE:STRING=${{matrix.build_type}} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }}
+      run: cmake --preset=${{ steps.preset.outputs.preset }} -D${{ env.PROJECT_NAME }}_PACKAGING_MAINTAINER_MODE:BOOL=${{matrix.packaging_maintainer_mode}} -D${{ env.PROJECT_NAME }}_ENABLE_COVERAGE:BOOL=${{ matrix.build_type == 'Debug' }}
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
@@ -125,9 +146,9 @@ jobs:
 
 
     - name: Build
-      # Execute the build.  You can specify a specific target with "--target <NAME>"
-      run: |
-        cmake --build ./build --config ${{matrix.build_type}}
+      run: cmake --build --preset=${{ steps.preset.outputs.preset }}
+      env:
+        PROTOC: ${{ github.workspace }}/out/build/${{ steps.preset.outputs.preset }}/vcpkg_installed/x64-linux/tools/protobuf/protoc
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4

@@ -252,4 +252,36 @@ function(radix_relay_setup_dependencies)
     endif()
   endif()
 
+  if(NOT TARGET simpleble::simpleble)
+    cpmaddpackage(
+      NAME SimpleBLE
+      GITHUB_REPOSITORY simpleble/simpleble
+      GIT_TAG v0.6.1
+      SOURCE_SUBDIR simpleble
+      OPTIONS
+        "SIMPLEBLE_PLAIN OFF"
+        "SIMPLEBLE_USE_SESSION_DBUS OFF"
+        "SIMPLEBLE_LOG_LEVEL INFO"
+        "SIMPLEBLUEZ_LOG_LEVEL FATAL"
+        "SIMPLEDBUS_LOG_LEVEL FATAL"
+      SYSTEM YES
+    )
+    if(SimpleBLE_ADDED)
+      message(STATUS "System SimpleBLE not found, built from source via CPM")
+      if(TARGET simpleble AND NOT TARGET simpleble::simpleble)
+        add_library(simpleble::simpleble ALIAS simpleble)
+        message(STATUS "Created simpleble::simpleble alias for simpleble target")
+      endif()
+      # Suppress warnings for SimpleBLE and its dependencies
+      if(TARGET simpleble)
+        target_compile_options(simpleble PRIVATE -w)
+      endif()
+      if(TARGET simpleble-c)
+        target_compile_options(simpleble-c PRIVATE -w)
+      endif()
+    else()
+      message(STATUS "Found system SimpleBLE ${SimpleBLE_VERSION}")
+    endif()
+  endif()
+
 endfunction()
