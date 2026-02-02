@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GRACE_PERIOD_SECS","MIN_PRE_KEY_COUNT","REPLENISH_COUNT","ROTATION_INTERVAL_SECS"],"fn":["cleanup_expired_kyber_pre_keys","cleanup_expired_signed_pre_keys","consume_pre_key","kyber_pre_key_needs_rotation","replenish_pre_keys","rotate_kyber_pre_key","rotate_signed_pre_key","signed_pre_key_needs_rotation"]};
